@@ -95,6 +95,7 @@ async def chat_assistant(prompt: UserPrompt):
         or preferences["monthly_budget"]
         or preferences["category"]
         or preferences["layout_type"]
+        or preferences["preferred_area"]
         or work_name
     )
 
@@ -119,6 +120,8 @@ async def chat_assistant(prompt: UserPrompt):
             query = query.ilike("category", preferences["category"])
         if preferences["layout_type"]:
             query = query.ilike("layout_type", f"%{preferences['layout_type']}%")
+        if preferences["preferred_area"]:
+            query = query.ilike("village_name", f"%{preferences['preferred_area']}%")
         if preferences["has_subdivision"]:
             query = query.or_(
                 "village_name.ilike.%subdivision%,village_name.ilike.%village%"
@@ -171,23 +174,41 @@ async def chat_assistant(prompt: UserPrompt):
             "recommendations": [],
         }
 
-    reply_msg = (
-        f"I found {len(results)} properties within {max_commute_mins} mins commute to {work_name}."
-        if work_name and max_commute_mins
-        else f"I calculated travel routes to {work_name} and ranked them by shortest commute!"
-        if work_name
-        else f"With a downpayment of ₱{preferences['downpayment_budget']:,.2f} and ₱{preferences['monthly_budget']:,.2f} monthly, I recommend '{results[0]['title']}'."
-        if preferences["downpayment_budget"] and preferences["monthly_budget"]
-        else f"Based on your downpayment of ₱{preferences['downpayment_budget']:,.2f}, I recommend '{results[0]['title']}'."
-        if preferences["downpayment_budget"]
-        else f"Based on your monthly budget of ₱{preferences['monthly_budget']:,.2f}, I recommend '{results[0]['title']}'."
-        if preferences["monthly_budget"]
-        else f"You mentioned wanting a {preferences['layout_type']} unit — here's '{results[0]['title']}'."
-        if preferences["layout_type"]
-        else f"Based on your budget of ₱{preferences['budget']:,.2f}, I recommend '{results[0]['title']}'."
-        if preferences["budget"]
-        else "Here are the top options matching your search."
-    )
+    # Build the reply message additively so multiple criteria (area, layout
+    # type, budget, workplace/commute) can all be mentioned together.
+    reply_parts = []
+
+    if preferences["preferred_area"]:
+        reply_parts.append(f"a property in {preferences['preferred_area'].title()}")
+    if preferences["layout_type"]:
+        reply_parts.append(f"a {preferences['layout_type']} unit")
+    if preferences["downpayment_budget"] and preferences["monthly_budget"]:
+        reply_parts.append(
+            f"a downpayment of ₱{preferences['downpayment_budget']:,.2f} and ₱{preferences['monthly_budget']:,.2f} monthly"
+        )
+    elif preferences["downpayment_budget"]:
+        reply_parts.append(f"a downpayment of ₱{preferences['downpayment_budget']:,.2f}")
+    elif preferences["monthly_budget"]:
+        reply_parts.append(f"a monthly budget of ₱{preferences['monthly_budget']:,.2f}")
+    elif preferences["budget"]:
+        reply_parts.append(f"a budget of ₱{preferences['budget']:,.2f}")
+
+    criteria_text = " with ".join(reply_parts) if reply_parts else ""
+
+    if work_name and max_commute_mins:
+        reply_msg = (
+            f"Based on {criteria_text}, " if criteria_text else ""
+        ) + f"I found {len(results)} properties within {max_commute_mins} mins commute to {work_name}."
+    elif work_name:
+        reply_msg = (
+            f"You mentioned wanting {criteria_text} near {work_name} — "
+            if criteria_text
+            else f"I calculated travel routes to {work_name} — "
+        ) + f"here's '{results[0]['title']}', ranked by fastest commute."
+    elif criteria_text:
+        reply_msg = f"You mentioned wanting {criteria_text} — here's '{results[0]['title']}'."
+    else:
+        reply_msg = "Here are the top options matching your search."
 
     return {
         "status": "recommendation_found",

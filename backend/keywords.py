@@ -5,18 +5,14 @@ HOUSE_KEYWORDS = {"house", "subdivision", "home", "villa", "village", "townhouse
 CONDO_KEYWORDS = {"condo", "apartment"}
 WORKPLACE_KEYWORDS = {"office", "work", "job site", "workplace", "site", "commute"}
 
-# Words that indicate the WORKPLACE_REGEX captured a generic phrase,
-# not an actual place name (e.g. "near my work site location")
 GENERIC_LOCATION_WORDS = {
     "location", "area", "place", "site", "office", "work",
-    "workplace", "job", "here", "there", "commute",
+    "workplace", "job", "here", "there", "commute", "property",
 }
 
 DOWNPAYMENT_KEYWORDS = {"downpayment", "down payment", "dp"}
 MONTHLY_KEYWORDS = {"per month", "monthly", "a month", "/month", "each month"}
 
-# Maps a phrase the user might type -> the normalized substring to search
-# for inside the DB's free-text `layout_type` column via ILIKE.
 LAYOUT_KEYWORDS = {
     "studio": "studio",
     "loft": "loft",
@@ -40,8 +36,39 @@ GIBBERISH_REGEX_2 = re.compile(
     r"(asdf|qwerty|zxcv|ghjkl|1234|qwer|dfgh|hjkl|aaaa|zzzz|xxxx)"
 )
 
+# my workplace is in alabang").
+_STOP = r"(?:,|\.|$|and|but|find|with|under)"
+
 WORKPLACE_REGEX = re.compile(
-    r"(?:work at|workplace is at|workplace is|my workplace is|office is at|office in|near|close to|job at|workplace in)\s+([a-zA-Z0-9\s]+?)(?:,|\.|$|find|with|under)",
+    r"(?:"
+    r"work(?:ing)?\s+(?:at|in)\b"
+    r"|(?:my\s+)?workplace\s+is\s+at\b"
+    r"|(?:my\s+)?workplace\s+is\s+in\b"
+    r"|(?:my\s+)?workplace\s+is\b"
+    r"|(?:my\s+)?workplace\s+(?:at|in)\b"
+    r"|office\s+is\s+at\b"
+    r"|office\s+is\s+in\b"
+    r"|office\s+(?:at|in)\b"
+    r"|based\s+(?:at|in)\b"
+    r"|job\s+at\b"
+    r"|near\b"
+    r"|close\s+to\b"
+    r")\s+([a-zA-Z0-9\s]+?)" + _STOP,
+    re.IGNORECASE,
+)
+
+PROPERTY_LOCATION_REGEX = re.compile(
+    r"(?:"
+    r"properties?\s+in"
+    r"|want\s+(?:a\s+)?property\s+in"
+    r"|looking\s+(?:for\s+)?(?:a\s+)?property\s+in"
+    r"|located\s+in"
+    r"|want\s+to\s+live\s+in"
+    r"|live\s+in"
+    r"|unit\s+in"
+    r"|condo\s+in"
+    r"|house\s+in"
+    r")\s+([a-zA-Z0-9\s]+?)" + _STOP,
     re.IGNORECASE,
 )
 
@@ -101,11 +128,10 @@ def parse_budget(text: str) -> float | None:
 
 
 def parse_downpayment_budget(text: str) -> float | None:
-    """Matches '500k downpayment', '500k for downpayment', 'downpayment of 500k', etc."""
     text_clean = text.lower().replace(",", "")
 
     match = re.search(
-        r"(\d+(?:\.\d+)?)\s*(k|thousand|thousands|m|million|millions|b|billion|billions)?\s*(?:downpayment|down payment|dp)\b",
+        r"(\d+(?:\.\d+)?)\s*(k|thousand|thousands|m|million|millions|b|billion|billions)?\s*(?:for\s+)?(?:downpayment|down payment|dp)\b",
         text_clean,
     )
     if match:
@@ -122,7 +148,6 @@ def parse_downpayment_budget(text: str) -> float | None:
 
 
 def parse_monthly_budget(text: str) -> float | None:
-    """Matches '4k per month', '4k monthly', '4k a month', etc."""
     text_clean = text.lower().replace(",", "")
 
     match = re.search(
@@ -146,8 +171,6 @@ def is_downpayment_mention(text: str) -> bool:
 
 
 def is_valid_location_candidate(candidate: str) -> bool:
-    """Reject regex captures that are generic phrases rather than real place names,
-    e.g. 'in my work site location' should not be sent to the geocoder."""
     words = candidate.lower().split()
     if not words:
         return False
@@ -159,12 +182,19 @@ def is_valid_location_candidate(candidate: str) -> bool:
 
 
 def extract_layout_type(text: str) -> str | None:
-    """Detects an interior/layout preference (studio, loft, penthouse, etc.)
-    so it can be matched against the DB's free-text layout_type column."""
     text_lower = text.lower()
     for phrase, normalized in LAYOUT_KEYWORDS.items():
         if phrase in text_lower:
             return normalized
+    return None
+
+
+def extract_property_location(text: str) -> str | None:
+    match = PROPERTY_LOCATION_REGEX.search(text)
+    if match:
+        candidate = match.group(1).strip()
+        if is_valid_location_candidate(candidate):
+            return candidate
     return None
 
 
@@ -186,9 +216,6 @@ def extract_preferences(text: str, doc: spacy.tokens.Doc) -> dict:
     downpayment_budget = parse_downpayment_budget(text)
     monthly_budget = parse_monthly_budget(text)
 
-    # Only fall back to the generic single-number parser when neither a
-    # downpayment-specific nor monthly-specific amount was found, so we
-    # don't double-count the same number as both "budget" and "downpayment".
     general_budget = None
     if not downpayment_budget and not monthly_budget:
         general_budget = parse_budget(text)
@@ -200,6 +227,7 @@ def extract_preferences(text: str, doc: spacy.tokens.Doc) -> dict:
         "is_downpayment": is_downpayment_mention(text),
         "category": category,
         "layout_type": extract_layout_type(text),
+        "preferred_area": extract_property_location(text),
         "locations": locations,
         "has_subdivision": "subdivision" in text_lower or "village" in text_lower,
         "wants_near_office": any(k in text_lower for k in WORKPLACE_KEYWORDS),
