@@ -154,10 +154,11 @@ export const PropertyMap: React.FC<MapProps> = ({
       <MapContainer
         center={defaultCenter}
         zoom={13}
+        attributionControl={false}
         className="h-full w-full rounded-xl z-0"
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          attribution=""
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 

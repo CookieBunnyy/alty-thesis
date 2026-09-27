@@ -18,7 +18,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   onSelectProperty,
 }) => {
   return (
-    <div className="flex-1 space-y-4 overflow-y-auto p-3 sm:p-4">
+    <div className="h-full min-h-0 flex-1 space-y-4 overflow-y-auto p-3 sm:p-4">
       {messages.map((msg) => (
         <div
           key={msg.id}
@@ -29,12 +29,12 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
           <div
             className={`max-w-[88%] rounded-2xl px-4 py-3 text-xs shadow-sm sm:text-sm ${
               msg.sender === "user"
-                ? "rounded-br-none bg-slate-900 text-white"
+                ? "rounded-br-none bg-[#0d3529] text-[#f3efe7]"
                 : msg.status === "rejected"
                   ? "rounded-bl-none border border-red-200 bg-red-50 text-red-800"
                   : msg.status === "clarification_needed"
                     ? "rounded-bl-none border border-amber-200 bg-amber-50 text-amber-900"
-                    : "rounded-bl-none bg-slate-100 text-slate-800"
+                    : "rounded-bl-none bg-[#edf0ed] text-[#183c32]"
             }`}
           >
             {msg.status === "clarification_needed" && (
@@ -55,8 +55,8 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                   onClick={() => onSelectProperty(prop)}
                   className={`cursor-pointer rounded-lg border p-3 transition-all hover:shadow-md ${
                     selectedProperty?.listing_id === prop.listing_id
-                      ? "border-emerald-500 bg-emerald-50/50"
-                      : "border-slate-200 bg-white hover:border-slate-300"
+                      ? "border-[#123f33] bg-[#edf0ed]"
+                      : "border-[#d8d1c8] bg-[#f9f6f2] hover:border-[#bfc7c1]"
                   }`}
                 >
                   <div className="flex items-start justify-between">
@@ -68,7 +68,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                         e.stopPropagation()
                         onSelectProperty(prop)
                       }}
-                      className="ml-2 flex shrink-0 items-center rounded-md bg-emerald-100/60 px-2 py-1 text-[11px] font-medium text-emerald-700 hover:underline"
+                      className="ml-2 flex shrink-0 items-center rounded-md bg-[#dfe7e2] px-2 py-1 text-[11px] font-medium text-[#123f33] hover:underline"
                     >
                       <Eye className="mr-1 h-3 w-3" /> View
                     </button>
@@ -90,7 +90,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                   </div>
 
                   <div className="mt-2 flex items-center justify-between">
-                    <p className="text-sm font-bold text-emerald-700">
+                    <p className="text-sm font-bold text-[#123f33]">
                       ₱{prop.price_total.toLocaleString()}
                     </p>
                     {prop.commute_info && (
