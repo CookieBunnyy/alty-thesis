@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, Map as MapIcon } from 'lucide-react';
+import { MapPin, Map as MapIcon, Home } from 'lucide-react';
 import type { PropertyDetailModalProps, NearbyEstablishmentsMap, LocationPoint } from '../types';
 
 import { PropertyImageGallery } from '@/components/property-detail-modal/PropertyImageGaller';
@@ -46,11 +46,19 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
         {/* Body Content */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
           <div>
-            {property.category && (
-              <span className="inline-block px-2.5 py-1 bg-emerald-100 text-emerald-800 text-xs font-semibold rounded-full uppercase tracking-wider">
-                {property.category}
-              </span>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {property.category && (
+                <span className="inline-block px-2.5 py-1 bg-emerald-100 text-emerald-800 text-xs font-semibold rounded-full uppercase tracking-wider">
+                  {property.category}
+                </span>
+              )}
+              {property.layout_type && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-700 text-xs font-semibold rounded-full">
+                  <Home className="h-3 w-3" />
+                  {property.layout_type}
+                </span>
+              )}
+            </div>
             <h2 className="text-xl font-bold text-slate-900 mt-2">{property.title}</h2>
             <p className="text-slate-500 text-sm flex items-center mt-1">
               <MapPin className="h-4 w-4 mr-1 text-slate-400 shrink-0" />
