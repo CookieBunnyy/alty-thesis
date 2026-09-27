@@ -11,3 +11,6 @@ TASK
 - user preferred property location from his/her work-site location
 - estimate hours and kilometers
 - best route save commute time
+
+(pending)
+- i want studio type but im working in Alabang. give me the best recommendation for fastest way

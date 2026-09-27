@@ -94,6 +94,7 @@ async def chat_assistant(prompt: UserPrompt):
         or preferences["downpayment_budget"]
         or preferences["monthly_budget"]
         or preferences["category"]
+        or preferences["layout_type"]
         or work_name
     )
 
@@ -116,6 +117,8 @@ async def chat_assistant(prompt: UserPrompt):
             query = query.lte(budget_column, preferences["budget"])
         if preferences["category"]:
             query = query.ilike("category", preferences["category"])
+        if preferences["layout_type"]:
+            query = query.ilike("layout_type", f"%{preferences['layout_type']}%")
         if preferences["has_subdivision"]:
             query = query.or_(
                 "village_name.ilike.%subdivision%,village_name.ilike.%village%"
@@ -179,6 +182,8 @@ async def chat_assistant(prompt: UserPrompt):
         if preferences["downpayment_budget"]
         else f"Based on your monthly budget of ₱{preferences['monthly_budget']:,.2f}, I recommend '{results[0]['title']}'."
         if preferences["monthly_budget"]
+        else f"You mentioned wanting a {preferences['layout_type']} unit — here's '{results[0]['title']}'."
+        if preferences["layout_type"]
         else f"Based on your budget of ₱{preferences['budget']:,.2f}, I recommend '{results[0]['title']}'."
         if preferences["budget"]
         else "Here are the top options matching your search."

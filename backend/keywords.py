@@ -15,6 +15,26 @@ GENERIC_LOCATION_WORDS = {
 DOWNPAYMENT_KEYWORDS = {"downpayment", "down payment", "dp"}
 MONTHLY_KEYWORDS = {"per month", "monthly", "a month", "/month", "each month"}
 
+# Maps a phrase the user might type -> the normalized substring to search
+# for inside the DB's free-text `layout_type` column via ILIKE.
+LAYOUT_KEYWORDS = {
+    "studio": "studio",
+    "loft": "loft",
+    "penthouse": "penthouse",
+    "duplex": "duplex",
+    "single attached": "single attached",
+    "single detached": "single detached",
+    "townhouse": "townhouse",
+    "town house": "townhouse",
+    "bungalow": "bungalow",
+    "1-bedroom": "1-bedroom",
+    "one bedroom": "1-bedroom",
+    "2-bedroom": "2-bedroom",
+    "two bedroom": "2-bedroom",
+    "3-bedroom": "3-bedroom",
+    "three bedroom": "3-bedroom",
+}
+
 GIBBERISH_REGEX_1 = re.compile(r"[a-zA-Z]{4,}\d+|\d+[a-zA-Z]{4,}")
 GIBBERISH_REGEX_2 = re.compile(
     r"(asdf|qwerty|zxcv|ghjkl|1234|qwer|dfgh|hjkl|aaaa|zzzz|xxxx)"
@@ -84,7 +104,6 @@ def parse_downpayment_budget(text: str) -> float | None:
     """Matches '500k downpayment', '500k for downpayment', 'downpayment of 500k', etc."""
     text_clean = text.lower().replace(",", "")
 
-    # number BEFORE the keyword: "500k downpayment", "10k dp"
     match = re.search(
         r"(\d+(?:\.\d+)?)\s*(k|thousand|thousands|m|million|millions|b|billion|billions)?\s*(?:downpayment|down payment|dp)\b",
         text_clean,
@@ -92,7 +111,6 @@ def parse_downpayment_budget(text: str) -> float | None:
     if match:
         return _apply_unit(float(match.group(1)), match.group(2))
 
-    # number AFTER the keyword: "downpayment of 500k", "downpayment is 500k"
     match2 = re.search(
         r"(?:downpayment|down payment|dp)(?:\s+of|\s+is)?\s+(\d+(?:\.\d+)?)\s*(k|thousand|thousands|m|million|millions|b|billion|billions)?",
         text_clean,
@@ -140,6 +158,16 @@ def is_valid_location_candidate(candidate: str) -> bool:
     return True
 
 
+def extract_layout_type(text: str) -> str | None:
+    """Detects an interior/layout preference (studio, loft, penthouse, etc.)
+    so it can be matched against the DB's free-text layout_type column."""
+    text_lower = text.lower()
+    for phrase, normalized in LAYOUT_KEYWORDS.items():
+        if phrase in text_lower:
+            return normalized
+    return None
+
+
 def extract_preferences(text: str, doc: spacy.tokens.Doc) -> dict:
     text_lower = text.lower()
 
@@ -171,6 +199,7 @@ def extract_preferences(text: str, doc: spacy.tokens.Doc) -> dict:
         "monthly_budget": monthly_budget,
         "is_downpayment": is_downpayment_mention(text),
         "category": category,
+        "layout_type": extract_layout_type(text),
         "locations": locations,
         "has_subdivision": "subdivision" in text_lower or "village" in text_lower,
         "wants_near_office": any(k in text_lower for k in WORKPLACE_KEYWORDS),
