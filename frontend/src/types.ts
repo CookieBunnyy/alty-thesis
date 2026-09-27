@@ -50,6 +50,7 @@ export interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant';
   text: string;
+  timestamp?: string;
   status?: 'rejected' | 'clarification_needed' | 'success' | 'casual_chat' | 'no_match' | 'recommendation_found';
   recommendations?: Property[];
 }

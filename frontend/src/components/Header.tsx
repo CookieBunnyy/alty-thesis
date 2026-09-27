@@ -49,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <MessageSquare className="h-4 w-4" />
-            <span>Chat Assistant</span>
+            <span>Chat Assistance</span>
           </button>
           <button
             onClick={() => onTabChange("map")}

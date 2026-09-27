@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from "react"
-import { ArrowLeft, Bath, Bed, Building2, ChevronLeft, MapPin, MessageCircleMore, Search, Sparkles, X } from "lucide-react"
+import { Bath, Bed, Building2, ChevronLeft, MapPin, MessageCircleMore, Search, Sparkles, X } from "lucide-react"
 import { PropertyMap } from "./components/MapContainer"
 import { PropertyDetailModal } from "./components/PropertyDetailModal"
 import { Header } from "./components/Header"
@@ -9,6 +9,14 @@ import type { ChatMessage, Property, LocationPoint } from "./types"
 
 const BACKEND_URL = "https://alty-thesis.onrender.com"
 const LISTING_FILTERS = ["All", "Apartment", "Villa", "Duplex", "Warehouse"] as const
+const QUICK_CHAT_SUGGESTIONS = [
+  "Find a condo in BGC under 8k monthly",
+  "Show me 3-bedroom houses in Alabang",
+  "Properties near my office in Makati",
+  "I want a duplex with a 2M down payment",
+  "Apartment in Taguig within 30 minutes commute",
+  "Affordable studio in Pasig",
+] as const
 
 type ListingFilter = (typeof LISTING_FILTERS)[number]
 
@@ -37,6 +45,7 @@ export default function App() {
       id: "1",
       sender: "assistant",
       text: "Hello! I am your real estate assistant. What is your budget and location preference?",
+      timestamp: new Date().toISOString(),
     },
   ])
   const [input, setInput] = useState<string>("")
@@ -46,10 +55,14 @@ export default function App() {
   const [workplaceLocation, setWorkplaceLocation] = useState<LocationPoint | null>(null)
   const [activeTab, setActiveTab] = useState<"chat" | "map">("map")
   const [previewProperty, setPreviewProperty] = useState<Property | null>(null)
-  const [isListingsOpen, setIsListingsOpen] = useState(true)
+  const [isListingsOpen, setIsListingsOpen] = useState(() => (typeof window !== "undefined" ? window.innerWidth >= 768 : true))
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [isWorkplaceModalOpen, setIsWorkplaceModalOpen] = useState(false)
+  const [workplaceInput, setWorkplaceInput] = useState("")
+  const [quickChats, setQuickChats] = useState<string[]>([...QUICK_CHAT_SUGGESTIONS])
   const [activeFilter, setActiveFilter] = useState<ListingFilter>("All")
   const [searchTerm, setSearchTerm] = useState("")
+  const [isMobileView, setIsMobileView] = useState(() => (typeof window !== "undefined" ? window.innerWidth < 768 : false))
 
   const chatEndRef = useRef<HTMLDivElement | null>(null)
 
@@ -73,6 +86,28 @@ export default function App() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isChatOpen])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const mediaQuery = window.matchMedia("(max-width: 767px)")
+
+    const updateViewport = () => {
+      const mobile = mediaQuery.matches
+      setIsMobileView(mobile)
+
+      if (mobile) {
+        setIsChatOpen(false)
+        setIsListingsOpen(false)
+        setActiveTab("map")
+      }
+    }
+
+    updateViewport()
+    mediaQuery.addEventListener("change", updateViewport)
+
+    return () => mediaQuery.removeEventListener("change", updateViewport)
+  }, [])
 
   useEffect(() => {
     fetch(`${BACKEND_URL}/properties`)
@@ -124,6 +159,7 @@ export default function App() {
       id: Date.now().toString(),
       sender: "user",
       text: textMessage,
+      timestamp: new Date().toISOString(),
     }
     setMessages((prev) => [...prev, userMessage])
     setIsLoading(true)
@@ -150,6 +186,7 @@ export default function App() {
           id: (Date.now() + 1).toString(),
           sender: "assistant",
           text: data.reply,
+          timestamp: new Date().toISOString(),
           status: data.status,
           recommendations: data.recommendations || [],
         },
@@ -164,6 +201,7 @@ export default function App() {
           id: (Date.now() + 1).toString(),
           sender: "assistant",
           text: "Connection error. Please ensure the backend server is running.",
+          timestamp: new Date().toISOString(),
           status: "rejected",
         },
       ])
@@ -178,20 +216,40 @@ export default function App() {
     setInput("")
   }
 
-  const handleSetWorkplaceClick = () => {
-    const promptFn = typeof window !== "undefined" ? window.prompt : undefined
-
-    if (typeof promptFn === "function") {
-      const placeName = promptFn(
-        "Enter your workplace address or city (e.g., 'BGC Taguig'):"
-      )
-      if (placeName?.trim())
-        sendChatMessage(`My workplace is at ${placeName.trim()}`)
-      return
-    }
-
+  const handleQuickChatSelect = (quickChat: string) => {
+    setQuickChats((prev) => prev.filter((chat) => chat !== quickChat))
+    setInput("")
+    setActiveTab("chat")
     setIsChatOpen(true)
-    setInput("My workplace is at ")
+    void sendChatMessage(quickChat)
+  }
+
+  const handleChatToggle = () => {
+    setIsChatOpen((prev) => !prev)
+    setActiveTab("chat")
+    setQuickChats([...QUICK_CHAT_SUGGESTIONS])
+  }
+
+  const handleChatClose = () => {
+    setIsChatOpen(false)
+    setActiveTab("map")
+    setQuickChats([...QUICK_CHAT_SUGGESTIONS])
+  }
+
+  const handleSetWorkplaceClick = () => {
+    setWorkplaceInput(workplaceLocation?.name ?? "")
+    setIsWorkplaceModalOpen(true)
+  }
+
+  const handleWorkplaceSubmit = (event: React.FormEvent) => {
+    event.preventDefault()
+
+    const placeName = workplaceInput.trim()
+    if (!placeName) return
+
+    setIsWorkplaceModalOpen(false)
+    setWorkplaceInput("")
+    void sendChatMessage(`My workplace is at ${placeName}`)
   }
 
   const handleClearWorkplace = () => {
@@ -212,6 +270,64 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#0d3529] font-sans">
+      {isWorkplaceModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[1.5rem] border border-[#d8d1c8] bg-[#f5f3ee] p-5 shadow-[0_25px_60px_rgba(12,53,41,0.28)]">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#5b6f68]">Workplace</p>
+                <h3 className="text-xl font-semibold text-[#183c32]">Set your office</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsWorkplaceModalOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#183c32] shadow-sm transition hover:bg-[#eef2ee]"
+                aria-label="Close workplace modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleWorkplaceSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="workplace-name" className="mb-1.5 block text-sm font-medium text-[#183c32]">
+                  Workplace name or address
+                </label>
+                <input
+                  id="workplace-name"
+                  type="text"
+                  value={workplaceInput}
+                  onChange={(event) => setWorkplaceInput(event.target.value)}
+                  placeholder="e.g. BGC Taguig, Makati CBD, Ayala Tower"
+                  className="w-full rounded-xl border border-[#d8d1c8] bg-white px-3 py-2.5 text-sm text-[#183c32] placeholder:text-slate-400 focus:border-[#123f33] focus:outline-none focus:ring-2 focus:ring-[#123f33]/20"
+                />
+              </div>
+
+              <div className="rounded-xl border border-[#d8d1c8] bg-[#f9f6f2] p-3 text-sm text-[#4d635d]">
+                We’ll use this to help match properties based on commute time and location preference.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsWorkplaceModalOpen(false)}
+                  className="rounded-xl border border-[#d8d1c8] bg-white px-4 py-2 text-sm font-medium text-[#183c32] transition hover:bg-[#eef2ee]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!workplaceInput.trim()}
+                  className="rounded-xl bg-[#0d3529] px-4 py-2 text-sm font-medium text-[#f3efe7] transition hover:bg-[#173f32] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Save Workplace
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <PropertyDetailModal
         property={previewProperty}
         workplaceLocation={workplaceLocation}
@@ -377,84 +493,161 @@ export default function App() {
         </aside>
 
         <main className="relative flex-1 overflow-hidden bg-[#0d3529]">
-          <div className="absolute inset-0">
-            <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-3 py-3 sm:px-4">
-              {!isListingsOpen && (
-                <button
-                  type="button"
-                  onClick={() => setIsListingsOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-full border border-[#d8d1c8] bg-[#f5f3ee]/95 px-3 py-2 text-sm font-medium text-[#183c32] shadow-md backdrop-blur transition hover:bg-[#f9f6f2]"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  Open Listings
-                </button>
-              )}
-
-            </div>
-
-            <div className="h-full w-full pt-16 sm:pt-16">
-              <div className="h-full w-full rounded-t-[1.3rem] border-t border-[#d8d1c8] bg-[#f5f3ee] p-2 shadow-[0_-10px_30px_rgba(12,53,41,0.12)] sm:p-3">
-                <PropertyMap
-                  properties={filteredProperties}
-                  selectedProperty={selectedProperty}
-                  workplaceLocation={workplaceLocation}
-                  onSelectProperty={handleSelectProperty}
-                  onClearNearby={() => setSelectedProperty(null)}
-                />
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setIsChatOpen((prev) => !prev)}
-            className="absolute bottom-5 right-5 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#0d3529] text-[#f3efe7] shadow-[0_12px_30px_rgba(12,53,41,0.35)] transition hover:-translate-y-1 hover:bg-[#173f32]"
-            aria-label="Toggle assistant"
-          >
-            <MessageCircleMore className="h-6 w-6" />
-          </button>
-
-          {isChatOpen && (
-            <div className="absolute bottom-24 right-5 z-50 flex h-[480px] w-[340px] flex-col overflow-hidden rounded-[1.5rem] border border-[#d8d1c8] bg-[#f5f3ee] shadow-[0_20px_45px_rgba(12,53,41,0.18)]">
-              <div className="flex items-center justify-between border-b bg-[#0d3529] px-4 py-3 text-[#f3efe7]">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#d9d4cc]/20 text-[#d9d4cc]">
-                    <Sparkles className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">Property Assistant</p>
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-[#d9d4cc]">Online</p>
+          {isMobileView ? (
+            activeTab === "chat" ? (
+              <div className="flex h-full flex-col bg-[#f5f3ee]">
+                <div className="flex items-center justify-between border-b bg-[#0d3529] px-4 py-3 text-[#f3efe7]">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#d9d4cc]/20 text-[#d9d4cc]">
+                      <Sparkles className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">Property Assistant</p>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-[#d9d4cc]">Online</p>
+                    </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsChatOpen(false)}
-                  className="rounded-full bg-[#173f32] p-1.5 text-[#f3efe7] transition hover:bg-[#1d4d3f]"
-                  aria-label="Close assistant"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <ChatMessageList
+                    messages={messages}
+                    selectedProperty={selectedProperty}
+                    isLoading={isLoading}
+                    chatEndRef={chatEndRef}
+                    onSelectProperty={handleSelectProperty}
+                  />
+                </div>
+
+                <div className="border-t bg-white p-3">
+                  <ChatInput
+                    input={input}
+                    isLoading={isLoading}
+                    quickChats={quickChats}
+                    onInputChange={setInput}
+                    onSubmit={handleSendMessage}
+                    onQuickChatSelect={handleQuickChatSelect}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="absolute inset-0">
+                <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-3 py-3 sm:px-4">
+                  {!isListingsOpen && (
+                    <button
+                      type="button"
+                      onClick={() => setIsListingsOpen(true)}
+                      className="inline-flex items-center justify-center rounded-full border border-[#d8d1c8] bg-[#f5f3ee]/95 p-2.5 text-[#183c32] shadow-md backdrop-blur transition hover:bg-[#f9f6f2]"
+                      aria-label="Open listings"
+                    >
+                      <span className="flex flex-col gap-1">
+                        <span className="block h-0.5 w-5 rounded-full bg-current" />
+                        <span className="block h-0.5 w-5 rounded-full bg-current" />
+                        <span className="block h-0.5 w-5 rounded-full bg-current" />
+                      </span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="h-full w-full pt-16 sm:pt-16">
+                  <div className="h-full w-full rounded-t-[1.3rem] border-t border-[#d8d1c8] bg-[#f5f3ee] p-2 shadow-[0_-10px_30px_rgba(12,53,41,0.12)] sm:p-3">
+                    <PropertyMap
+                      properties={filteredProperties}
+                      selectedProperty={selectedProperty}
+                      workplaceLocation={workplaceLocation}
+                      onSelectProperty={handleSelectProperty}
+                      onClearNearby={() => setSelectedProperty(null)}
+                    />
+                  </div>
+                </div>
+              </div>
+            )
+          ) : (
+            <>
+              <div className="absolute inset-0">
+                <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-3 py-3 sm:px-4">
+                  {!isListingsOpen && (
+                    <button
+                      type="button"
+                      onClick={() => setIsListingsOpen(true)}
+                      className="inline-flex items-center justify-center rounded-full border border-[#d8d1c8] bg-[#f5f3ee]/95 p-2.5 text-[#183c32] shadow-md backdrop-blur transition hover:bg-[#f9f6f2]"
+                      aria-label="Open listings"
+                    >
+                      <span className="flex flex-col gap-1">
+                        <span className="block h-0.5 w-5 rounded-full bg-current" />
+                        <span className="block h-0.5 w-5 rounded-full bg-current" />
+                        <span className="block h-0.5 w-5 rounded-full bg-current" />
+                      </span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="h-full w-full pt-16 sm:pt-16">
+                  <div className="h-full w-full rounded-t-[1.3rem] border-t border-[#d8d1c8] bg-[#f5f3ee] p-2 shadow-[0_-10px_30px_rgba(12,53,41,0.12)] sm:p-3">
+                    <PropertyMap
+                      properties={filteredProperties}
+                      selectedProperty={selectedProperty}
+                      workplaceLocation={workplaceLocation}
+                      onSelectProperty={handleSelectProperty}
+                      onClearNearby={() => setSelectedProperty(null)}
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <ChatMessageList
-                  messages={messages}
-                  selectedProperty={selectedProperty}
-                  isLoading={isLoading}
-                  chatEndRef={chatEndRef}
-                  onSelectProperty={handleSelectProperty}
-                />
-              </div>
+              <button
+                type="button"
+                onClick={handleChatToggle}
+                className="absolute bottom-5 right-5 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#0d3529] text-[#f3efe7] shadow-[0_12px_30px_rgba(12,53,41,0.35)] transition hover:-translate-y-1 hover:bg-[#173f32]"
+                aria-label="Toggle assistant"
+              >
+                <MessageCircleMore className="h-6 w-6" />
+              </button>
 
-              <div className="border-t bg-white p-3">
-                <ChatInput
-                  input={input}
-                  isLoading={isLoading}
-                  onInputChange={setInput}
-                  onSubmit={handleSendMessage}
-                />
-              </div>
-            </div>
+              {isChatOpen && (
+                <div className="absolute bottom-24 right-5 z-50 flex h-[480px] w-[340px] flex-col overflow-hidden rounded-[1.5rem] border border-[#d8d1c8] bg-[#f5f3ee] shadow-[0_20px_45px_rgba(12,53,41,0.18)]">
+                  <div className="flex items-center justify-between border-b bg-[#0d3529] px-4 py-3 text-[#f3efe7]">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#d9d4cc]/20 text-[#d9d4cc]">
+                        <Sparkles className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">Property Assistant</p>
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-[#d9d4cc]">Online</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleChatClose}
+                      className="rounded-full bg-[#173f32] p-1.5 text-[#f3efe7] transition hover:bg-[#1d4d3f]"
+                      aria-label="Close assistant"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    <ChatMessageList
+                      messages={messages}
+                      selectedProperty={selectedProperty}
+                      isLoading={isLoading}
+                      chatEndRef={chatEndRef}
+                      onSelectProperty={handleSelectProperty}
+                    />
+                  </div>
+
+                  <div className="border-t bg-white p-3">
+                    <ChatInput
+                      input={input}
+                      isLoading={isLoading}
+                      quickChats={quickChats}
+                      onInputChange={setInput}
+                      onSubmit={handleSendMessage}
+                      onQuickChatSelect={handleQuickChatSelect}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </main>
       </div>
