@@ -1,20 +1,45 @@
+from contextlib import asynccontextmanager
+
+import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from config import nlp, supabase
+from config import supabase
 from keywords import (
     WORKPLACE_REGEX,
     extract_preferences,
-    has_gibberish_or_nonsense,
     is_valid_location_candidate,
     normalize_input,
     parse_max_commute_time,
 )
+from ml.recommender import PropertyRecommender
 from schemas import UserPrompt
 from services.geocoding import calculate_osrm_commute, geocode_location
 from services.property_service import format_listing_row
 
-app = FastAPI(title="Property Recommendation Assistant", version="1.0.0")
+# Minimum TF-IDF similarity for a message to count as a property request.
+# Tune it on your real data: print the max similarity for a few valid queries
+# and a few gibberish ones, then pick a value between the two groups.
+DOMAIN_THRESHOLD = 0.1
+
+recommender = PropertyRecommender()
+
+
+def load_recommender():
+    response = supabase.table("listings").select("*").execute()
+    rows = [format_listing_row(r) for r in (response.data or [])]
+    recommender.fit(rows)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    load_recommender()
+    yield
+
+
+app = FastAPI(
+    title="Property Recommendation Assistant", version="2.0.0", lifespan=lifespan
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,6 +59,13 @@ async def get_properties():
         return {"error": str(e)}
 
 
+@app.post("/admin/retrain")
+async def retrain():
+    """Call this after listings change in Supabase to refit the model."""
+    load_recommender()
+    return {"listings": len(recommender.rows)}
+
+
 @app.post("/chat")
 async def chat_assistant(prompt: UserPrompt):
     raw_message = prompt.message.strip()
@@ -46,17 +78,14 @@ async def chat_assistant(prompt: UserPrompt):
         }
 
     normalized_message = normalize_input(raw_message)
-    doc = nlp(normalized_message)
+    preferences = extract_preferences(normalized_message)
+    has_money = bool(
+        preferences["budget"]
+        or preferences["downpayment_budget"]
+        or preferences["monthly_budget"]
+    )
 
-    if has_gibberish_or_nonsense(doc):
-        return {
-            "status": "rejected",
-            "reply": "I could not understand your request because it contains unrecognized or invalid words.",
-            "recommendations": [],
-        }
-
-    preferences = extract_preferences(normalized_message, doc)
-
+    # ---- workplace detection ----
     work_lat, work_lng, work_name = (
         prompt.workplace_lat,
         prompt.workplace_lng,
@@ -65,7 +94,6 @@ async def chat_assistant(prompt: UserPrompt):
     detected_workplace = None
     geocode_failed = False
 
-    # Detect location phrases
     workplace_match = WORKPLACE_REGEX.search(normalized_message)
     if workplace_match:
         candidate = workplace_match.group(1).strip()
@@ -76,94 +104,58 @@ async def chat_assistant(prompt: UserPrompt):
                 detected_workplace = geo
             else:
                 geocode_failed = True
-        # else: generic phrase like "my work site location" was captured —
-        # not a real place name, so we skip geocoding it and fall back to
-        # whatever workplace_lat/lng the frontend already had set.
 
     max_commute_mins = parse_max_commute_time(normalized_message)
 
-    if geocode_failed and not preferences["budget"] and not preferences["category"]:
+    if geocode_failed and not has_money:
         return {
             "status": "rejected",
             "reply": "I couldn't locate that workplace address. Could you try a more specific name (e.g., 'BGC Taguig' or 'Makati CBD')?",
             "recommendations": [],
         }
 
-    has_any_criteria = (
-        preferences["budget"]
-        or preferences["downpayment_budget"]
-        or preferences["monthly_budget"]
-        or preferences["category"]
-        or preferences["layout_type"]
-        or preferences["preferred_area"]
-        or work_name
-    )
-
-    if not has_any_criteria:
+    # ---- is this a property request? (replaces the gibberish + no-criteria rules) ----
+    in_domain = recommender.is_in_domain(normalized_message, DOMAIN_THRESHOLD)
+    if not (in_domain or has_money or work_name):
         return {
             "status": "casual_chat",
-            "reply": "Hello! I am your real estate assistant. Please provide your budget or workplace (e.g., 'I work at BGC Taguig').",
+            "reply": "Hello! I am your real estate assistant. Tell me your budget, the kind of property you want, or your workplace (e.g., 'I work at BGC Taguig').",
             "recommendations": [],
         }
 
-    try:
-        query = supabase.table("listings").select("*")
+    # ---- rank all listings with scikit-learn ----
+    candidates = recommender.rank(
+        normalized_message,
+        budget=preferences["budget"],
+        monthly=preferences["monthly_budget"],
+        downpayment=preferences["downpayment_budget"],
+        is_downpayment=preferences["is_downpayment"],
+        top_n=20,
+    )
 
-        if preferences["downpayment_budget"]:
-            query = query.lte("initial_dp", preferences["downpayment_budget"])
-        if preferences["monthly_budget"]:
-            query = query.lte("monthly_rate", preferences["monthly_budget"])
-        if preferences["budget"]:
-            budget_column = "initial_dp" if preferences["is_downpayment"] else "price_total"
-            query = query.lte(budget_column, preferences["budget"])
-        if preferences["category"]:
-            query = query.ilike("category", preferences["category"])
-        if preferences["layout_type"]:
-            query = query.ilike("layout_type", f"%{preferences['layout_type']}%")
-        if preferences["preferred_area"]:
-            query = query.ilike("village_name", f"%{preferences['preferred_area']}%")
-        if preferences["has_subdivision"]:
-            query = query.or_(
-                "village_name.ilike.%subdivision%,village_name.ilike.%village%"
+    # ---- commute only for the top candidates ----
+    for c in candidates:
+        item = dict(c["row"])  # copy, so cached rows are never mutated
+        c["item"] = item
+        c["commute"] = None
+
+        if work_lat and work_lng and item.get("lat") and item.get("lng"):
+            commute = calculate_osrm_commute(
+                item["lat"], item["lng"], work_lat, work_lng
             )
+            if commute:
+                c["commute"] = commute
+                item["commute_info"] = commute
 
-        rows = query.execute().data or []
-    except Exception as e:
-        return {
-            "status": "error",
-            "reply": f"Database error: {str(e)}",
-            "recommendations": [],
-        }
+        mins = c["commute"]["duration_mins"] if c["commute"] else None
+        c["commute_score"] = 1.0 if mins is None else float(np.exp(-mins / 60))
+        if max_commute_mins and mins and mins > max_commute_mins:
+            c["commute_score"] *= 0.1  # soft penalty instead of a hard drop
 
-    results = [format_listing_row(row) for row in rows]
+        c["final"] = 0.7 * c["score"] + 0.3 * c["commute_score"]
 
-    # Calculate routes & filter by commute time
-    if work_lat and work_lng:
-        filtered = []
-        for item in results:
-            if item.get("lat") and item.get("lng"):
-                commute = calculate_osrm_commute(
-                    item["lat"], item["lng"], work_lat, work_lng
-                )
-                if commute:
-                    item["commute_info"] = commute
-                    if (
-                        max_commute_mins
-                        and commute["duration_mins"] > max_commute_mins
-                    ):
-                        continue
-            filtered.append(item)
-
-        filtered.sort(
-            key=lambda x: x.get("commute_info", {}).get(
-                "duration_mins", float("inf")
-            )
-            if x.get("commute_info")
-            else float("inf")
-        )
-        results = filtered
-
-    results = results[:3]
+    candidates.sort(key=lambda c: -c["final"])
+    results = [c["item"] for c in candidates[:3]]
 
     if not results:
         return {
@@ -174,26 +166,20 @@ async def chat_assistant(prompt: UserPrompt):
             "recommendations": [],
         }
 
-    # Build the reply message additively so multiple criteria (area, layout
-    # type, budget, workplace/commute) can all be mentioned together.
-    reply_parts = []
-
-    if preferences["preferred_area"]:
-        reply_parts.append(f"a property in {preferences['preferred_area'].title()}")
-    if preferences["layout_type"]:
-        reply_parts.append(f"a {preferences['layout_type']} unit")
+    # ---- reply message ----
+    parts = []
     if preferences["downpayment_budget"] and preferences["monthly_budget"]:
-        reply_parts.append(
+        parts.append(
             f"a downpayment of ₱{preferences['downpayment_budget']:,.2f} and ₱{preferences['monthly_budget']:,.2f} monthly"
         )
     elif preferences["downpayment_budget"]:
-        reply_parts.append(f"a downpayment of ₱{preferences['downpayment_budget']:,.2f}")
+        parts.append(f"a downpayment of ₱{preferences['downpayment_budget']:,.2f}")
     elif preferences["monthly_budget"]:
-        reply_parts.append(f"a monthly budget of ₱{preferences['monthly_budget']:,.2f}")
+        parts.append(f"a monthly budget of ₱{preferences['monthly_budget']:,.2f}")
     elif preferences["budget"]:
-        reply_parts.append(f"a budget of ₱{preferences['budget']:,.2f}")
+        parts.append(f"a budget of ₱{preferences['budget']:,.2f}")
 
-    criteria_text = " with ".join(reply_parts) if reply_parts else ""
+    criteria_text = " with ".join(parts)
 
     if work_name and max_commute_mins:
         reply_msg = (
@@ -204,11 +190,11 @@ async def chat_assistant(prompt: UserPrompt):
             f"You mentioned wanting {criteria_text} near {work_name} — "
             if criteria_text
             else f"I calculated travel routes to {work_name} — "
-        ) + f"here's '{results[0]['title']}', ranked by fastest commute."
+        ) + f"here's '{results[0]['title']}', ranked by best match and commute."
     elif criteria_text:
         reply_msg = f"You mentioned wanting {criteria_text} — here's '{results[0]['title']}'."
     else:
-        reply_msg = "Here are the top options matching your search."
+        reply_msg = f"Here are the top {len(results)} listings matching your search."
 
     return {
         "status": "recommendation_found",
