@@ -34,6 +34,13 @@ class ApiClient:
             raise RuntimeError(response.json().get("detail", "Login failed"))
         return response.json()
 
+    def get_property_listings(self) -> list[dict[str, Any]]:
+        response = self.client.get(
+                f"{self.base_url}/api/v1/property-listings"
+            )
+        response.raise_for_status()
+        return response.json()
+
     def register(
         self,
         username: str,
