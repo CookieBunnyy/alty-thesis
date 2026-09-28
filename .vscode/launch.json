@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend Main",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/desktop-side/backend/main.py",
+      "cwd": "${workspaceFolder}/desktop-side/backend",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/desktop-side/backend"
+      },
+      "console": "integratedTerminal"
+    }
+  ]
+}
