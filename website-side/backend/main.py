@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 
 import numpy as np
-from fastapi import FastAPI
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import supabase
@@ -22,12 +23,17 @@ from services.property_service import format_listing_row
 # and a few gibberish ones, then pick a value between the two groups.
 DOMAIN_THRESHOLD = 0.1
 
+
 recommender = PropertyRecommender()
 
 
 def load_recommender():
     response = supabase.table("listings").select("*").execute()
-    rows = [format_listing_row(r) for r in (response.data or [])]
+    rows = [
+        format_listing_row(row)
+        for row in (response.data or [])
+        if str(row.get("status") or "AVAILABLE").upper() == "AVAILABLE"
+    ]
     recommender.fit(rows)
 
 
@@ -54,9 +60,42 @@ app.add_middleware(
 async def get_properties():
     try:
         response = supabase.table("listings").select("*").execute()
-        return [format_listing_row(row) for row in (response.data or [])]
-    except Exception as e:
-        return {"error": str(e)}
+        return [
+            format_listing_row(row)
+            for row in (response.data or [])
+            if str(row.get("status") or "AVAILABLE").upper() == "AVAILABLE"
+        ]
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502, detail="Unable to load available properties."
+        ) from exc
+
+
+@app.get("/agents")
+async def get_active_agents():
+    try:
+        response = supabase.table("agents").select("agent_id, full_name, status").execute()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to load agents.") from exc
+    return [
+        {
+            "agent_id": row["agent_id"],
+            "full_name": row["full_name"],
+            "status": row.get("status"),
+        }
+        for row in (response.data or [])
+        if str(row.get("status") or "").upper() == "ACTIVE"
+        and row.get("agent_id")
+        and row.get("full_name")
+    ]
+
+
+@app.post("/client-transactions", status_code=410)
+async def submit_client_transaction():
+    raise HTTPException(
+        status_code=410,
+        detail="Client and transaction records are created from validated documents.",
+    )
 
 
 @app.post("/admin/retrain")

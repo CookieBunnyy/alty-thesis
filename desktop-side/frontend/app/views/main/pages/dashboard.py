@@ -1,16 +1,30 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
+
+from app.api.client import ApiClient
+
+
+STATUS_COLORS = {
+    "available": "#486b2a",
+    "reserved": "#91b8d3",
+    "sold": "#b4b9b5",
+    "on_hold": "#deb753",
+    "unavailable": "#ce756f",
+}
 
 
 class StatCard(QWidget):
@@ -48,21 +62,33 @@ class StatCard(QWidget):
         top.addWidget(more)
         layout.addLayout(top)
 
-        value_label = QLabel(self.value)
-        value_label.setStyleSheet("color: #17240f; font-size: 30px; font-weight: 800;")
-        layout.addWidget(value_label)
+        self.value_label = QLabel(self.value)
+        self.value_label.setStyleSheet("color: #17240f; font-size: 30px; font-weight: 800;")
+        layout.addWidget(self.value_label)
 
-        delta_label = QLabel(self.delta)
-        delta_label.setStyleSheet(f"color: {self.accent}; font-size: 12px; font-weight: 700;")
-        layout.addWidget(delta_label)
+        self.delta_label = QLabel(self.delta)
+        self.delta_label.setStyleSheet(
+            f"color: {self.accent}; font-size: 12px; font-weight: 700;"
+        )
+        layout.addWidget(self.delta_label)
+
+    def set_value(self, value: str) -> None:
+        self.value = value
+        self.value_label.setText(value)
 
 
 class TrendChart(QWidget):
-    def __init__(self, values=None) -> None:
+    def __init__(self, months=None, values=None) -> None:
         super().__init__()
         self.setStyleSheet("background: transparent; border: none;")
-        self.values = values or [18, 22, 30, 28, 36, 42, 39, 50, 58, 54, 68, 72]
+        self.months = months or []
+        self.values = values or []
         self.setMinimumHeight(230)
+
+    def set_data(self, months: list[str], values: list[int]) -> None:
+        self.months = months
+        self.values = values
+        self.update()
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -77,11 +103,20 @@ class TrendChart(QWidget):
             y = rect.top() + int((i / 4) * h)
             painter.drawLine(rect.left(), y, rect.right(), y)
 
+        if not self.values:
+            painter.setPen(QPen(QColor(101, 116, 91), 1))
+            painter.drawText(
+                self.rect(),
+                Qt.AlignmentFlag.AlignCenter,
+                "Insufficient transaction history",
+            )
+            return
+
         max_value = max(self.values) if self.values else 100
         min_value = min(self.values) if self.values else 0
         points = []
         for idx, value in enumerate(self.values):
-            x = rect.left() + int(((idx / (len(self.values) - 1)) * (w - 20))) + 10
+            x = rect.left() + int((idx / max(len(self.values) - 1, 1)) * (w - 20)) + 10
             y = rect.bottom() - int(((value - min_value) / max(max_value - min_value, 1)) * (h - 28)) - 10
             points.append((x, y))
 
@@ -95,35 +130,62 @@ class TrendChart(QWidget):
             painter.setBrush(QColor(72, 107, 42))
             painter.drawEllipse(x - 4, y - 4, 8, 8)
 
-        for label_idx, label in enumerate(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]):
+        for label_idx, label in enumerate(self.months):
             x = rect.left() + int((label_idx / max(len(self.values) - 1, 1)) * (w - 20)) + 10
-            painter.drawText(int(x), int(rect.bottom() - 4), label)
+            month_label = label[5:] if len(label) >= 7 else label
+            painter.drawText(int(x), int(rect.bottom() - 4), month_label)
 
 
 class StatusDonutChart(QWidget):
-    def __init__(self, available: int, reserved: int, sold: int, on_hold: int, unavailable: int) -> None:
+    def __init__(
+        self,
+        available: int = 0,
+        reserved: int = 0,
+        sold: int = 0,
+        on_hold: int = 0,
+        unavailable: int = 0,
+    ) -> None:
         super().__init__()
         self.setStyleSheet("background: transparent; border: none;")
+        self.set_counts(available, reserved, sold, on_hold, unavailable)
+        self.setMinimumHeight(220)
+
+    def set_counts(
+        self,
+        available: int,
+        reserved: int,
+        sold: int,
+        on_hold: int,
+        unavailable: int,
+    ) -> None:
         self.available = available
         self.reserved = reserved
         self.sold = sold
         self.on_hold = on_hold
         self.unavailable = unavailable
-        self.setMinimumHeight(220)
+        self.update()
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         center = self.rect().center()
         radius = min(self.rect().width(), self.rect().height()) * 0.30
-        total = max(self.available + self.reserved + self.sold + self.on_hold + self.unavailable, 1)
-        segments = [
-            (self.available / total, QColor(72, 107, 42)),
-            (self.reserved / total, QColor(111, 147, 72)),
-            (self.sold / total, QColor(63, 107, 39)),
-            (self.on_hold / total, QColor(154, 135, 77)),
-            (self.unavailable / total, QColor(180, 180, 180)),
-        ]
+        total = (
+            self.available
+            + self.reserved
+            + self.sold
+            + self.on_hold
+            + self.unavailable
+        )
+        segments = []
+        if total:
+            segments = [
+                (self.available / total, QColor(STATUS_COLORS["available"])),
+                (self.reserved / total, QColor(STATUS_COLORS["reserved"])),
+                (self.sold / total, QColor(STATUS_COLORS["sold"])),
+                (self.on_hold / total, QColor(STATUS_COLORS["on_hold"])),
+                (self.unavailable / total, QColor(STATUS_COLORS["unavailable"])),
+            ]
 
         start_angle = 90 * 16
         for ratio, color in segments:
@@ -153,8 +215,18 @@ class StatusDonutChart(QWidget):
 
 
 class DashboardPage(QWidget):
-    def __init__(self) -> None:
+    def __init__(self, controller) -> None:
         super().__init__()
+
+        self.controller = controller
+        self.api = ApiClient()
+        self.total_properties_card = None
+        self.active_clients_card = None
+        self.transaction_card = None
+        self.revenue_card = None
+        self.total_agents_card = None
+        self.pending_documents_card = None
+
         self.setStyleSheet(
             """
             QWidget { background: transparent; }
@@ -179,12 +251,36 @@ class DashboardPage(QWidget):
 
         stats = QGridLayout()
         stats.setSpacing(16)
-        stats.addWidget(StatCard("184", "Total Properties", "DEMO DATA", "#486b2a"), 0, 0)
-        stats.addWidget(StatCard("1,286", "Active Clients", "+8.4% vs last month", "#486b2a"), 0, 1)
-        stats.addWidget(StatCard("97", "Active Transactions", "+12.6% this quarter", "#5d8138"), 0, 2)
-        stats.addWidget(StatCard("₱8.4M", "Revenue", "+9.2% this month", "#6f9348"), 1, 0)
-        stats.addWidget(StatCard("38", "Active Agents", "Capacity: 82%", "#9a874d"), 1, 1)
-        stats.addWidget(StatCard("41", "Pending Documents", "12 require review", "#9b5555"), 1, 2)
+        self.total_properties_card = StatCard(
+            "—",
+            "Total Properties",
+            "From property records",
+            "#486b2a",
+        )
+        stats.addWidget(self.total_properties_card, 0, 0)
+        self.active_clients_card = StatCard(
+            "—",
+            "Total Clients",
+            "From client records",
+            "#486b2a",
+        )
+        stats.addWidget(self.active_clients_card, 0, 1)
+        self.transaction_card = StatCard(
+            "—", "Transactions", "From transaction records", "#5d8138"
+        )
+        stats.addWidget(self.transaction_card, 0, 2)
+        self.revenue_card = StatCard(
+            "—", "Completed Revenue", "Completed transactions", "#6f9348"
+        )
+        stats.addWidget(self.revenue_card, 1, 0)
+        self.total_agents_card = StatCard(
+            "—", "Active Agents", "Active agent records", "#9a874d"
+        )
+        stats.addWidget(self.total_agents_card, 1, 1)
+        self.pending_documents_card = StatCard(
+            "—", "Pending Documents", "Processing / pending review", "#9b5555"
+        )
+        stats.addWidget(self.pending_documents_card, 1, 2)
         layout.addLayout(stats)
 
         top_row = QHBoxLayout()
@@ -196,15 +292,19 @@ class DashboardPage(QWidget):
         trend_layout.setContentsMargins(18, 18, 18, 18)
 
         trend_heading = QHBoxLayout()
-        heading = QLabel("Property / Transaction Trend")
+        heading = QLabel("Monthly Transaction Trend")
         heading.setStyleSheet("font-size: 18px; font-weight: 700; color: #17240f;")
         trend_heading.addWidget(heading)
         trend_heading.addStretch()
-        trend_label = QLabel("DEMO DATA")
-        trend_label.setStyleSheet("font-size: 10px; font-weight: 700; letter-spacing: 1px; color: #708064; background: #e7eedc; border-radius: 8px; padding: 4px 8px;")
-        trend_heading.addWidget(trend_label)
+        self.trend_status_label = QLabel("Awaiting transaction data")
+        self.trend_status_label.setStyleSheet(
+            "font-size: 10px; font-weight: 700; color: #708064; "
+            "background: #e7eedc; border-radius: 8px; padding: 4px 8px;"
+        )
+        trend_heading.addWidget(self.trend_status_label)
         trend_layout.addLayout(trend_heading)
-        trend_layout.addWidget(TrendChart())
+        self.trend_chart = TrendChart()
+        trend_layout.addWidget(self.trend_chart)
         top_row.addWidget(trend_panel, 2)
 
         status_panel = QWidget()
@@ -212,19 +312,39 @@ class DashboardPage(QWidget):
         status_layout = QVBoxLayout(status_panel)
         status_layout.setContentsMargins(18, 18, 18, 18)
 
+        status_heading_row = QHBoxLayout()
         status_heading = QLabel("Property Status Distribution")
         status_heading.setStyleSheet("font-size: 18px; font-weight: 700; color: #17240f;")
-        status_layout.addWidget(status_heading)
+        status_heading_row.addWidget(status_heading)
+        status_heading_row.addStretch()
+        self.status_refresh_button = QPushButton("Refresh")
+        self.status_refresh_button.clicked.connect(self.refresh_property_status)
+        status_heading_row.addWidget(self.status_refresh_button)
+        status_layout.addLayout(status_heading_row)
 
         donut_row = QHBoxLayout()
-        donut_row.addWidget(StatusDonutChart(88, 26, 32, 14, 24), 1)
+        self.status_chart = StatusDonutChart()
+        donut_row.addWidget(self.status_chart, 1)
         legend = QVBoxLayout()
         legend.setSpacing(10)
-        legend.addWidget(QLabel("Available: 88"))
-        legend.addWidget(QLabel("Reserved: 26"))
-        legend.addWidget(QLabel("Sold: 32"))
-        legend.addWidget(QLabel("On Hold: 14"))
-        legend.addWidget(QLabel("Unavailable: 24"))
+        self.status_legend = {
+            "available": QLabel("Available: 0"),
+            "reserved": QLabel("Reserved: 0"),
+            "sold": QLabel("Sold: 0"),
+            "on_hold": QLabel("On Hold: 0"),
+            "unavailable": QLabel("Unavailable: 0"),
+        }
+        for key, label in self.status_legend.items():
+            legend_row = QHBoxLayout()
+            color_swatch = QLabel()
+            color_swatch.setFixedSize(10, 10)
+            color_swatch.setStyleSheet(
+                f"background-color: {STATUS_COLORS[key]}; border-radius: 5px;"
+            )
+            legend_row.addWidget(color_swatch)
+            legend_row.addWidget(label)
+            legend_row.addStretch()
+            legend.addLayout(legend_row)
         donut_row.addLayout(legend)
         status_layout.addLayout(donut_row)
         top_row.addWidget(status_panel, 1)
@@ -237,27 +357,26 @@ class DashboardPage(QWidget):
         capacity_panel.setStyleSheet("background: #f7f9f3; border: none; border-radius: 18px;")
         capacity_layout = QVBoxLayout(capacity_panel)
         capacity_layout.setContentsMargins(18, 18, 18, 18)
-        capacity_title = QLabel("Workforce Capacity Overview")
+        capacity_title = QLabel("Agent Performance")
         capacity_title.setStyleSheet("font-size: 18px; font-weight: 700; color: #17240f;")
         capacity_layout.addWidget(capacity_title)
-        capacity_stack = QVBoxLayout()
-        capacity_stack.setSpacing(10)
-        for label, value, color in [
-            ("Current workload", "82%", "#486b2a"),
-            ("Available capacity", "18%", "#5d8138"),
-            ("Utilization", "74%", "#9a874d"),
-            ("Capacity vs demand", "+6.3%", "#6f9348"),
-        ]:
-            metric_line = QHBoxLayout()
-            metric_name = QLabel(label)
-            metric_name.setStyleSheet("color: #294c16; font-size: 12px; font-weight: 600;")
-            metric_value = QLabel(value)
-            metric_value.setStyleSheet(f"color: {color}; font-size: 12px; font-weight: 800;")
-            metric_line.addWidget(metric_name)
-            metric_line.addStretch()
-            metric_line.addWidget(metric_value)
-            capacity_stack.addLayout(metric_line)
-        capacity_layout.addLayout(capacity_stack)
+        self.agent_performance_table = QTableWidget(0, 4)
+        self.agent_performance_table.setHorizontalHeaderLabels(
+            ["Agent", "Status", "Transactions", "Completed Revenue"]
+        )
+        self.agent_performance_table.horizontalHeader().setSectionResizeMode(
+            0, self.agent_performance_table.horizontalHeader().ResizeMode.Stretch
+        )
+        for column, width in enumerate([100, 85, 100, 140]):
+            if column:
+                self.agent_performance_table.setColumnWidth(column, width)
+        self.agent_performance_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.agent_performance_table.setAlternatingRowColors(True)
+        self.agent_performance_table.setShowGrid(False)
+        self.agent_performance_table.verticalHeader().setVisible(False)
+        capacity_layout.addWidget(self.agent_performance_table)
         second_row.addWidget(capacity_panel, 1)
 
         forecast_panel = QWidget()
@@ -267,24 +386,12 @@ class DashboardPage(QWidget):
         forecast_title = QLabel("Forecast Snapshot")
         forecast_title.setStyleSheet("font-size: 18px; font-weight: 700; color: #17240f;")
         forecast_layout.addWidget(forecast_title)
-        forecast_rows = QVBoxLayout()
-        forecast_rows.setSpacing(10)
-        for label, value in [
-            ("Sales forecast", "₱12.8M"),
-            ("Demand forecast", "+14.2%"),
-            ("Revenue forecast", "₱9.7M"),
-            ("Commission forecast", "₱1.9M"),
-        ]:
-            row = QHBoxLayout()
-            key = QLabel(label)
-            key.setStyleSheet("color: #65745b; font-size: 12px; font-weight: 600;")
-            val = QLabel(value)
-            val.setStyleSheet("color: #17240f; font-size: 12px; font-weight: 800;")
-            row.addWidget(key)
-            row.addStretch()
-            row.addWidget(val)
-            forecast_rows.addLayout(row)
-        forecast_layout.addLayout(forecast_rows)
+        self.forecast_label = QLabel("Insufficient historical data for a revenue forecast.")
+        self.forecast_label.setWordWrap(True)
+        self.forecast_label.setStyleSheet(
+            "color: #65745b; font-size: 13px; font-weight: 600;"
+        )
+        forecast_layout.addWidget(self.forecast_label)
         second_row.addWidget(forecast_panel, 1)
 
         layout.addLayout(second_row)
@@ -300,58 +407,194 @@ class DashboardPage(QWidget):
         transactions_title.setStyleSheet("font-size: 18px; font-weight: 700; color: #17240f;")
         transactions_layout.addWidget(transactions_title)
 
-        table = QTableWidget(5, 6)
-        table.setHorizontalHeaderLabels(["ID", "Property", "Client", "Type", "Amount", "Status"])
-        table.setColumnWidth(0, 90)
-        table.setColumnWidth(1, 180)
-        table.setColumnWidth(2, 160)
-        table.setColumnWidth(3, 120)
-        table.setColumnWidth(4, 120)
-        table.setColumnWidth(5, 120)
-        rows = [
-            ("TX-2048", "Aster Hills", "M. Santos", "Sale", "₱4.2M", "Closed"),
-            ("TX-2049", "Harbor View", "E. Cruz", "Lease", "₱220K", "In Review"),
-            ("TX-2050", "Skyline Residences", "C. Lim", "Sale", "₱6.8M", "Active"),
-            ("TX-2051", "Cedar Court", "R. Gomez", "Assignment", "₱1.1M", "Pending"),
-            ("TX-2052", "Ember Heights", "A. Ramos", "Sale", "₱3.9M", "Reserved"),
-        ]
-        for row_index, values in enumerate(rows):
-            for col_index, value in enumerate(values):
-                item = QTableWidgetItem(str(value))
-                item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                table.setItem(row_index, col_index, item)
-        table.verticalHeader().setVisible(False)
-        table.setAlternatingRowColors(True)
-        table.setShowGrid(False)
-        transactions_layout.addWidget(table)
+        self.recent_transactions_table = QTableWidget(0, 6)
+        self.recent_transactions_table.setHorizontalHeaderLabels(
+            ["ID", "Client", "Property", "Agent", "Amount", "Status"]
+        )
+        self.recent_transactions_table.horizontalHeader().setSectionResizeMode(
+            2, self.recent_transactions_table.horizontalHeader().ResizeMode.Stretch
+        )
+        for column, width in enumerate([90, 140, 220, 140, 120, 100]):
+            if column != 2:
+                self.recent_transactions_table.setColumnWidth(column, width)
+        self.recent_transactions_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.recent_transactions_table.setAlternatingRowColors(True)
+        self.recent_transactions_table.setShowGrid(False)
+        self.recent_transactions_table.verticalHeader().setVisible(False)
+        transactions_layout.addWidget(self.recent_transactions_table)
         lower_row.addWidget(transactions_panel, 2)
-
-        dss_panel = QWidget()
-        dss_panel.setStyleSheet("background: #f7f9f3; border: none; border-radius: 18px;")
-        dss_layout = QVBoxLayout(dss_panel)
-        dss_layout.setContentsMargins(18, 18, 18, 18)
-        dss_title = QLabel("DSS Recommendations Requiring Review")
-        dss_title.setStyleSheet("font-size: 18px; font-weight: 700; color: #17240f;")
-        dss_layout.addWidget(dss_title)
-
-        recs = [
-            ("Increase pricing on Aster Hills units", "Demand remains strong in the north branch; recent comps support a +3% pricing adjustment."),
-            ("Prioritize document review for Harbor View", "Several transaction files are overdue and may delay close."),
-            ("Reassign agent capacity in Laguna branch", "Utilization exceeds target by 11% and support is needed on active listings."),
-        ]
-        for title, text in recs:
-            card = QWidget()
-            card.setStyleSheet("background: #e7eedc; border: none; border-radius: 12px;")
-            c_layout = QVBoxLayout(card)
-            c_layout.setContentsMargins(12, 10, 12, 10)
-            c_title = QLabel(title)
-            c_title.setStyleSheet("font-size: 12px; font-weight: 700; color: #17240f;")
-            c_text = QLabel(text)
-            c_text.setWordWrap(True)
-            c_text.setStyleSheet("font-size: 11px; color: #65745b; line-height: 1.4;")
-            c_layout.addWidget(c_title)
-            c_layout.addWidget(c_text)
-            dss_layout.addWidget(card)
-
-        lower_row.addWidget(dss_panel, 1)
         layout.addLayout(lower_row)
+
+    @property
+    def token(self) -> str | None:
+        return self.controller.session.state.token
+
+    def refresh(self) -> None:
+        if not self.token:
+            self._set_unavailable("Sign in to load dashboard data.")
+            return
+        self.load_summary()
+        self.refresh_property_status()
+        self.load_transaction_trend()
+        self.load_recent_transactions()
+        self.load_agent_performance()
+        self.load_forecast()
+
+    def load_summary(self) -> None:
+        try:
+            summary = self.api.get_dashboard_summary(token=self.token)
+            self.total_properties_card.set_value(
+                f"{int(summary.get('total_properties', 0)):,}"
+            )
+            self.active_clients_card.set_value(
+                f"{int(summary.get('total_clients', 0)):,}"
+            )
+            self.transaction_card.set_value(
+                f"{int(summary.get('total_transactions', 0)):,}"
+            )
+            self.revenue_card.set_value(
+                self._format_currency(summary.get("completed_revenue"))
+            )
+            self.total_agents_card.set_value(
+                f"{int(summary.get('active_agents', 0)):,}"
+            )
+            self.pending_documents_card.set_value(
+                f"{int(summary.get('pending_documents', 0)):,}"
+            )
+        except Exception as exc:
+            print(f"Dashboard summary error: {exc}")
+            for card in (
+                self.total_properties_card,
+                self.active_clients_card,
+                self.transaction_card,
+                self.revenue_card,
+                self.total_agents_card,
+                self.pending_documents_card,
+            ):
+                card.set_value("—")
+
+    def refresh_property_status(self) -> None:
+        self.status_refresh_button.setEnabled(False)
+        try:
+            summary = self.api.get_dashboard_property_status(token=self.token)
+            counts = {
+                key: int(summary.get(key, 0))
+                for key in self.status_legend
+            }
+            self.status_chart.set_counts(
+                counts["available"],
+                counts["reserved"],
+                counts["sold"],
+                counts["on_hold"],
+                counts["unavailable"],
+            )
+            labels = {
+                "available": "Available",
+                "reserved": "Reserved",
+                "sold": "Sold",
+                "on_hold": "On Hold",
+                "unavailable": "Unavailable",
+            }
+            for key, label in self.status_legend.items():
+                label.setText(f"{labels[key]}: {counts[key]}")
+        except Exception as exc:
+            print(f"Dashboard property status error: {exc}")
+            self.status_chart.set_counts(0, 0, 0, 0, 0)
+            for label in self.status_legend.values():
+                label.setText(label.text().split(":", 1)[0] + ": —")
+        finally:
+            self.status_refresh_button.setEnabled(True)
+
+    def load_transaction_trend(self) -> None:
+        try:
+            result = self.api.get_dashboard_transaction_trend(token=self.token)
+            months = list(result.get("months", []))
+            counts = [int(value) for value in result.get("counts", [])]
+            self.trend_chart.set_data(months, counts)
+            self.trend_status_label.setText(
+                "Last 12 months" if any(counts) else "Insufficient transaction history"
+            )
+        except Exception as exc:
+            print(f"Dashboard transaction trend error: {exc}")
+            self.trend_chart.set_data([], [])
+            self.trend_status_label.setText("Trend unavailable")
+
+    def load_recent_transactions(self) -> None:
+        try:
+            transactions = self.api.get_dashboard_recent_transactions(
+                token=self.token
+            )
+        except Exception as exc:
+            print(f"Dashboard recent transactions error: {exc}")
+            transactions = []
+        self.recent_transactions_table.setRowCount(len(transactions))
+        for row, transaction in enumerate(transactions):
+            transaction_id = str(transaction.get("transaction_id") or "")
+            values = [
+                transaction_id[:8],
+                str(transaction.get("client_name") or "—"),
+                str(transaction.get("property_title") or "—"),
+                str(transaction.get("agent_name") or "—"),
+                self._format_currency(transaction.get("amount")),
+                str(transaction.get("status") or "—"),
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setToolTip(transaction_id if column == 0 else value)
+                self.recent_transactions_table.setItem(row, column, item)
+
+    def load_agent_performance(self) -> None:
+        try:
+            agents = self.api.get_dashboard_agent_performance(token=self.token)
+        except Exception as exc:
+            print(f"Dashboard agent performance error: {exc}")
+            agents = []
+        self.agent_performance_table.setRowCount(len(agents))
+        for row, agent in enumerate(agents):
+            values = [
+                str(agent.get("full_name") or "—"),
+                str(agent.get("status") or "—"),
+                str(agent.get("transactions", 0)),
+                self._format_currency(agent.get("completed_revenue")),
+            ]
+            for column, value in enumerate(values):
+                self.agent_performance_table.setItem(row, column, QTableWidgetItem(value))
+
+    def load_forecast(self) -> None:
+        try:
+            forecast = self.api.get_dashboard_forecast(token=self.token)
+        except Exception as exc:
+            print(f"Dashboard forecast error: {exc}")
+            self.forecast_label.setText("Forecast unavailable.")
+            return
+        if forecast.get("status") == "insufficient_data":
+            self.forecast_label.setText(str(forecast.get("message")))
+            return
+        self.forecast_label.setText(
+            "Estimated next-month completed revenue: "
+            f"{self._format_currency(forecast.get('next_month_revenue'))}\n"
+            f"Linear trend based on {forecast.get('historical_months', 0)} "
+            "months of completed transactions."
+        )
+
+    def _set_unavailable(self, message: str) -> None:
+        for card in (
+            self.total_properties_card,
+            self.active_clients_card,
+            self.transaction_card,
+            self.revenue_card,
+            self.total_agents_card,
+            self.pending_documents_card,
+        ):
+            card.set_value("—")
+        self.trend_status_label.setText(message)
+        self.forecast_label.setText(message)
+
+    @staticmethod
+    def _format_currency(value) -> str:
+        try:
+            return f"₱{float(value):,.2f}"
+        except (TypeError, ValueError):
+            return "—"

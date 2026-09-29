@@ -14,7 +14,12 @@ class PropertyListing(Base):
     listing_id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
+        autoincrement=True,
         index=True,
+    )
+
+    external_listing_id: Mapped[str | None] = mapped_column(
+        String(120), nullable=True, unique=True, index=True
     )
 
     title: Mapped[str | None] = mapped_column(
@@ -120,6 +125,14 @@ class PropertyListing(Base):
     garage_spaces: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="AVAILABLE",
+        server_default="AVAILABLE",
+        nullable=False,
+        index=True,
     )
 
     # Local synchronization metadata

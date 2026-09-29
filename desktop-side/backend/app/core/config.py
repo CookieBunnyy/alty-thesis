@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     SUPABASE_URL: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
+    SUPABASE_DOCUMENTS_BUCKET: str = "documents"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

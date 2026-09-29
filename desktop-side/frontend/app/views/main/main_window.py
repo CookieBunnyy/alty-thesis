@@ -577,20 +577,20 @@ class MainWindow(QWidget):
         )
 
         self.pages = {
-            "dashboard": DashboardPage(),
-            "properties": PropertiesPage(),
+            "dashboard": DashboardPage(self.controller),
+            "properties": PropertiesPage(self.controller),
             "partners": PartnersPage(),
-            "clients": ClientsPage(),
-            "transactions": TransactionsPage(),
+            "clients": ClientsPage(self.controller),
+            "transactions": TransactionsPage(self.controller),
             # Temporary: Commissions currently reuses the transaction page
             # until a dedicated CommissionsPage is implemented.
-            "commissions": TransactionsPage(),
-            "documents": DocumentsPage(),
+            "commissions": TransactionsPage(self.controller),
+            "documents": DocumentsPage(self.controller),
             "media": MediaPage(),
-            "agents": AgentsPage(),
+            "agents": AgentsPage(self.controller),
             "workforce": WorkforcePage(),
-            "analytics": AnalyticsPage(),
-            "forecasting": ForecastingPage(),
+            "analytics": AnalyticsPage(self.controller),
+            "forecasting": ForecastingPage(self.controller),
             "dss": DssPage(),
             "users": UsersPage(),
             "audit": AuditPage(),
@@ -747,6 +747,22 @@ class MainWindow(QWidget):
 
         self.stack.setCurrentWidget(self.pages[key])
         self.page_title.setText(self.page_title_for_key(key))
+        if key == "dashboard":
+            self.pages[key].refresh()
+        elif key == "properties":
+            self.pages[key].load_properties()
+        elif key == "documents":
+            self.pages[key].refresh()
+        elif key == "agents":
+            self.pages[key].load_agents()
+        elif key == "clients":
+            self.pages[key].load_clients()
+        elif key in {"transactions", "commissions"}:
+            self.pages[key].load_transactions()
+        elif key == "analytics":
+            self.pages[key].refresh()
+        elif key == "forecasting":
+            self.pages[key].refresh()
 
         for nav_key, btn in self.nav_map.items():
             is_active = nav_key == key

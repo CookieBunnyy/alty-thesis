@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.supabase import supabase
 from app.models.property_listing import PropertyListing
+from app.services.client_sync import reconcile_client_for_property
 
 
 def sync_property_listings(db: Session) -> dict[str, int]:
@@ -69,21 +70,42 @@ def sync_property_listings(db: Session) -> dict[str, int]:
                 "sync_status": "SYNCED",
                 "last_synced_at": datetime.utcnow(),
             }
+            if data.get("external_listing_id"):
+                values["external_listing_id"] = data["external_listing_id"]
+            cloud_status = str(data.get("status") or "").strip().upper()
+            cloud_status = cloud_status.replace(" ", "_")
+            if cloud_status not in {
+                "AVAILABLE",
+                "RESERVED",
+                "SOLD",
+                "ON_HOLD",
+                "UNAVAILABLE",
+            }:
+                cloud_status = None
 
             if existing:
-                for field, value in values.items():
-                    setattr(existing, field, value)
-
+                if existing.sync_status == "SYNCED":
+                    for field, value in values.items():
+                        setattr(existing, field, value)
+                    if cloud_status is not None:
+                        existing.status = cloud_status
+                elif data.get("external_listing_id") and not existing.external_listing_id:
+                    existing.external_listing_id = data["external_listing_id"]
+                listing_to_reconcile = existing
                 updated += 1
 
             else:
                 listing = PropertyListing(
                     listing_id=listing_id,
+                    status=cloud_status or "AVAILABLE",
                     **values,
                 )
 
                 db.add(listing)
+                listing_to_reconcile = listing
                 inserted += 1
+
+            reconcile_client_for_property(db, listing_to_reconcile)
 
         except Exception:
             errors += 1

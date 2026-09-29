@@ -50,6 +50,7 @@ class AppController:
             "Abellar Realty Management System"
         )
         self.root.showFullScreen()
+        self.main_window.show_page("dashboard")
 
     def logout(self) -> None:
         self.session.clear()

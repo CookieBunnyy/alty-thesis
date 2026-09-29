@@ -113,9 +113,7 @@ export default function App() {
     fetch(`${BACKEND_URL}/properties`)
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setActiveProperties([])
-        }
+        if (Array.isArray(data)) setActiveProperties(data)
       })
       .catch((err) => console.error("Failed to load initial properties:", err))
   }, [])
