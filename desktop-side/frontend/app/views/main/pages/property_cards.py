@@ -102,6 +102,7 @@ class PropertyCard(QFrame):
         self.image = QLabel()
         self.image.setObjectName("cardImage")
         self.image.setFixedHeight(IMAGE_HEIGHT)
+        self.image.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.image.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image.setPixmap(qta.icon("fa5s.home", color=T["text_faint"]).pixmap(QSize(38, 38)))
         layout.addWidget(self.image)

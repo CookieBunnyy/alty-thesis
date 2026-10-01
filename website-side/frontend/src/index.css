@@ -6,7 +6,9 @@
 @custom-variant dark (&:is(.dark *));
 
 /* Abellar / Alty design tokens — same values as the desktop app
-   (desktop-side/frontend/app/theme.py). */
+   (desktop-side/frontend/app/theme.py: DARK_TOKENS / LIGHT_TOKENS).
+   Dark is the default; <html data-theme="light"> switches every ab-* utility
+   (and the shadcn variables below) to the light palette. */
 @theme {
     --color-ab-bg: #080B0D;
     --color-ab-sidebar: #0C1012;
@@ -27,7 +29,71 @@
     --color-ab-warning: #F5B83D;
     --color-ab-danger: #F0616D;
     --color-ab-info: #5AB4F0;
+    /* map chrome */
+    --color-ab-overlay: rgba(12, 16, 18, 0.88);
+    --color-ab-route: #C7F000;
+    --color-ab-route-casing: #0B0F10;
+    --color-ab-route-alt: #6E7872;
+    --color-ab-scrollbar: #2F393C;
 }
+
+/* Light palette (desktop LIGHT_TOKENS). The lime is deepened to an olive
+   green so it reads at >= 4.5:1 both as text on white and under white ink. */
+:root[data-theme="light"] {
+    --color-ab-bg: #F4F6F2;
+    --color-ab-sidebar: #FFFFFF;
+    --color-ab-card: #FFFFFF;
+    --color-ab-card-2: #F7F8F5;
+    --color-ab-input: #FFFFFF;
+    --color-ab-hover: #EEF1EA;
+    --color-ab-border: #E1E5DC;
+    --color-ab-border-strong: #CBD2C4;
+    --color-ab-text: #111719;
+    --color-ab-muted: #566158;
+    --color-ab-faint: #879087;
+    --color-ab-accent: #5E7E00;
+    --color-ab-accent-hover: #4F6B00;
+    --color-ab-ink: #FFFFFF;
+    --color-ab-accent-soft: #EEF6D6;
+    --color-ab-success: #178A4E;
+    --color-ab-warning: #A86A0C;
+    --color-ab-danger: #C9343F;
+    --color-ab-info: #1F6FAE;
+    --color-ab-overlay: rgba(255, 255, 255, 0.92);
+    --color-ab-route: #4F7A00;
+    --color-ab-route-casing: #FFFFFF;
+    --color-ab-route-alt: #9AA39A;
+    --color-ab-scrollbar: #CBD2C4;
+
+    --background: #F4F6F2;
+    --foreground: #111719;
+    --card: #FFFFFF;
+    --card-foreground: #111719;
+    --popover: #FFFFFF;
+    --popover-foreground: #111719;
+    --primary: #5E7E00;
+    --primary-foreground: #FFFFFF;
+    --secondary: #F7F8F5;
+    --secondary-foreground: #111719;
+    --muted: #F7F8F5;
+    --muted-foreground: #566158;
+    --accent: #EEF1EA;
+    --accent-foreground: #111719;
+    --destructive: #C9343F;
+    --border: #E1E5DC;
+    --input: #E1E5DC;
+    --ring: #5E7E00;
+    --sidebar: #FFFFFF;
+    --sidebar-foreground: #111719;
+    --sidebar-primary: #5E7E00;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #EEF1EA;
+    --sidebar-accent-foreground: #111719;
+    --sidebar-border: #E1E5DC;
+    --sidebar-ring: #5E7E00;
+    color-scheme: light;
+}
+:root:not([data-theme="light"]) { color-scheme: dark; }
 
 @theme inline {
     --font-heading: var(--font-sans);
@@ -155,7 +221,8 @@
 
   body {
     @apply bg-background text-foreground;
-    overflow: hidden;
+    /* Pages scroll; the map page clips itself (h-dvh overflow-hidden). */
+    overflow-x: hidden;
   }
 
   button:not(:disabled), [role="button"]:not(:disabled) {
@@ -171,13 +238,13 @@
   font-family: var(--font-sans);
 }
 
-/* Dark map chrome */
+/* Map chrome (follows the active theme) */
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip {
   background: var(--color-ab-card-2);
   color: var(--color-ab-text);
   border: 1px solid var(--color-ab-border-strong);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
 }
 .leaflet-popup-content-wrapper { border-radius: 14px; }
 .leaflet-container a.leaflet-popup-close-button { color: var(--color-ab-muted); }
@@ -187,23 +254,23 @@
   border-color: var(--color-ab-border) !important;
 }
 .leaflet-control-attribution {
-  background: rgba(8, 11, 13, 0.7) !important;
+  background: var(--color-ab-overlay) !important;
   color: var(--color-ab-faint) !important;
 }
+.leaflet-top.leaflet-left .leaflet-control-attribution { margin-top: 76px; }
 .leaflet-control-attribution a { color: var(--color-ab-muted) !important; }
 
-/* Dark basemap: filter only the tile images, never markers/popups */
+/* Dark basemap (dark theme only): filter only the tile images, never
+   markers/popups. The light theme shows the OSM tiles unfiltered. */
 .ab-dark-tiles {
   filter: invert(100%) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.35);
 }
 
-/* Property pins (white house tiles; lime when selected) */
-.ab-pin { transition: transform 0.15s ease; }
-.ab-pin:hover { transform: translateY(-2px); }
+/* Leaflet positions markers with transform: never transition .ab-pin itself. */
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2F393C transparent;
+  scrollbar-color: var(--color-ab-scrollbar) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -212,10 +279,155 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background: #2F393C;
+  background: var(--color-ab-scrollbar);
   border-radius: 9999px;
 }
 
 *::-webkit-scrollbar-track {
   background: transparent;
+}
+/* Property pins: price chips (Google Maps-style), lime when selected */
+.ab-price-pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+  border-radius: 9999px;
+  padding: 4px 9px;
+  font: 700 12px/1 var(--font-sans);
+  background: var(--color-ab-card);
+  color: var(--color-ab-text);
+  border: 1px solid var(--color-ab-border-strong);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  position: relative;
+}
+.ab-price-pin::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 8px;
+  height: 8px;
+  transform: translateX(-50%) rotate(45deg);
+  background: inherit;
+  border-right: inherit;
+  border-bottom: inherit;
+}
+.ab-price-pin.is-selected {
+  background: var(--color-ab-accent);
+  color: var(--color-ab-ink);
+  border-color: var(--color-ab-accent);
+  z-index: 1000;
+  transform: translate(-50%, -100%) scale(1.12);
+}
+.ab-price-pin svg { width: 12px; height: 12px; }
+.ab-pin-wrap:hover .ab-price-pin { border-color: var(--color-ab-accent); }
+
+/* Workplace / start marker and "you are here" dot */
+.ab-place-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px 9999px 9999px 0;
+  transform: rotate(-45deg);
+  background: var(--color-ab-text);
+  border: 2px solid var(--color-ab-accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+.ab-place-pin > span { transform: rotate(45deg); font-size: 15px; line-height: 1; }
+.ab-me-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: #2E7CF6;
+  border: 3px solid #FFFFFF;
+  box-shadow: 0 0 0 6px rgba(46, 124, 246, 0.25);
+}
+
+/* Mobile bottom sheet */
+.ab-sheet { transition: max-height 0.25s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ab-sheet { transition: none; }
+}
+
+/* ---- Site animations (subtle; all disabled for reduced motion) ---------- */
+@keyframes ab-fade-up {
+  from { opacity: 0; transform: translate3d(0, 18px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ab-pop {
+  from { opacity: 0; transform: scale(0.97) translate3d(0, 6px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ab-ken-burns {
+  from { transform: scale(1.08); }
+  to { transform: scale(1); }
+}
+@keyframes ab-draw {
+  from { stroke-dashoffset: 700; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* Hero copy enters in sequence (delays set inline). */
+.hero-in { opacity: 0; animation: ab-fade-up 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+/* Hero photos crossfade with a slow zoom (real featured-property photos). */
+.hero-slide { opacity: 0; transition: opacity 1.4s ease; will-change: opacity, transform; }
+.hero-slide.is-active { opacity: 1; animation: ab-ken-burns 9s ease-out forwards; }
+
+/* Scroll reveal (see useReveal). */
+.reveal { opacity: 0; transform: translate3d(0, 28px, 0); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+.reveal.is-visible { opacity: 1; transform: none; }
+
+.ab-pop { animation: ab-pop 0.22s ease-out both; }
+.ab-card-in { opacity: 0; animation: ab-fade-up 0.5s ease-out forwards; }
+.route-draw { stroke-dasharray: 700; animation: ab-draw 2.4s ease-in-out 0.3s both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-in, .ab-card-in, .ab-pop, .route-draw, .hero-slide.is-active { animation: none; opacity: 1; stroke-dasharray: none; }
+  .reveal, .reveal.is-visible { opacity: 1; transform: none; transition: none; }
+  .hero-slide { transition: none; }
+}
+
+/* ---- Loading indicators -------------------------------------------------- */
+/* Top progress bar (TopProgressBar.tsx): creeps while waiting, then completes. */
+.ab-progress { width: 0; opacity: 0; }
+.ab-progress-running { width: 85%; opacity: 1; transition: width 8s cubic-bezier(0.1, 0.6, 0.2, 1), opacity 0.15s ease; }
+.ab-progress-finishing { width: 100%; opacity: 0; transition: width 0.25s ease, opacity 0.3s ease 0.2s; }
+
+/* Skeleton placeholders with a soft shimmer. */
+@keyframes ab-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+.ab-skeleton {
+  background: linear-gradient(90deg, var(--color-ab-card-2) 25%, var(--color-ab-hover) 50%, var(--color-ab-card-2) 75%);
+  background-size: 200% 100%;
+  animation: ab-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Brand spinner. */
+@keyframes ab-spin { to { transform: rotate(360deg); } }
+.ab-spinner {
+  display: inline-block;
+  border-radius: 9999px;
+  border: 2.5px solid var(--color-ab-border-strong);
+  border-top-color: var(--color-ab-accent);
+  animation: ab-spin 0.8s linear infinite;
+}
+
+/* Page switch: a quick fade (opacity only — a transform here would break
+   the map page's fixed-position dialogs). */
+@keyframes ab-fade { from { opacity: 0; } to { opacity: 1; } }
+.ab-page-in { animation: ab-fade 0.22s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ab-skeleton { animation: none; }
+  .ab-progress-running, .ab-progress-finishing { transition: opacity 0.15s ease; }
+  .ab-page-in { animation: none; }
+  .ab-spinner { animation-duration: 2.4s; }
 }

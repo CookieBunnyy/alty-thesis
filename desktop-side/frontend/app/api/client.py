@@ -44,7 +44,11 @@ class ApiClient:
             except Exception:
                 base_url = None
         self.base_url = (base_url or DEFAULT_API_URL).rstrip("/")
-        self.client = httpx.Client(timeout=30.0)
+        # Requests run off the GUI thread so the window keeps painting its
+        # loading indicators (see app.busy).
+        from app.busy import ResponsiveHttpClient
+
+        self.client = ResponsiveHttpClient(httpx.Client(timeout=30.0))
 
     def get(self, path: str, token: str | None = None, params: dict[str, Any] | None = None) -> Any:
         headers = {"Accept": "application/json"}
@@ -286,6 +290,10 @@ class ApiClient:
 
     def get_agent_activity(self, agent_id: str, token: str | None = None) -> dict[str, Any]:
         return self.get(f"/api/v1/agents/{quote(agent_id, safe='')}/activity", token=token)
+
+    def get_agent_reviews(self, agent_id: str, token: str | None = None, limit: int = 20) -> dict[str, Any]:
+        """Client rating summary, star distribution and recent reviews."""
+        return self.get(f"/api/v1/agents/{quote(agent_id, safe='')}/reviews", token=token, params={"limit": limit})
 
     # Clients
     def get_clients(self, token: str | None = None) -> list[dict[str, Any]]:

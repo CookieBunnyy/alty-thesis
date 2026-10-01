@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.core.security import (
     EMPLOYEE,
     canonical_role,
+    is_client,
     create_access_token,
     get_current_user,
     get_password_hash,
@@ -53,6 +54,12 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         record_audit_now(db, "LOGIN_FAILED", actor=user, entity_type="users", entity_id=user.id,
                          result="FAILED", details={"reason": "account inactive"})
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account is inactive")
+    if is_client(user):
+        # Website client accounts sign in through /client/login only.
+        record_audit_now(db, "LOGIN_FAILED", actor=user, entity_type="users", entity_id=user.id,
+                         result="FAILED", details={"reason": "client account on staff login"})
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Client accounts can only sign in on the Abellar Realty website.")
 
     user.last_login_at = datetime.utcnow()
     record_audit(db, "LOGIN", actor=user, entity_type="users", entity_id=user.id)

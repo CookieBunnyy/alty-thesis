@@ -50,7 +50,9 @@ def get_roles(db: Session = Depends(get_db), _user: User = Depends(require_manag
 
 @router.get("", response_model=list[UserResponse])
 def get_users(db: Session = Depends(get_db), _user: User = Depends(require_management)):
-    return [_serialize(user) for user in db.execute(select(User).order_by(User.username)).scalars()]
+    # Website client accounts are managed through the website, not here.
+    staff = select(User).where(func.lower(User.role) != "client").order_by(User.username)
+    return [_serialize(user) for user in db.execute(staff).scalars()]
 
 
 @router.post("", response_model=UserResponse, status_code=201)

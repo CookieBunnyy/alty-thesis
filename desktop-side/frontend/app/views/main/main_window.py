@@ -34,6 +34,9 @@ from app.views.main.pages.settings import SettingsPage
 from app.views.main.pages.transactions import TransactionsPage
 from app.views.main.pages.users import UsersPage
 from app.views.main.pages.workforce import WorkforcePage
+from app.busy import busy_tracker
+from app.views.loading import BusyBar, BusyIndicators, LoadingOverlay
+from app.views.theme_toggle import ThemeToggleButton
 from app.views.window_frame import is_drag_area, start_move, toggle_maximized
 from app.views.main.global_search import GlobalSearchDialog
 from app.theme import TOKENS
@@ -66,6 +69,11 @@ QToolButton#windowAction {{ min-width: 30px; min-height: 30px; }}
 QToolButton#headerAction:hover, QToolButton#windowAction:hover {{ background: {t['hover']};
     border-color: {t['border_strong']}; }}
 QToolButton#headerAction::menu-indicator {{ image: none; }}
+QMenu {{ background: {t['card_2']}; color: {t['text']}; border: 1px solid {t['border_strong']};
+    border-radius: 8px; padding: 6px; }}
+QMenu::item {{ padding: 7px 18px 7px 12px; border-radius: 6px; }}
+QMenu::item:selected {{ background: {t['accent_soft_2']}; color: {t['accent']}; }}
+QMenu::separator {{ height: 1px; background: {t['border']}; margin: 5px 8px; }}
 QToolButton#statusChip {{ background: {t['card']}; color: {t['text_muted']}; border: 1px solid {t['border']};
     border-radius: 9px; padding: 0 10px; min-height: 38px; font-size: 12px; font-weight: 600; }}
 QToolButton#statusChip:hover {{ background: {t['hover']}; color: {t['text']}; }}
@@ -232,7 +240,7 @@ class MainWindow(QWidget):
         self.sidebar_scroll.setStyleSheet(
             "QScrollArea { background: transparent; border: none; }"
             "QScrollBar:vertical { width: 7px; background: transparent; }"
-            "QScrollBar::handle:vertical { background: rgba(180,180,180,0.30); border-radius: 3px; min-height: 24px; }"
+            f"QScrollBar::handle:vertical {{ background: {TOKENS['border_strong']}; border-radius: 3px; min-height: 24px; }}"
         )
 
         nav_container = QWidget()
@@ -403,7 +411,7 @@ class MainWindow(QWidget):
             Qt.ToolButtonStyle.ToolButtonIconOnly
         )
         self.minimize_button.setIcon(
-            qta.icon("fa5.window-minimize", color="#486b2a")
+            qta.icon("fa5.window-minimize", color=TOKENS["text_muted"])
         )
         self.minimize_button.setIconSize(QSize(15, 15))
         self.minimize_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -416,7 +424,7 @@ class MainWindow(QWidget):
             Qt.ToolButtonStyle.ToolButtonIconOnly
         )
         self.maximize_button.setIcon(
-            qta.icon("fa5.window-maximize", color="#486b2a")
+            qta.icon("fa5.window-maximize", color=TOKENS["text_muted"])
         )
         self.maximize_button.setIconSize(QSize(15, 15))
         self.maximize_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -429,7 +437,7 @@ class MainWindow(QWidget):
             Qt.ToolButtonStyle.ToolButtonIconOnly
         )
         self.close_button.setIcon(
-            qta.icon("fa5.window-close", color="#486b2a")
+            qta.icon("fa5.window-close", color=TOKENS["text_muted"])
         )
         self.close_button.setIconSize(QSize(15, 15))
         self.close_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -442,7 +450,7 @@ class MainWindow(QWidget):
             Qt.ToolButtonStyle.ToolButtonIconOnly
         )
         self.settings_button.setIcon(
-            qta.icon("fa5s.cog", color="#486b2a")
+            qta.icon("fa5s.cog", color=TOKENS["accent"])
         )
         self.settings_button.setIconSize(QSize(17, 17))
         self.settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -455,7 +463,7 @@ class MainWindow(QWidget):
         # Styled by the global theme (QMenu).
 
         logout_action = QAction(
-            qta.icon("fa5s.sign-out-alt"),
+            qta.icon("fa5s.sign-out-alt", color=TOKENS["text_muted"]),
             "Logout",
             self,
         )
@@ -463,7 +471,7 @@ class MainWindow(QWidget):
         self.settings_menu.addAction(logout_action)
 
         settings_action = QAction(
-            qta.icon("fa5s.cog"),
+            qta.icon("fa5s.cog", color=TOKENS["text_muted"]),
             "Settings",
             self,
         )
@@ -473,7 +481,7 @@ class MainWindow(QWidget):
         self.settings_menu.addAction(settings_action)
 
         about_action = QAction(
-            qta.icon("fa5s.info-circle"),
+            qta.icon("fa5s.info-circle", color=TOKENS["text_muted"]),
             "About",
             self,
         )
@@ -482,19 +490,16 @@ class MainWindow(QWidget):
 
         self.settings_button.setMenu(self.settings_menu)
 
+        # Light/dark switch sits with the window controls: [theme] [—] [□] [×]
+        self.theme_button = ThemeToggleButton(self.controller, "windowAction", 30)
+        header_layout.addWidget(self.theme_button)
         header_layout.addWidget(self.minimize_button)
         header_layout.addWidget(self.maximize_button)
         header_layout.addWidget(self.close_button)
         header_layout.addWidget(self.settings_button)
 
         self.page_title = QLabel("Dashboard")
-        self.page_title.setStyleSheet(
-            """
-            font-size: 20px;
-            font-weight: 700;
-            color: #17310a;
-            """
-        )
+        self.page_title.setObjectName("pageTitle")  # styled by shell_stylesheet()
         self.page_title.setContentsMargins(0, 2, 0, 0)
 
         title_row = QHBoxLayout()
@@ -502,6 +507,9 @@ class MainWindow(QWidget):
         title_row.addStretch()
 
         content_layout.addWidget(self.header)
+        # Slim progress bar: visible whenever the app is waiting for the server.
+        self.busy_bar = BusyBar()
+        content_layout.addWidget(self.busy_bar)
         content_layout.addLayout(title_row)
 
         # Put the stacked pages inside a vertical scroll area.
@@ -557,6 +565,9 @@ class MainWindow(QWidget):
 
         self.page_scroll.setWidget(self.stack)
         content_layout.addWidget(self.page_scroll, 1)
+        # "Loading Agents…" over the page when a load takes a moment.
+        self.loading_overlay = LoadingOverlay(self.page_scroll)
+        self.busy_indicators = BusyIndicators(self.busy_bar, self.loading_overlay, self)
 
         shell_layout.addWidget(self.sidebar)
         shell_layout.addWidget(content, 1)
@@ -652,7 +663,7 @@ class MainWindow(QWidget):
     def _update_maximize_icon(self) -> None:
         maximized = self.controller.root.isMaximized()
         self.maximize_button.setIcon(qta.icon(
-            "fa5.window-restore" if maximized else "fa5.window-maximize", color="#486b2a"
+            "fa5.window-restore" if maximized else "fa5.window-maximize", color=TOKENS["text_muted"]
         ))
 
     def changeEvent(self, event) -> None:
@@ -692,6 +703,10 @@ class MainWindow(QWidget):
         token = self.controller.session.state.token
         if not token:
             return
+        with busy_tracker().labelled("Checking sync status…", quiet=True):
+            self._refresh_status_chips(token)
+
+    def _refresh_status_chips(self, token: str) -> None:
         try:
             sync = self.search_api.get_sync_status(token=token)
             pending = sum(counts.get("PENDING", 0) for counts in sync.get("counts", {}).values())
@@ -754,7 +769,8 @@ class MainWindow(QWidget):
         token = self.controller.session.state.token
         permissions = set(self.controller.session.state.permissions)
         try:
-            data = self.search_api.search(query, token=token)
+            with busy_tracker().labelled(f"Searching for “{query}”…"):
+                data = self.search_api.search(query, token=token)
             results = {
                 group: [item for item in items if not permissions or item["page"] in permissions]
                 for group, items in data.get("results", {}).items()
@@ -818,6 +834,11 @@ class MainWindow(QWidget):
     def show_page(self, key: str) -> None:
         if key not in self.pages:
             return
+        # A page chosen while another is still loading opens right after it
+        # (never a second load nested inside the first).
+        if getattr(self, "_page_loading", False):
+            self._pending_page = key
+            return
         permissions = self.controller.session.state.permissions
         if permissions and key not in permissions:
             QMessageBox.information(self, "Access restricted", "Your role does not have access to this page.")
@@ -834,10 +855,20 @@ class MainWindow(QWidget):
             )
         self.page_title.setText(self.page_title_for_key(key))
         page = self.pages[key]
-        for loader in ("refresh", "load_agents", "load_clients", "load_transactions"):
-            if hasattr(page, loader):
-                getattr(page, loader)()
-                break
+        self._page_loading = True
+        try:
+            with busy_tracker().labelled(f"Loading {self.page_title_for_key(key)}…"):
+                for loader in ("refresh", "load_agents", "load_clients", "load_transactions"):
+                    if hasattr(page, loader):
+                        getattr(page, loader)()
+                        break
+        finally:
+            self._page_loading = False
+        pending, self._pending_page = getattr(self, "_pending_page", None), None
+        if pending and pending != key:
+            from PyQt6.QtCore import QTimer
+
+            QTimer.singleShot(0, lambda: self.show_page(pending))
 
         for nav_key, btn in self.nav_map.items():
             is_active = nav_key == key

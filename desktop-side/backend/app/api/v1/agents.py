@@ -8,9 +8,11 @@ from decimal import Decimal
 
 from app.models.agent import Agent
 from app.models.client import Client
+from app.models.review import AgentReview
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
 from app.schemas.agent import AgentResponse, AgentSyncResult
+from app.services import reviews as review_service
 from app.services.agent_sync import sync_agents
 from app.services.audit import record_audit
 
@@ -33,15 +35,14 @@ def get_agents(
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    return (
-        db.execute(
-            select(Agent).order_by(
-                Agent.full_name
-            )
-        )
-        .scalars()
-        .all()
-    )
+    agents = db.execute(select(Agent).order_by(Agent.full_name)).scalars().all()
+    stats = review_service.review_stats(db, [agent.agent_id for agent in agents])
+    return [_with_reviews(agent, stats) for agent in agents]
+
+
+def _with_reviews(agent: Agent, stats: dict) -> AgentResponse:
+    response = AgentResponse.model_validate(agent)
+    return response.model_copy(update=review_service.stats_for(stats, agent.agent_id))
 
 
 # =========================================================
@@ -88,7 +89,40 @@ def get_agent(
             detail="Agent not found",
         )
 
-    return agent
+    return _with_reviews(agent, review_service.review_stats(db, [agent_id]))
+
+
+# =========================================================
+# CLIENT REVIEWS OF AN AGENT
+# =========================================================
+
+@router.get("/{agent_id}/reviews")
+def get_agent_reviews(
+    agent_id: str,
+    limit: int = 20,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Client rating summary and recent reviews. Reviewers are shown as
+    "First L." — staff don't need clients' contact details to read reviews."""
+    if db.get(Agent, agent_id) is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    stats = review_service.stats_for(review_service.review_stats(db, [agent_id]), agent_id)
+    distribution = dict(db.execute(
+        select(AgentReview.rating, func.count()).where(AgentReview.agent_id == agent_id)
+        .group_by(AgentReview.rating)
+    ).all())
+    limit, offset = max(1, min(limit, 100)), max(0, offset)
+    return {
+        **stats,
+        "distribution": {str(stars): int(distribution.get(stars, 0)) for stars in range(5, 0, -1)},
+        "reviews": [
+            {**review_service.public_review(review),
+             "property_title": review.transaction.property_listing.title if review.transaction else None}
+            for review in review_service.recent_reviews(db, agent_id, limit, offset)
+        ],
+    }
 
 
 # =========================================================

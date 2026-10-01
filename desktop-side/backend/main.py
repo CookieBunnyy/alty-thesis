@@ -10,9 +10,11 @@ from app.api.v1.agents import router as agents_router
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.client_portal import router as client_portal_router
 from app.api.v1.clients import router as clients_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.documents import router as documents_router
+from app.api.v1.maps import router as maps_router
 from app.api.v1.media import router as media_router
 from app.api.v1.property_listings import router as property_listings_router
 from app.api.v1.public import router as public_router
@@ -86,6 +88,8 @@ for router in (
     audit_router,
     system_router,
     public_router,
+    maps_router,
+    client_portal_router,
     search_router,
 ):
     app.include_router(router, prefix="/api/v1")

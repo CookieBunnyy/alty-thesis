@@ -9,6 +9,7 @@ from app.models.client import Client
 from app.models.transaction import PropertyTransaction
 from app.models.audit import AuditEvent
 from app.models.media import PropertyMedia
+from app.models.review import AgentReview
 
 __all__ = [
 	"Branch",
@@ -24,4 +25,5 @@ __all__ = [
 	"PropertyTransaction",
 	"AuditEvent",
 	"PropertyMedia",
+	"AgentReview",
 ]

@@ -15,6 +15,9 @@ interface ModalProps extends PropertyDetailModalProps {
   workplaceLocation?: LocationPoint | null;
   onViewOnMap?: (property: PropertyDetailModalProps['property']) => void;
   onTransactionSubmitted?: () => void;
+  // When given, Reserve / Purchase is handed to the page (sign-in check,
+  // agents near the property) instead of opening the form here.
+  onRequestTransaction?: (property: NonNullable<PropertyDetailModalProps['property']>, type: 'RESERVED' | 'SOLD') => void;
 }
 
 export const PropertyDetailModal: React.FC<ModalProps> = ({
@@ -24,6 +27,7 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
   onViewOnMap,
   onSetWorkplaceClick,
   onTransactionSubmitted,
+  onRequestTransaction,
 }) => {
   const [isTransactionOpen, setIsTransactionOpen] = useState(false);
   if (!property) return null;
@@ -46,7 +50,7 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
     (property as { nearby_establishment?: NearbyEstablishmentsMap }).nearby_establishment;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-fade-in">
       <div className="bg-ab-card-2 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-ab-border flex flex-col max-h-[90vh]">
         
         {/* Photo Gallery Header */}
@@ -116,7 +120,14 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
           </button>
 
           <button
-            onClick={() => setIsTransactionOpen(true)}
+            onClick={() => {
+              if (onRequestTransaction) {
+                onRequestTransaction(property, 'RESERVED');
+                onClose();
+              } else {
+                setIsTransactionOpen(true);
+              }
+            }}
             disabled={!isAvailable}
             title={isAvailable ? 'Reserve or purchase this property' : `This property is ${property.status}`}
             className="flex items-center gap-1.5 px-5 py-2 bg-ab-accent text-ab-ink rounded-xl text-sm font-medium hover:bg-ab-accent-hover transition shadow-sm disabled:cursor-not-allowed disabled:opacity-50"

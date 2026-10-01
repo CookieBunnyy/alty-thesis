@@ -1,8 +1,9 @@
-"""Public (unauthenticated) endpoints used by the website.
+"""Public endpoints used by the website.
 
-The website reads live property data and submits client transactions here;
-it never writes to Supabase or keeps its own transaction store. Submissions
-go through the same matching and property-lifecycle rules as documents.
+Anyone may read live property data, agents, reviews and the home page here.
+Reserving or purchasing requires a signed-in website client account; the
+submission goes through the same matching and property-lifecycle rules as
+documents. The website never writes to Supabase or keeps its own store.
 """
 
 from __future__ import annotations
@@ -14,16 +15,20 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.security import get_current_client
 from app.models.agent import Agent
+from app.models.client import Client
+from app.models.user import User
+from app.services import reviews as review_service
 from app.models.media import PropertyMedia
 from app.models.property_listing import PropertyListing
-from app.services.audit import WEBSITE, record_audit
+from app.services.audit import record_audit
 from app.services.cloud_sync import try_push_pending
 from app.services.document_processing import Context, ProcessingError, apply_transaction, new_result
 from app.services.document_storage import StorageError, read_file
@@ -39,14 +44,15 @@ class _RateLimiter:
         self._hits: dict[str, deque] = defaultdict(deque)
         self._lock = threading.Lock()
 
-    def check(self, key: str, limit: int, window: float = 3600.0) -> None:
+    def check(self, key: str, limit: int, window: float = 3600.0,
+              detail: str = "Too many submissions; try again later.") -> None:
         now = time.monotonic()
         with self._lock:
             hits = self._hits[key]
             while hits and now - hits[0] > window:
                 hits.popleft()
             if len(hits) >= limit:
-                raise HTTPException(status_code=429, detail="Too many submissions; try again later.")
+                raise HTTPException(status_code=429, detail=detail)
             hits.append(now)
 
 
@@ -120,14 +126,150 @@ def get_public_property(listing_id: int, db: Session = Depends(get_db)):
     return _public_listing(listing, _media_urls(db, [listing_id]).get(listing_id, []))
 
 
+def _active_agents(db: Session) -> list[Agent]:
+    return list(db.execute(
+        select(Agent).where(func.upper(Agent.status) == "ACTIVE").order_by(Agent.full_name)
+    ).scalars())
+
+
+def _public_agent(agent: Agent, stats: dict) -> dict:
+    """Client-facing agent card. Ratings come from client reviews only."""
+    return {
+        "agent_id": agent.agent_id,
+        "full_name": agent.full_name,
+        "agent_location": agent.agent_location,
+        "phone_number": agent.phone_number,
+        "status": agent.status,
+        **review_service.stats_for(stats, agent.agent_id),
+        # Legacy/system rating synced from Supabase (not client reviews).
+        "star_rating": float(agent.star_rating) if agent.star_rating is not None else None,
+    }
+
+
 @router.get("/agents")
 def list_public_agents(db: Session = Depends(get_db)):
+    agents = _active_agents(db)
+    stats = review_service.review_stats(db, [a.agent_id for a in agents])
+    return [_public_agent(agent, stats) for agent in agents]
+
+
+@router.get("/agents/{agent_id}")
+def get_public_agent(agent_id: str, limit: int = 10, offset: int = 0, db: Session = Depends(get_db)):
+    """Public agent profile with real client reviews (newest first)."""
+    agent = db.get(Agent, agent_id)
+    if agent is None or str(agent.status or "").upper() != "ACTIVE":
+        raise HTTPException(status_code=404, detail="Agent not found")
+    stats = review_service.review_stats(db, [agent_id])
+    limit, offset = max(1, min(limit, 50)), max(0, offset)
+    return {
+        **_public_agent(agent, stats),
+        "completed_sales": agent.completed_sales,
+        "reviews": [review_service.public_review(r)
+                    for r in review_service.recent_reviews(db, agent_id, limit, offset)],
+    }
+
+
+@router.get("/home")
+def public_home(db: Session = Depends(get_db)):
+    """Everything the home page shows, in one request, from live data only."""
+    available = PropertyListing.status == "AVAILABLE"
+    # Listings with photos first: the home page is a showcase.
+    with_photos = func.coalesce(func.cardinality(PropertyListing.photos), 0) > 0
+    featured = db.execute(
+        select(PropertyListing).where(available, PropertyListing.price_total.is_not(None))
+        .order_by(with_photos.desc(), PropertyListing.created_at.desc(), PropertyListing.listing_id.desc())
+        .limit(6)
+    ).scalars().all()
+    media = _media_urls(db, [listing.listing_id for listing in featured])
+    categories = db.execute(
+        select(PropertyListing.category, func.count())
+        .where(available).group_by(PropertyListing.category)
+        .order_by(func.count().desc())
+    ).all()
+    agents = _active_agents(db)
+    stats = review_service.review_stats(db, [a.agent_id for a in agents])
+    agents.sort(key=lambda a: (-review_service.stats_for(stats, a.agent_id)["review_count"],
+                               -(review_service.stats_for(stats, a.agent_id)["client_rating"] or 0),
+                               a.full_name))
+    return {
+        "stats": {
+            "available_properties": db.scalar(select(func.count()).select_from(PropertyListing).where(available)) or 0,
+            "active_agents": len(agents),
+            "client_reviews": review_service.overall_stats(db),
+        },
+        "featured_properties": [_public_listing(listing, media.get(listing.listing_id, []))
+                                for listing in featured],
+        "categories": [{"category": name or "Other", "count": count} for name, count in categories],
+        "agents": [_public_agent(agent, stats) for agent in agents[:6]],
+        "reviews": [review_service.public_review(r, include_agent=True)
+                    for r in review_service.recent_reviews(db, limit=9, with_text_first=True)],
+    }
+
+
+@router.get("/properties/{listing_id}/nearby-agents")
+def list_nearby_agents(listing_id: int, request: Request, limit: int = 5,
+                       db: Session = Depends(get_db)):
+    """Active agents nearest to a property.
+
+    Ranking uses *geographic* proximity (straight-line distance between the
+    agent's and the property's coordinates). Road distance and travel time
+    come from the routing provider when it can answer; otherwise they are
+    null and ``routing.message`` says why. Only client-facing contact fields
+    are returned (no sales, commission or performance figures)."""
+    from app.api.v1.maps import _limit
+    from app.services import routing
+
+    _limit(request)
+    listing = db.get(PropertyListing, listing_id)
+    if listing is None or listing.status not in PUBLIC_STATUSES:
+        raise HTTPException(status_code=404, detail="Property not found")
+    limit = max(1, min(limit, 10))
     agents = db.execute(
         select(Agent).where(func.upper(Agent.status) == "ACTIVE").order_by(Agent.full_name)
     ).scalars().all()
-    return [{"agent_id": a.agent_id, "full_name": a.full_name, "agent_location": a.agent_location,
-             "star_rating": float(a.star_rating) if a.star_rating is not None else None}
-            for a in agents]
+
+    stats = review_service.review_stats(db, [a.agent_id for a in agents])
+
+    def card(agent: Agent) -> dict:
+        return {**_public_agent(agent, stats), "completed_sales": agent.completed_sales,
+                "straight_line_km": None, "road_distance_km": None, "travel_time_min": None}
+
+    property_point = None
+    if listing.lat is not None and listing.lng is not None:
+        property_point = routing.Point(float(listing.lat), float(listing.lng))
+    located, unlocated = [], []
+    for agent in agents:
+        entry = card(agent)
+        if property_point is not None and agent.latitude is not None and agent.longitude is not None:
+            agent_point = routing.Point(float(agent.latitude), float(agent.longitude))
+            entry["straight_line_km"] = round(routing.haversine_m(agent_point, property_point) / 1000, 2)
+            located.append((entry, agent_point))
+        else:
+            unlocated.append(entry)
+    located.sort(key=lambda pair: pair[0]["straight_line_km"])
+    located = located[:limit]
+
+    routing_status = {"available": False, "mode": "driving",
+                      "message": "Road distances need the property's map location."}
+    if located:
+        provider = routing.get_provider()
+        try:
+            cells = provider.calculate_matrix([point for _, point in located], property_point, "driving")
+            for (entry, _), cell in zip(located, cells):
+                if cell is not None:
+                    entry["road_distance_km"] = round(cell[0] / 1000, 2)
+                    entry["travel_time_min"] = round(cell[1] / 60)
+            routing_status = {"available": True, "mode": "driving", "provider": provider.name,
+                              "live_traffic": provider.live_traffic,
+                              "message": "Road distance and car travel time from the agent's base "
+                                         + ("with current traffic." if provider.live_traffic
+                                            else "(typical conditions, no live traffic).")}
+        except routing.RoutingError as exc:
+            routing_status = {"available": False, "mode": "driving", "message": exc.message}
+    results = [entry for entry, _ in located] + unlocated[: max(0, limit - len(located))]
+    return {"property_id": listing.listing_id, "property_status": listing.status,
+            "ranking": "Geographic (straight-line) proximity to the property",
+            "routing": routing_status, "agents": results}
 
 
 @router.get("/media/{media_id}")
@@ -146,33 +288,20 @@ def get_public_media(media_id: int, db: Session = Depends(get_db)):
 
 
 class WebsiteTransaction(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    """Reserve/purchase request. The client's identity comes from the
+    signed-in account, never from the form, so ``extra`` contact fields sent
+    by older website builds are ignored."""
+    model_config = ConfigDict(extra="ignore")
 
     property_id: int
     agent_id: str = Field(min_length=1, max_length=32)
     transaction_type: str = Field(pattern="^(RESERVED|SOLD)$")
-    full_name: str = Field(min_length=2, max_length=200)
-    email: str | None = Field(default=None, max_length=255, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-    phone_number: str | None = Field(default=None, max_length=40)
-    location: str | None = Field(default=None, max_length=255)
-
-    @field_validator("full_name", "phone_number", "location", mode="before")
-    @classmethod
-    def strip(cls, value: object) -> object:
-        return (" ".join(value.split()) or None) if isinstance(value, str) else value
-
-    @model_validator(mode="after")
-    def contact_required(self) -> "WebsiteTransaction":
-        if not self.email and not self.phone_number:
-            raise ValueError("Provide an email address or phone number so the agent can reach you")
-        return self
 
 
-@router.post("/transactions", status_code=201)
-def submit_website_transaction(payload: WebsiteTransaction, request: Request,
-                               db: Session = Depends(get_db)):
-    """USER SELECTS PROPERTY -> FORM -> validate property & status -> create or
-    match client -> create transaction -> update property status."""
+def record_client_transaction(db: Session, request: Request, user: User,
+                              payload: WebsiteTransaction) -> dict:
+    """USER SELECTS PROPERTY -> signed-in client -> validate property & status
+    -> match the client's own record -> create transaction -> update property."""
     rate_limiter.check(request.client.host if request.client else "unknown",
                        settings.PUBLIC_SUBMISSIONS_PER_HOUR)
     listing = db.get(PropertyListing, payload.property_id)
@@ -183,14 +312,20 @@ def submit_website_transaction(payload: WebsiteTransaction, request: Request,
     agent = db.get(Agent, payload.agent_id)
     if agent is None or str(agent.status or "").upper() != "ACTIVE":
         raise HTTPException(status_code=422, detail="Choose an active agent")
+    client = db.get(Client, user.client_id)
+    if client is None:
+        raise HTTPException(status_code=403, detail="Your client profile is missing; contact Abellar Realty.")
 
     fields = {
         "listing_id": str(listing.listing_id),
         "agent_id": agent.agent_id,
-        "full_name": payload.full_name,
-        "email": str(payload.email).casefold() if payload.email else None,
-        "contact_number": payload.phone_number,
-        "address": payload.location,
+        # The account's own client record: matching cannot attach this
+        # transaction to anyone else.
+        "client_id": client.client_id,
+        "full_name": client.full_name,
+        "email": client.email,
+        "contact_number": client.phone_number,
+        "address": client.location,
         "transaction_date": datetime.now(timezone.utc),
         # The website records the listed contract price; reservation fees and
         # payments are captured later from receipts/agreements.
@@ -205,7 +340,7 @@ def submit_website_transaction(payload: WebsiteTransaction, request: Request,
         db.flush()
     except ProcessingError as exc:
         savepoint.rollback()
-        record_audit(db, "WEBSITE_TRANSACTION_REJECTED", actor=WEBSITE, entity_type="property_listings",
+        record_audit(db, "WEBSITE_TRANSACTION_REJECTED", actor=user, entity_type="property_listings",
                      entity_id=listing.listing_id, result="FAILED",
                      details={"stage": exc.stage, "reason": str(exc),
                               "transaction_type": payload.transaction_type})
@@ -214,7 +349,7 @@ def submit_website_transaction(payload: WebsiteTransaction, request: Request,
         raise HTTPException(status_code=status, detail=str(exc)) from exc
     savepoint.commit()
     for event in context.events:
-        record_audit(db, event["action"], actor=WEBSITE, entity_type=event["entity_type"],
+        record_audit(db, event["action"], actor=user, entity_type=event["entity_type"],
                      entity_id=event["entity_id"], details={**event["details"], "source": "WEBSITE"})
     db.commit()
     try_push_pending(db)
@@ -223,7 +358,6 @@ def submit_website_transaction(payload: WebsiteTransaction, request: Request,
         "status": "SUCCESS",
         "already_recorded": result["idempotent"],
         "transaction_id": matched.get("transaction", {}).get("id"),
-        "client_id": matched.get("client", {}).get("id"),
         "property_id": listing.listing_id,
         "property_status": listing.status,
         "transaction_type": payload.transaction_type,
@@ -232,3 +366,11 @@ def submit_website_transaction(payload: WebsiteTransaction, request: Request,
             else "Your request was recorded. An agent will contact you."
         ),
     }
+
+
+@router.post("/transactions", status_code=201)
+def submit_website_transaction(payload: WebsiteTransaction, request: Request,
+                               db: Session = Depends(get_db),
+                               user: User = Depends(get_current_client)):
+    """Kept at its original path; now requires a signed-in client account."""
+    return record_client_transaction(db, request, user, payload)

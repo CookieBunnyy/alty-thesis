@@ -74,8 +74,13 @@ class AppController:
             theme.set_mode(mode)
             signed_in = self.session.is_authenticated and self.stack.currentWidget() is self.main_window
             current_page = getattr(self.main_window, "current_page", "dashboard")
+            old_login = self.login_window
             old_widgets = (self.login_window, self.main_window)
             self.login_window = LoginWindow(self)
+            # Switching on the sign-in screen keeps what was typed there.
+            self.login_window.username_input.setText(old_login.username_input.text())
+            self.login_window.password_input.setText(old_login.password_input.text())
+            self.login_window.remember_check.setChecked(old_login.remember_check.isChecked())
             self.main_window = MainWindow(self)
             self.stack.addWidget(self.login_window)
             self.stack.addWidget(self.main_window)

@@ -3,7 +3,8 @@
 Installed once in ``main.py``. An event filter handles every top-level
 window when it is first shown, so individual dialogs need no changes:
 
-* QMessageBox: white background, a type-specific icon, icons on buttons.
+* QMessageBox: the active theme (light or dark), a type-specific icon,
+  icons on buttons.
 * QDialog: never larger than the screen — content taller than the screen is
   wrapped in a scroll area, and the window is kept inside the visible area.
 * Any button without an icon gets one chosen from its text.
@@ -36,37 +37,21 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-INK = "#0B0F10"  # icon colour on lime / white surfaces
 SCREEN_FRACTION = 0.9
 MAX_MESSAGE_LINES = 22
-
-MESSAGE_BOX_STYLE = """/*alty-raw*/
-QMessageBox { background-color: #ffffff; }
-QMessageBox QWidget { background-color: #ffffff; color: #111719; }
-QMessageBox QLabel { background-color: transparent; color: #111719; font-size: 13px; }
-QMessageBox QTextEdit { background-color: #f6f7f5; color: #111719; border: 1px solid #dfe3dc;
-    border-radius: 8px; }
-QMessageBox QPushButton {
-    background-color: #eef0ec; color: #111719; border: 1px solid #d9ddd5;
-    border-radius: 8px; padding: 7px 16px; min-width: 76px; min-height: 28px; font-weight: 600;
-}
-QMessageBox QPushButton:hover { background-color: #e3e7df; }
-QMessageBox QPushButton:default { background-color: #C7F000; color: #0B0F10; border-color: #b5da00; }
-QMessageBox QPushButton:default:hover { background-color: #D6FF33; }
-"""
 
 DIALOG_SCROLL_STYLE = (
     "QScrollArea#dialogScroll { background: transparent; border: none; }"
     "QWidget#dialogContent { background: transparent; }"
 )
 
-# (icon name, color) per message box type.
+# (icon name, colour token) per message box type.
 MESSAGE_ICONS = {
-    QMessageBox.Icon.Information: ("fa5s.info-circle", "#2f6f95"),
-    QMessageBox.Icon.Warning: ("fa5s.exclamation-triangle", "#c28a12"),
-    QMessageBox.Icon.Critical: ("fa5s.times-circle", "#b03a3a"),
-    QMessageBox.Icon.Question: ("fa5s.question-circle", "#486b2a"),
-    QMessageBox.Icon.NoIcon: ("fa5s.comment-alt", "#486b2a"),
+    QMessageBox.Icon.Information: ("fa5s.info-circle", "info"),
+    QMessageBox.Icon.Warning: ("fa5s.exclamation-triangle", "warning"),
+    QMessageBox.Icon.Critical: ("fa5s.times-circle", "danger"),
+    QMessageBox.Icon.Question: ("fa5s.question-circle", "accent"),
+    QMessageBox.Icon.NoIcon: ("fa5s.comment-alt", "accent"),
 }
 
 STANDARD_BUTTON_ICONS = {
@@ -139,13 +124,14 @@ def icon_for_text(text: str) -> str | None:
 
 
 def _button_icon_color(button: QAbstractButton) -> str:
-    """Dark ink on lime (primary) buttons, light elsewhere."""
-    style = (button.styleSheet() or "").replace(" ", "").casefold()
-    if button.objectName() == "primaryAction" or "background:#c7f000" in style \
-            or "background-color:#c7f000" in style:
-        return INK
+    """Ink on accent (primary) buttons, the text colour elsewhere."""
     from app.theme import TOKENS
 
+    style = (button.styleSheet() or "").replace(" ", "").casefold()
+    accent = TOKENS["accent"].casefold()
+    if button.objectName() == "primaryAction" or f"background:{accent}" in style \
+            or f"background-color:{accent}" in style:
+        return TOKENS["accent_ink"]
     return TOKENS["text"]
 
 
@@ -217,11 +203,11 @@ def make_tables_scrollable(root: QWidget) -> None:
 
 
 def polish_message_box(box: QMessageBox) -> None:
-    # The box's own stylesheet overrides the transparent/dark rules that the
-    # main window and pages set on their QWidget descendants.
-    from app.theme import raw_set_stylesheet
+    # The box's own stylesheet overrides the transparent rules that the main
+    # window and pages set on their QWidget descendants.
+    from app.theme import TOKENS, message_box_stylesheet, raw_set_stylesheet
 
-    raw_set_stylesheet(box, MESSAGE_BOX_STYLE)  # white box stays white (not dark-translated)
+    raw_set_stylesheet(box, message_box_stylesheet())
     # Very long messages would push the box past the screen: show the start
     # and move the full text into the scrollable "Show Details" area.
     lines = box.text().splitlines()
@@ -229,13 +215,15 @@ def polish_message_box(box: QMessageBox) -> None:
         box.setDetailedText(box.text())
         shown = "\n".join(lines[:MAX_MESSAGE_LINES])
         box.setText(shown + "\n… (see Show Details for the full text)")
-    name, color = MESSAGE_ICONS.get(box.icon(), MESSAGE_ICONS[QMessageBox.Icon.NoIcon])
+    name, token = MESSAGE_ICONS.get(box.icon(), MESSAGE_ICONS[QMessageBox.Icon.NoIcon])
+    color = TOKENS[token]
     box.setIconPixmap(qta.icon(name, color=color).pixmap(QSize(40, 40)))
     box.setWindowIcon(qta.icon(name, color=color))
     for button in box.buttons():
         icon = STANDARD_BUTTON_ICONS.get(box.standardButton(button))
         if icon:
-            button.setIcon(qta.icon(icon, color=INK))
+            default = button is box.defaultButton()
+            button.setIcon(qta.icon(icon, color=TOKENS["accent_ink"] if default else TOKENS["text"]))
 
 
 def _available_geometry(widget: QWidget):

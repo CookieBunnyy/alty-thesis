@@ -18,6 +18,10 @@ class AgentResponse(BaseModel):
     total_sales: Decimal = Decimal("0")
     total_commission: Decimal = Decimal("0")
     performance_score: Decimal = Decimal("0")
+    # From client reviews (agent_reviews); star_rating above is the
+    # system/legacy rating synced from Supabase.
+    client_rating: float | None = None
+    review_count: int = 0
     status: str
     sync_status: str
     last_synced_at: datetime | None = None

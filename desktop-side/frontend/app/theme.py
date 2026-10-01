@@ -29,6 +29,9 @@ DARK_TOKENS = {
     "success": "#3DD68C", "success_soft": "#0F2A1E", "warning": "#F5B83D", "warning_soft": "#2E2410",
     "danger": "#F0616D", "danger_soft": "#2E1316", "info": "#5AB4F0", "info_soft": "#0F2230",
     "disabled": "#2A3235", "chart_bar": "#E8ECE6", "login_glow": "#141C0A",
+    # Login backdrop: deep charcoal-green gradient with soft lime light.
+    "backdrop_top": "#0E1512", "backdrop_bottom": "#06090A", "backdrop_shape": "#C7F000",
+    "backdrop_line": "#16201B", "shadow": "#000000",
 }
 # Light mode: white surfaces, dark text; the lime is deepened so it stays
 # readable as text on white while buttons keep dark ink on lime.
@@ -42,6 +45,9 @@ LIGHT_TOKENS = {
     "success": "#178A4E", "success_soft": "#E2F5EA", "warning": "#A86A0C", "warning_soft": "#FBF0DC",
     "danger": "#C9343F", "danger_soft": "#FBE4E6", "info": "#1F6FAE", "info_soft": "#E2EEF8",
     "disabled": "#E4E8E1", "chart_bar": "#CBD2C4", "login_glow": "#EEF6D6",
+    # Login backdrop: soft neutral green tint (never plain white).
+    "backdrop_top": "#E9EFE1", "backdrop_bottom": "#D6E1CA", "backdrop_shape": "#8DB600",
+    "backdrop_line": "#CCD8BE", "shadow": "#3D4A33",
 }
 MODES = {"dark": DARK_TOKENS, "light": LIGHT_TOKENS}
 THEME_SETTING = "theme"
@@ -90,6 +96,11 @@ def _rebuild_tables() -> None:
         "#aeb8a7": T["disabled"], "#e5e7e3": T["card_2"], "#f0f0f0": T["card_2"], "#e8e8e8": T["card_2"],
         "#17310a": T["accent"], "#285214": T["accent_hover"], "#486b2a": T["accent"],
         "#294c16": T["accent"], "#1e4010": T["accent_hover"],
+        "#e4eddb": T["card_2"], "#dee0dc": T["card_2"], "#d5e2ca": T["hover_2"],
+        "#e8f0dc": T["accent_soft"], "#dcebf1": T["info_soft"], "#e4eff7": T["info_soft"],
+        "#eef0ed": T["card_2"], "#fff3cd": T["warning_soft"], "#f8dedc": T["danger_soft"],
+        "#edf0e9": T["input"], "#102406": T["accent_hover"], "#203b12": T["accent_hover"],
+        "#b4b4b4": T["disabled"], "#aacc00": T["accent_hover"],
     })
     _SIDEBAR_BACKGROUND.clear()
     _SIDEBAR_BACKGROUND.update({"#17310a": T["sidebar"], "#285214": T["hover"]})
@@ -103,6 +114,8 @@ def _rebuild_tables() -> None:
         **{c: T["accent"] for c in ("#486b2a", "#5d8138", "#6f9348", "#6b8e52", "#5d7d4e", "#285214")},
         "#9b3030": T["danger"], "#9b5555": T["danger"], "#9a6a13": T["warning"], "#9a874d": T["warning"],
         "#477489": T["info"], "#1d6384": T["info"], "#2f6f95": T["info"], "#8b4c85": T["info"],
+        "#999999": T["text_faint"], "#9aa894": T["text_faint"], "#c8c8c8": T["text_faint"],
+        "#dee0dc": T["text"], "#e0a0a0": T["danger"], "#607e49": T["accent"], "#2b4713": T["accent"],
     })
     _BORDER_MAP.clear()
     _BORDER_MAP.update({
@@ -111,8 +124,9 @@ def _rebuild_tables() -> None:
             "#e8ede3", "#edf0eb", "#d5dfcc", "#d8d8d8", "#c8c8c8", "#e8e8e8", "#dfe7df", "#ffffff",
             "#c9c2b9",
         )},
-        **{c: T["accent"] for c in ("#6b8e52", "#5d7d4e", "#486b2a", "#17310a", "#294c16", "#b8d0a8")},
-        "#b9cdaa": T["border_strong"],
+        **{c: T["accent"] for c in ("#6b8e52", "#5d7d4e", "#486b2a", "#17310a", "#294c16", "#b8d0a8",
+                                    "#9eb78e", "#607e49", "#2b4713")},
+        **{c: T["border_strong"] for c in ("#b9cdaa", "#aebca4", "#6b8058", "#b4b4b4", "#d4ddcc")},
     })
 
 
@@ -255,6 +269,25 @@ QTabBar::tab:selected {{ color: {T['accent']}; border-bottom: 2px solid {T['acce
 QSplitter::handle {{ background: {T['border']}; }}
 QProgressBar {{ background: {T['card_2']}; border: none; border-radius: 5px; height: 8px; text-align: center; }}
 QProgressBar::chunk {{ background: {T['accent']}; border-radius: 5px; }}
+"""
+
+
+def message_box_stylesheet() -> str:
+    """QMessageBox in the active theme (raw: applied without translation)."""
+    return f"""/*alty-raw*/
+QMessageBox {{ background-color: {T['card']}; }}
+QMessageBox QWidget {{ background-color: {T['card']}; color: {T['text']}; }}
+QMessageBox QLabel {{ background-color: transparent; color: {T['text']}; font-size: 13px; }}
+QMessageBox QTextEdit {{ background-color: {T['input']}; color: {T['text']}; border: 1px solid {T['border']};
+    border-radius: 8px; }}
+QMessageBox QPushButton {{
+    background-color: {T['hover']}; color: {T['text']}; border: 1px solid {T['border']};
+    border-radius: 8px; padding: 7px 16px; min-width: 76px; min-height: 28px; font-weight: 600;
+}}
+QMessageBox QPushButton:hover {{ background-color: {T['hover_2']}; }}
+QMessageBox QPushButton:default {{ background-color: {T['accent']}; color: {T['accent_ink']};
+    border-color: {T['accent']}; }}
+QMessageBox QPushButton:default:hover {{ background-color: {T['accent_hover']}; }}
 """
 
 

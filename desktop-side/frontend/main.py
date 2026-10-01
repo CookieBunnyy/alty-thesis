@@ -9,10 +9,10 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     from app import theme
 
-    theme.install(app)  # Abellar dark design system (tokens, palette, QSS)
+    theme.install(app)  # Abellar light/dark design system (tokens, palette, QSS)
     from app.ui_polish import install as install_ui_polish
 
-    install_ui_polish(app)  # white message boxes, icons, screen-fitting dialogs
+    install_ui_polish(app)  # themed message boxes, icons, screen-fitting dialogs
     controller = AppController()
     controller.start()
     sys.exit(app.exec())

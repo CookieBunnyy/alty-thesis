@@ -21,6 +21,10 @@ FILING_MANAGER = "Filing Manager"
 AGENT = "Agent"
 EMPLOYEE = "Employee"
 ROLES = (ADMINISTRATOR, GENERAL_MANAGER, PRESIDENT, FILING_MANAGER, AGENT, EMPLOYEE)
+# Website client accounts share the users table, hashing and tokens, but are
+# not an internal role: they cannot use any internal endpoint (see
+# get_current_user) and cannot be assigned from the desktop Users page.
+CLIENT = "Client"
 
 MANAGEMENT_ROLES = {ADMINISTRATOR, GENERAL_MANAGER, PRESIDENT}
 FILING_ROLES = MANAGEMENT_ROLES | {FILING_MANAGER}
@@ -47,6 +51,8 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
 
 def canonical_role(role: str | None) -> str:
     lowered = (role or "").strip().casefold()
+    if lowered == CLIENT.casefold():
+        return CLIENT
     for name in ROLES:
         if name.casefold() == lowered:
             return name
@@ -54,7 +60,11 @@ def canonical_role(role: str | None) -> str:
 
 
 def permissions_for(role: str | None) -> list[str]:
-    return list(ROLE_PERMISSIONS[canonical_role(role)])
+    return list(ROLE_PERMISSIONS.get(canonical_role(role), []))
+
+
+def is_client(user: User) -> bool:
+    return canonical_role(user.role) == CLIENT
 
 
 def has_role(user: User, roles: set[str]) -> bool:
@@ -85,10 +95,7 @@ def decode_access_token(token: str) -> dict:
         raise ValueError("Invalid token") from exc
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-) -> User:
+def _user_from_token(token: str, db: Session) -> User:
     credentials_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired authentication token",
@@ -102,6 +109,33 @@ def get_current_user(
     user = db.query(User).filter(User.username == username).first()
     if user is None or not user.is_active:
         raise credentials_error
+    return user
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    """Internal (desktop/staff) user. Website client accounts are refused, so
+    every internal endpoint stays closed to them."""
+    user = _user_from_token(token, db)
+    if is_client(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Client accounts can only use the Abellar Realty website.",
+        )
+    return user
+
+
+def get_current_client(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    """Website client account linked to a client record."""
+    user = _user_from_token(token, db)
+    if not is_client(user) or not user.client_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Sign in with a client account to continue.")
     return user
 
 

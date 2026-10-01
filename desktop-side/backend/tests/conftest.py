@@ -40,6 +40,10 @@ os.environ.update(
     INITIAL_ADMIN_PASSWORD="",
     SECRET_KEY="test-secret-key-for-integration-tests",
     FORECAST_MIN_MONTHS="6",
+    # Never call live routing/traffic providers from tests, whatever .env says.
+    ROUTING_PROVIDER="osrm",
+    TRAFFIC_PROVIDER="none",
+    TOMTOM_API_KEY="",
 )
 
 
@@ -72,7 +76,7 @@ from app.models.user import User  # noqa: E402
 from main import app  # noqa: E402
 
 BUSINESS_TABLES = (
-    "audit_events", "document_audit_events", "property_media", "transactions", "clients",
+    "agent_reviews", "audit_events", "document_audit_events", "property_media", "transactions", "clients",
     "documents", "document_folders", "property_listings", "agents", "users",
 )
 

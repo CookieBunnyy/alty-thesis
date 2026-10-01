@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -16,6 +16,12 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(50), default="Employee", nullable=False)
     branch_id: Mapped[int | None] = mapped_column(ForeignKey("branches.id"), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Website client accounts (role "Client") point at their client record;
+    # internal staff accounts leave this empty.
+    client_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("clients.client_id", ondelete="SET NULL"),
+        nullable=True, unique=True,
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
