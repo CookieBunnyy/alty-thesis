@@ -84,7 +84,7 @@ def _agent_values(data: dict[str, Any], synced_at: datetime) -> dict[str, Any]:
 
 
 def sync_agents(db: Session) -> dict[str, Any]:
-    if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
+    if not settings.cloud_configured:
         raise HTTPException(status_code=503, detail="Supabase is not configured on the server")
     try:
         response = supabase.table("agents").select("*").execute()
@@ -123,6 +123,8 @@ def sync_agents(db: Session) -> dict[str, Any]:
             if agent is None:
                 db.add(Agent(**values))
                 inserted += 1
+            elif agent.sync_status == "PENDING":
+                continue  # local document-derived change not yet pushed
             else:
                 for key, value in values.items():
                     if key != "agent_id":

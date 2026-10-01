@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from app.theme import badge_colors
 from app.api.client import ApiClient
 
 TRANSACTION_STATUS_COLORS = {
@@ -165,8 +166,9 @@ class TransactionsPage(QWidget):
             self.summary_label.setText(
                 f"{int(summary.get('total', 0)):,} transactions  ·  "
                 f"{int(summary.get('reserved', 0)):,} reserved  ·  "
-                f"{int(summary.get('completed', 0)):,} completed  ·  "
-                f"Completed amount: {self._format_currency(summary.get('amount_total'))}"
+                f"{int(summary.get('completed', 0)):,} completed sales  ·  "
+                f"{int(summary.get('cancelled', 0)):,} cancelled  ·  "
+                f"Sales revenue: {self._format_currency(summary.get('amount_total'))}"
             )
             self.apply_filters()
         except httpx.HTTPStatusError as exc:
@@ -257,9 +259,9 @@ class TransactionsPage(QWidget):
                 if column == 0:
                     item.setData(Qt.ItemDataRole.UserRole, transaction_id)
                 if column == 7:
-                    item.setBackground(
-                        QColor(TRANSACTION_STATUS_COLORS.get(status, "#ffffff"))
-                    )
+                    _text, _bg = badge_colors(status)
+                    item.setForeground(_text)
+                    item.setBackground(_bg)
                     font = item.font()
                     font.setBold(True)
                     item.setFont(font)

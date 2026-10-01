@@ -146,3 +146,22 @@ class PropertyListing(Base):
         DateTime,
         nullable=True,
     )
+
+    # Lifecycle timestamps (NULL for rows that predate tracking).
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=True,
+    )
+
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=True,
+    )
+
+    status_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )

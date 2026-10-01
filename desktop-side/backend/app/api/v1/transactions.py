@@ -1,36 +1,36 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
-from app.models.agent import Agent
-from app.models.client import Client
-from app.models.property_listing import PropertyListing
+from app.core.security import get_current_user, require_management
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
 from app.schemas.transaction import TransactionResponse, TransactionSummary, TransactionSyncResult
+from app.services.audit import record_audit
+from app.services.entity_matching import (
+    find_client_by_external_reference,
+    find_transaction_by_reference,
+)
 from app.services.transaction_sync import sync_transactions
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
-
-def _query():
-    return (
-        select(PropertyTransaction)
-        .join(PropertyTransaction.client)
-        .join(PropertyTransaction.property_listing)
-        .join(PropertyTransaction.agent)
-        .order_by(PropertyTransaction.transaction_date.desc())
-    )
+# Revenue = completed sales. Reservations become COMPLETED when the sale is
+# recorded, so counting every COMPLETED row would double-count.
+REVENUE_CONDITION = (PropertyTransaction.transaction_type == "SOLD") & (
+    PropertyTransaction.status == "COMPLETED"
+)
 
 
 def _response(transaction: PropertyTransaction) -> dict:
     return {
         "transaction_id": str(transaction.transaction_id),
+        "external_transaction_id": transaction.external_transaction_id,
         "client_id": str(transaction.client_id),
         "client_name": transaction.client.full_name,
         "property_id": transaction.property_id,
+        "property_external_id": transaction.property_listing.external_listing_id,
         "property_title": transaction.property_listing.title,
         "agent_id": transaction.agent_id,
         "agent_name": transaction.agent.full_name,
@@ -39,6 +39,9 @@ def _response(transaction: PropertyTransaction) -> dict:
         "amount": transaction.amount,
         "status": transaction.status,
         "notes": transaction.notes,
+        "source": transaction.source,
+        "source_document_id": transaction.source_document_id,
+        "sync_status": transaction.sync_status,
         "created_at": transaction.created_at,
         "updated_at": transaction.updated_at,
     }
@@ -46,72 +49,71 @@ def _response(transaction: PropertyTransaction) -> dict:
 
 @router.get("", response_model=list[TransactionResponse])
 def get_transactions(
+    property_id: int | None = None,
+    client_id: str | None = None,
+    agent_id: str | None = None,
+    transaction_type: str | None = None,
+    status: str | None = None,
+    limit: int = Query(default=500, ge=1, le=2000),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    return [_response(item) for item in db.execute(_query()).scalars().all()]
+    statement = select(PropertyTransaction)
+    if property_id is not None:
+        statement = statement.where(PropertyTransaction.property_id == property_id)
+    if client_id:
+        client = find_client_by_external_reference(db, client_id)
+        if client is None:
+            raise HTTPException(status_code=404, detail="Client not found")
+        statement = statement.where(PropertyTransaction.client_id == client.client_id)
+    if agent_id:
+        statement = statement.where(PropertyTransaction.agent_id == agent_id)
+    if transaction_type:
+        statement = statement.where(PropertyTransaction.transaction_type == transaction_type.upper())
+    if status:
+        statement = statement.where(PropertyTransaction.status == status.upper())
+    rows = db.execute(
+        statement.order_by(PropertyTransaction.transaction_date.desc(),
+                           PropertyTransaction.created_at.desc())
+        .offset(offset).limit(limit)
+    ).scalars().all()
+    return [_response(item) for item in rows]
 
 
 @router.get("/summary", response_model=TransactionSummary)
-def get_transaction_summary(
-    db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
-):
-    total, reserved, completed, amount_total = db.execute(
+def get_transaction_summary(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+    total, reserved, completed_sales, cancelled, revenue = db.execute(
         select(
             func.count(PropertyTransaction.transaction_id),
-            func.coalesce(
-                func.sum(case((func.upper(PropertyTransaction.status) == "RESERVED", 1), else_=0)),
-                0,
-            ),
-            func.coalesce(
-                func.sum(case((func.upper(PropertyTransaction.status) == "COMPLETED", 1), else_=0)),
-                0,
-            ),
-            func.coalesce(
-                func.sum(
-                    case(
-                        (
-                            func.upper(PropertyTransaction.status) == "COMPLETED",
-                            PropertyTransaction.amount,
-                        ),
-                        else_=0,
-                    )
-                ),
-                0,
-            ),
+            func.coalesce(func.sum(case((PropertyTransaction.status == "RESERVED", 1), else_=0)), 0),
+            func.coalesce(func.sum(case((REVENUE_CONDITION, 1), else_=0)), 0),
+            func.coalesce(func.sum(case((PropertyTransaction.status == "CANCELLED", 1), else_=0)), 0),
+            func.coalesce(func.sum(case((REVENUE_CONDITION, PropertyTransaction.amount), else_=0)), 0),
         )
     ).one()
     return {
         "total": int(total),
         "reserved": int(reserved),
-        "completed": int(completed),
-        "amount_total": amount_total,
+        "completed": int(completed_sales),
+        "cancelled": int(cancelled),
+        "amount_total": revenue,
     }
 
 
 @router.get("/{transaction_id}", response_model=TransactionResponse)
-def get_transaction(
-    transaction_id: str,
-    db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
-):
-    transaction = db.execute(
-        _query().where(PropertyTransaction.transaction_id == transaction_id)
-    ).scalar_one_or_none()
+def get_transaction(transaction_id: str, db: Session = Depends(get_db),
+                    _user: User = Depends(get_current_user)):
+    transaction = find_transaction_by_reference(db, transaction_id)
     if transaction is None:
         raise HTTPException(status_code=404, detail="Transaction not found")
     return _response(transaction)
 
 
 @router.post("/sync", response_model=TransactionSyncResult)
-def sync_transaction_records(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    if user.role.casefold() not in {"administrator", "general manager"}:
-        raise HTTPException(
-            status_code=403,
-            detail="Only an administrator or general manager can sync transactions.",
-        )
-    return sync_transactions(db)
+def sync_transaction_records(db: Session = Depends(get_db), user: User = Depends(require_management)):
+    result = sync_transactions(db)
+    record_audit(db, "TRANSACTIONS_SYNCED", actor=user, entity_type="transactions",
+                 details={key: value for key, value in result.items() if key != "last_synced_at"})
+    db.commit()
+    return result

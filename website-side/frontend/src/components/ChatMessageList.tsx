@@ -52,7 +52,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
           <React.Fragment key={msg.id}>
             {shouldShowDate && msg.timestamp && (
               <div className="flex justify-center">
-                <div className="rounded-full border border-[#d8d1c8] bg-[#f0efe9] px-3 py-1 text-[11px] font-medium text-[#183c32]">
+                <div className="rounded-full border border-ab-border bg-ab-hover px-3 py-1 text-[11px] font-medium text-ab-text">
                   {formatDayLabel(msg.timestamp)}
                 </div>
               </div>
@@ -65,16 +65,16 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
               <div
                 className={`max-w-[88%] rounded-2xl px-4 py-3 text-xs shadow-sm sm:text-sm ${
                   msg.sender === "user"
-                    ? "rounded-br-none bg-[#0d3529] text-[#f3efe7]"
+                    ? "rounded-br-none bg-ab-sidebar text-ab-text"
                     : msg.status === "rejected"
-                      ? "rounded-bl-none border border-red-200 bg-red-50 text-red-800"
+                      ? "rounded-bl-none border border-ab-danger/40 bg-ab-danger/10 text-ab-danger"
                       : msg.status === "clarification_needed"
-                        ? "rounded-bl-none border border-amber-200 bg-amber-50 text-amber-900"
-                        : "rounded-bl-none bg-[#edf0ed] text-[#183c32]"
+                        ? "rounded-bl-none border border-ab-warning/40 bg-ab-warning/10 text-ab-warning"
+                        : "rounded-bl-none bg-ab-hover text-ab-text"
                 }`}
               >
                 {msg.status === "clarification_needed" && (
-                  <div className="mb-1 flex items-center space-x-1 font-medium text-amber-700">
+                  <div className="mb-1 flex items-center space-x-1 font-medium text-ab-warning">
                     <AlertCircle className="h-4 w-4" />
                     <span>More details needed</span>
                   </div>
@@ -83,7 +83,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
               </div>
 
               {msg.timestamp && (
-                <div className={`mt-1 text-[10px] text-slate-500 ${msg.sender === "user" ? "mr-1" : "ml-1"}`}>
+                <div className={`mt-1 text-[10px] text-ab-muted ${msg.sender === "user" ? "mr-1" : "ml-1"}`}>
                   {formatTimeLabel(msg.timestamp)}
                 </div>
               )}
@@ -97,12 +97,12 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                       onClick={() => onSelectProperty(prop)}
                       className={`cursor-pointer rounded-lg border p-3 transition-all hover:shadow-md ${
                         selectedProperty?.listing_id === prop.listing_id
-                          ? "border-[#123f33] bg-[#edf0ed]"
-                          : "border-[#d8d1c8] bg-[#f9f6f2] hover:border-[#bfc7c1]"
+                          ? "border-ab-accent bg-ab-hover"
+                          : "border-ab-border bg-ab-card hover:border-ab-border"
                       }`}
                     >
                       <div className="flex items-start justify-between">
-                        <h4 className="text-xs leading-snug font-semibold text-slate-900 sm:text-sm">
+                        <h4 className="text-xs leading-snug font-semibold text-ab-text sm:text-sm">
                           {prop.title}
                         </h4>
                         <button
@@ -110,33 +110,33 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                             e.stopPropagation()
                             onSelectProperty(prop)
                           }}
-                          className="ml-2 flex shrink-0 items-center rounded-md bg-[#dfe7e2] px-2 py-1 text-[11px] font-medium text-[#123f33] hover:underline"
+                          className="ml-2 flex shrink-0 items-center rounded-md bg-ab-hover px-2 py-1 text-[11px] font-medium text-ab-text hover:underline"
                         >
                           <Eye className="mr-1 h-3 w-3" /> View
                         </button>
                       </div>
 
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ab-muted">
                         <span className="flex items-center">
-                          <MapPin className="mr-1 h-3 w-3 text-slate-400" />
+                          <MapPin className="mr-1 h-3 w-3 text-ab-faint" />
                           {prop.village_name}
                         </span>
                         <span className="flex items-center">
-                          <Bed className="mr-1 h-3 w-3 text-slate-400" />
+                          <Bed className="mr-1 h-3 w-3 text-ab-faint" />
                           {prop.num_bedrooms} Bed
                         </span>
                         <span className="flex items-center">
-                          <Bath className="mr-1 h-3 w-3 text-slate-400" />
+                          <Bath className="mr-1 h-3 w-3 text-ab-faint" />
                           {prop.num_bathrooms} Bath
                         </span>
                       </div>
 
                       <div className="mt-2 flex items-center justify-between">
-                        <p className="text-sm font-bold text-[#123f33]">
+                        <p className="text-sm font-bold text-ab-text">
                           ₱{prop.price_total.toLocaleString()}
                         </p>
                         {prop.commute_info && (
-                          <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                          <span className="rounded-full border border-ab-border bg-ab-card-2 px-2 py-0.5 text-[10px] font-semibold text-ab-muted">
                             ⏱️ {prop.commute_info.duration_mins} mins away
                           </span>
                         )}
@@ -150,7 +150,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
         )
       })}
       {isLoading && (
-        <div className="animate-pulse text-xs text-slate-400">
+        <div className="animate-pulse text-xs text-ab-faint">
           Assistant is typing...
         </div>
       )}

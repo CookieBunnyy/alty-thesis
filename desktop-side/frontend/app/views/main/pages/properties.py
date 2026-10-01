@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
+    QStackedWidget,
     QScrollArea,
     QSizePolicy,
     QSpinBox,
@@ -36,7 +37,10 @@ from PyQt6.QtWidgets import (
 
 import qtawesome as qta
 
+from app.theme import badge_colors
 from app.api.client import ApiClient
+from app.theme import TOKENS
+from app.views.main.pages.property_cards import PropertyCardGrid
 
 PROPERTY_STATUSES = [
     ("Available", "AVAILABLE", "#e5efdc"),
@@ -45,6 +49,18 @@ PROPERTY_STATUSES = [
     ("On Hold", "ON_HOLD", "#fff3cd"),
     ("Unavailable", "UNAVAILABLE", "#f8dedc"),
 ]
+
+
+
+def _chip_style() -> str:
+    t = TOKENS
+    return (
+        "/*alty-raw*/"
+        f"QPushButton {{ background: {t['card']}; color: {t['text_muted']}; border: 1px solid {t['border']};"
+        " border-radius: 15px; padding: 6px 14px; font-weight: 600; }"
+        f"QPushButton:hover {{ color: {t['text']}; border-color: {t['border_strong']}; }}"
+        f"QPushButton:checked {{ background: {t['accent']}; color: {t['accent_ink']}; border-color: {t['accent']}; }}"
+    )
 
 
 class DynamicStringList(QWidget):
@@ -1031,6 +1047,10 @@ class PropertiesPage(QWidget):
         self.listings: list[dict[str, Any]] = []
 
         self._build_ui()
+        if self.token:
+            self.load_properties()
+
+    def refresh(self) -> None:
         self.load_properties()
 
     @property
@@ -1241,6 +1261,34 @@ class PropertiesPage(QWidget):
 
         main_layout.addLayout(filter_layout)
 
+        # Status chips (drive the existing status filter) + view toggle.
+        chips_row = QHBoxLayout()
+        chips_row.setSpacing(8)
+        self.status_chips: list[QPushButton] = []
+        for label, value in [("All", None)] + [(label, value) for label, value, _c in PROPERTY_STATUSES]:
+            chip = QPushButton(label)
+            chip.setCheckable(True)
+            chip.setChecked(value is None)
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setProperty("statusValue", value)
+            chip.setStyleSheet(_chip_style())
+            chip.clicked.connect(lambda _checked, v=value: self._select_status_chip(v))
+            chips_row.addWidget(chip)
+            self.status_chips.append(chip)
+        chips_row.addStretch()
+        self.cards_view_button = QPushButton("Cards")
+        self.table_view_button = QPushButton("Table")
+        for button, icon, index in ((self.cards_view_button, "fa5s.th-large", 0),
+                                    (self.table_view_button, "fa5s.list", 1)):
+            button.setCheckable(True)
+            button.setIcon(qta.icon(icon, color=TOKENS["text"]))
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setStyleSheet(_chip_style())
+            button.clicked.connect(lambda _checked, i=index: self._set_view(i))
+            chips_row.addWidget(button)
+        self.status_filter.hide()  # the chips replace the dropdown visually
+        main_layout.addLayout(chips_row)
+
         # -----------------------------------------------------
         # Record Count
         # -----------------------------------------------------
@@ -1384,7 +1432,14 @@ class PropertiesPage(QWidget):
             self.show_property_details
         )
 
-        main_layout.addWidget(self.table, 1)
+        self.card_grid = PropertyCardGrid()
+        self.card_grid.listing_selected.connect(self._card_selected)
+        self.card_grid.listing_opened.connect(self._card_opened)
+        self.views = QStackedWidget()
+        self.views.addWidget(self.card_grid)
+        self.views.addWidget(self.table)
+        main_layout.addWidget(self.views, 1)
+        self._set_view(0)
 
     # ---------------------------------------------------------
     # Message Box Styling
@@ -1613,7 +1668,12 @@ class PropertiesPage(QWidget):
     # Load Properties
     # ---------------------------------------------------------
 
-    def load_properties(self, sync_cloud: bool = True) -> None:
+    def load_properties(self, sync_cloud: bool = False) -> None:
+        # Listings come from documents and the backend's cloud sync; the page
+        # only reads them. Explicit sync is the "Sync Listings" button.
+        if not self.token:
+            self.record_count.setText("Sign in to load properties.")
+            return
         self.sync_button.setEnabled(False)
         self.record_count.setText("Loading properties...")
         cloud_sync_warning = None
@@ -1621,7 +1681,7 @@ class PropertiesPage(QWidget):
         try:
             if sync_cloud:
                 try:
-                    sync_result = self.api.sync_property_listings()
+                    sync_result = self.api.sync_property_listings(token=self.token)
                     sync_errors = int(sync_result.get("errors", 0))
                     if sync_errors:
                         cloud_sync_warning = (
@@ -1630,7 +1690,7 @@ class PropertiesPage(QWidget):
                 except Exception as exc:
                     cloud_sync_warning = str(exc)
 
-            data = self.api.get_property_listings()
+            data = self.api.get_property_listings(token=self.token)
 
             if not isinstance(data, list):
                 raise RuntimeError(
@@ -1765,6 +1825,40 @@ class PropertiesPage(QWidget):
             filtered.append(listing)
 
         self.populate_table(filtered)
+        self.card_grid.set_listings(filtered)
+
+    # ---------------------------------------------------------
+    # Card view helpers
+    # ---------------------------------------------------------
+
+    def _set_view(self, index: int) -> None:
+        self.views.setCurrentIndex(index)
+        self.cards_view_button.setChecked(index == 0)
+        self.table_view_button.setChecked(index == 1)
+
+    def _select_status_chip(self, value) -> None:
+        for chip in self.status_chips:
+            chip.setChecked(chip.property("statusValue") == value)
+        self.status_filter.setCurrentIndex(max(self.status_filter.findData(value), 0))
+
+    def _table_row_for(self, listing: dict[str, Any]) -> int:
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            data = item.data(Qt.ItemDataRole.UserRole) if item else None
+            if isinstance(data, dict) and data.get("listing_id") == listing.get("listing_id"):
+                return row
+        return -1
+
+    def _card_selected(self, listing: dict[str, Any]) -> None:
+        row = self._table_row_for(listing)
+        if row >= 0:
+            self.table.selectRow(row)  # Edit/Delete act on the selected card
+
+    def _card_opened(self, listing: dict[str, Any]) -> None:
+        row = self._table_row_for(listing)
+        if row >= 0:
+            self.table.selectRow(row)
+            self.show_property_details(row, 0)
 
     # ---------------------------------------------------------
     # Populate Table
@@ -1857,11 +1951,13 @@ class PropertiesPage(QWidget):
                 Qt.ItemDataRole.UserRole,
                 listing,
             )
-            background = QColor(status_color)
-            for column in range(self.table.columnCount()):
-                item = self.table.item(row, column)
-                if item is not None:
-                    item.setBackground(background)
+            # Status badge on the status cell only (readable on the dark theme).
+            _text, _bg = badge_colors(listing.get("status") or "AVAILABLE")
+            status_item.setForeground(_text)
+            status_item.setBackground(_bg)
+            status_font = status_item.font()
+            status_font.setBold(True)
+            status_item.setFont(status_font)
 
         self.table.setSortingEnabled(True)
 
@@ -1907,7 +2003,7 @@ class PropertiesPage(QWidget):
         self.sync_button.setText("↻  Syncing...")
 
         try:
-            result = self.api.sync_property_listings()
+            result = self.api.sync_property_listings(token=self.token)
 
             total = result.get("total", 0)
             inserted = result.get("inserted", 0)

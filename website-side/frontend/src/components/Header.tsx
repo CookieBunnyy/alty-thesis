@@ -1,5 +1,5 @@
 import React from "react"
-import { Building, Navigation, MessageSquare, Map as MapIcon, X } from "lucide-react"
+import { Navigation, MessageSquare, Map as MapIcon, X } from "lucide-react"
 import type { HeaderProps } from "../types"
 
 export const Header: React.FC<HeaderProps> = ({
@@ -13,16 +13,19 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <div>
       {/* Mobile/Tablet Header & Tab Navigation */}
-      <div className="flex flex-col border-b bg-[#0d3529] text-[#f3efe7] md:hidden">
+      <div className="flex flex-col border-b bg-ab-sidebar text-ab-text md:hidden">
         <header className="flex items-center justify-between p-3">
           <div className="flex items-center space-x-2">
-            <Building className="h-6 w-6 text-[#d9d4cc]" />
-            <h1 className="text-base font-semibold">Property Assistant</h1>
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ab-accent text-base font-black text-ab-ink">A</span>
+            <div className="leading-tight">
+              <h1 className="text-base font-extrabold tracking-wide text-ab-text">ALTY</h1>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ab-faint">Abellar Realty</p>
+            </div>
           </div>
           <div className="flex items-center space-x-1">
             <button
               onClick={onSetWorkplaceClick}
-              className="flex items-center space-x-1 rounded-md border border-[#285744] bg-[#173f32] px-2.5 py-1 text-xs text-[#d9d4cc]"
+              className="flex items-center space-x-1 rounded-md border border-ab-border-strong bg-ab-card-2 px-2.5 py-1 text-xs text-ab-muted"
             >
               <Navigation className="h-3 w-3" />
               <span>{workplaceLocation ? workplaceLocation.name : "Set Work"}</span>
@@ -31,7 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={onClearWorkplace}
                 aria-label="Clear workplace"
-                className="flex items-center justify-center rounded-md border border-[#285744] bg-[#173f32] p-1.5 text-[#d9d4cc] hover:text-red-400"
+                className="flex items-center justify-center rounded-md border border-ab-border-strong bg-ab-card-2 p-1.5 text-ab-muted hover:text-ab-danger"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -39,13 +42,13 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </header>
 
-        <div className="flex border-t border-[#285744] bg-[#0b2d25]/60">
+        <div className="flex border-t border-ab-border-strong bg-ab-bg/60">
           <button
             onClick={() => onTabChange("chat")}
             className={`flex flex-1 items-center justify-center space-x-2 py-2.5 text-xs font-semibold transition ${
               activeTab === "chat"
-                ? "border-b-2 border-[#d9d4cc] bg-[#173f32] text-[#f3efe7]"
-                : "text-[#d1d9d4] hover:text-[#f3efe7]"
+                ? "border-b-2 border-ab-border bg-ab-card-2 text-ab-text"
+                : "text-ab-muted hover:text-ab-text"
             }`}
           >
             <MessageSquare className="h-4 w-4" />
@@ -55,8 +58,8 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => onTabChange("map")}
             className={`flex flex-1 items-center justify-center space-x-2 py-2.5 text-xs font-semibold transition ${
               activeTab === "map"
-                ? "border-b-2 border-[#d9d4cc] bg-[#173f32] text-[#f3efe7]"
-                : "text-[#d1d9d4] hover:text-[#f3efe7]"
+                ? "border-b-2 border-ab-border bg-ab-card-2 text-ab-text"
+                : "text-ab-muted hover:text-ab-text"
             }`}
           >
             <MapIcon className="h-4 w-4" />
@@ -66,15 +69,18 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Desktop Header */}
-      <header className="hidden items-center justify-between border-b bg-[#0d3529] p-4 text-[#f3efe7] md:flex">
+      <header className="hidden items-center justify-between border-b bg-ab-sidebar p-4 text-ab-text md:flex">
         <div className="flex items-center space-x-2">
-          <Building className="h-6 w-6 text-[#d9d4cc]" />
-          <h1 className="text-lg font-semibold">Property Assistant</h1>
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ab-accent text-base font-black text-ab-ink">A</span>
+          <div className="leading-tight">
+            <h1 className="text-lg font-extrabold tracking-wide text-ab-text">ALTY</h1>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ab-faint">Abellar Realty · Property Finder</p>
+          </div>
         </div>
         <div className="flex items-center space-x-2">
           <button
             onClick={onSetWorkplaceClick}
-            className="flex items-center space-x-1.5 rounded-lg border border-[#285744] bg-[#173f32] px-3 py-1.5 text-xs font-medium text-[#d9d4cc] transition hover:bg-[#1d4d3f]"
+            className="flex items-center space-x-1.5 rounded-lg border border-ab-border-strong bg-ab-card-2 px-3 py-1.5 text-xs font-medium text-ab-muted transition hover:bg-ab-hover"
           >
             <Navigation className="h-3.5 w-3.5" />
             <span className="max-w-[120px] truncate">
@@ -85,7 +91,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onClearWorkplace}
               aria-label="Clear workplace"
-              className="flex items-center justify-center rounded-lg border border-[#285744] bg-[#173f32] p-1.5 text-[#d9d4cc] transition hover:bg-[#1d4d3f] hover:text-red-400"
+              className="flex items-center justify-center rounded-lg border border-ab-border-strong bg-ab-card-2 p-1.5 text-ab-muted transition hover:bg-ab-hover hover:text-ab-danger"
             >
               <X className="h-3.5 w-3.5" />
             </button>

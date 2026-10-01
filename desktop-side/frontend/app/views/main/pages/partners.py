@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QFrame,
+    QSizePolicy,
 )
 
 
@@ -46,6 +47,8 @@ class PartnerCard(QFrame):
         super().__init__(parent)
 
         self.setObjectName("partnerCard")
+        # Cards keep their natural height instead of stretching to fill space.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
@@ -285,7 +288,9 @@ class PartnersPage(QWidget):
         if partners is None:
             partners = self.partners
 
-        # Remove existing cards
+        # Remove existing cards and the previous trailing stretch row
+        for row in range(self.grid.rowCount()):
+            self.grid.setRowStretch(row, 0)
         while self.grid.count():
             item = self.grid.takeAt(0)
 
@@ -316,6 +321,9 @@ class PartnersPage(QWidget):
 
         self.grid.setColumnStretch(0, 1)
         self.grid.setColumnStretch(1, 1)
+        # An empty stretch row after the last card absorbs the spare height,
+        # so one search result stays card-sized at the top.
+        self.grid.setRowStretch((len(partners) + columns - 1) // columns, 1)
 
     # ---------------------------------------------------------
     # Search

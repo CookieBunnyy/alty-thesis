@@ -95,12 +95,40 @@ class PropertyListingResponse(BaseModel):
 
     sync_status: str
     last_synced_at: datetime | None = None
+    created_at: datetime | None = None
+    status_changed_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class PropertyListingUpdate(PropertyListingCreate):
-    pass
+class PropertyListingUpdate(BaseModel):
+    """Partial management edit. RESERVED/SOLD are rejected by the endpoint:
+    those statuses come from reservation and sale documents."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    category: str | None = Field(default=None, min_length=1, max_length=100)
+    price_total: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    initial_dp: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    monthly_rate: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    num_bedrooms: int | None = Field(default=None, ge=0)
+    num_bathrooms: int | None = Field(default=None, ge=0)
+    layout_type: str | None = Field(default=None, max_length=255)
+    village_name: str | None = Field(default=None, max_length=255)
+    lat: Decimal | None = Field(default=None, ge=-90, le=90, max_digits=10, decimal_places=6)
+    lng: Decimal | None = Field(default=None, ge=-180, le=180, max_digits=10, decimal_places=6)
+    photos: list[str] | None = None
+    amenity_list: dict | list | None = None
+    nearby_places: dict | list | None = None
+    details: str | None = None
+    nearby_establishments: dict | list | None = None
+    has_balcony: bool | None = None
+    has_kitchen: bool | None = None
+    has_backyard: bool | None = None
+    has_garage: bool | None = None
+    garage_spaces: int | None = Field(default=None, ge=0)
+    status: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class PropertyListingStatusSummary(BaseModel):

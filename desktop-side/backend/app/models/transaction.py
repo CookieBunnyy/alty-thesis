@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, String, Text, Uuid
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, String, Text, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -16,7 +16,17 @@ if TYPE_CHECKING:
     from app.models.property_listing import PropertyListing
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class PropertyTransaction(Base):
+    """One business event (reservation or sale) in a client's history.
+
+    A reservation followed by a sale is two rows; the reservation is kept
+    (its status becomes COMPLETED) when the sale is recorded.
+    """
+
     __tablename__ = "transactions"
     __table_args__ = (
         CheckConstraint(
@@ -28,6 +38,15 @@ class PropertyTransaction(Base):
             name="ck_transactions_status",
         ),
         CheckConstraint("amount >= 0", name="ck_transactions_amount_nonnegative"),
+        # Idempotency backstop: one live reservation/sale per client+property+type.
+        Index(
+            "uq_transactions_active_client_property_type",
+            "client_id",
+            "property_id",
+            "transaction_type",
+            unique=True,
+            postgresql_where=text("status <> 'CANCELLED'"),
+        ),
     )
 
     transaction_id: Mapped[str] = mapped_column(
@@ -42,7 +61,6 @@ class PropertyTransaction(Base):
         Uuid(as_uuid=False),
         ForeignKey("clients.client_id", ondelete="RESTRICT"),
         nullable=False,
-        unique=True,
         index=True,
     )
     property_id: Mapped[int] = mapped_column(
@@ -63,16 +81,21 @@ class PropertyTransaction(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="DOCUMENT", server_default="SYNC"
+    )
+    source_document_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    sync_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="PENDING", server_default="SYNCED"
+    )
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        nullable=False,
+        DateTime, default=_utcnow, nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        nullable=False,
+        DateTime, default=_utcnow, onupdate=_utcnow, nullable=False
     )
 
     client: Mapped[Client] = relationship("Client", back_populates="transactions")

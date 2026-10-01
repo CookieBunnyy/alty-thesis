@@ -34,13 +34,13 @@ function calculateFallbackEstimate(lat1: number, lon1: number, lat2: number, lon
 function getBadgeColor(score: string) {
   switch (score) {
     case 'Excellent':
-      return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      return 'bg-ab-accent-soft text-ab-accent border-ab-accent/40';
     case 'Good':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
+      return 'bg-ab-info/15 text-ab-info border-ab-info/40';
     case 'Far':
-      return 'bg-red-100 text-red-800 border-red-200';
+      return 'bg-ab-danger/15 text-ab-danger border-ab-danger/40';
     default:
-      return 'bg-amber-100 text-amber-800 border-amber-200';
+      return 'bg-ab-warning/15 text-ab-warning border-ab-warning/40';
   }
 }
 
@@ -51,15 +51,15 @@ export const CommuteCard: React.FC<CommuteCardProps> = ({
 }) => {
   if (!workplace) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-center shadow-sm">
-        <Navigation className="mx-auto h-6 w-6 text-slate-400 mb-1" />
-        <p className="text-xs font-semibold text-slate-700">Calculate Work Commute</p>
-        <p className="text-[11px] text-slate-500 mb-2">
+      <div className="rounded-xl border border-dashed border-ab-border bg-ab-card p-4 text-center shadow-sm">
+        <Navigation className="mx-auto h-6 w-6 text-ab-faint mb-1" />
+        <p className="text-xs font-semibold text-ab-muted">Calculate Work Commute</p>
+        <p className="text-[11px] text-ab-muted mb-2">
           Set your workplace location to see distance and estimated travel time.
         </p>
         <button
           onClick={onSetWorkplaceClick}
-          className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800"
+          className="rounded-lg bg-ab-accent px-3 py-1.5 text-xs font-medium text-ab-ink transition hover:bg-ab-accent-hover"
         >
           + Set Workplace
         </button>
@@ -85,11 +85,11 @@ export const CommuteCard: React.FC<CommuteCardProps> = ({
   const badgeColor = getBadgeColor(score);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm">
-      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+    <div className="rounded-xl border border-ab-border bg-gradient-to-br from-ab-card to-ab-card-2 p-4 shadow-sm">
+      <div className="flex items-center justify-between pb-2 border-b border-ab-border">
         <div className="flex items-center space-x-1.5">
-          <ShieldCheck className="h-4 w-4 text-emerald-600" />
-          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+          <ShieldCheck className="h-4 w-4 text-ab-accent" />
+          <h3 className="text-xs font-bold text-ab-text uppercase tracking-wider">
             Commute Value Score
           </h3>
         </div>
@@ -102,36 +102,36 @@ export const CommuteCard: React.FC<CommuteCardProps> = ({
 
       <div className="mt-3 grid grid-cols-2 gap-3">
         {/* Distance */}
-        <div className="rounded-lg bg-white p-2.5 border border-slate-100 shadow-2xs">
-          <div className="flex items-center space-x-1 text-slate-400 mb-1">
+        <div className="rounded-lg bg-ab-card-2 p-2.5 border border-ab-border shadow-2xs">
+          <div className="flex items-center space-x-1 text-ab-faint mb-1">
             <MapPin className="h-3.5 w-3.5" />
-            <span className="text-[11px] font-medium text-slate-500">Distance</span>
+            <span className="text-[11px] font-medium text-ab-muted">Distance</span>
           </div>
-          <p className="text-sm font-bold text-slate-900">{distance} km</p>
-          <p className="text-[10px] text-slate-400">
+          <p className="text-sm font-bold text-ab-text">{distance} km</p>
+          <p className="text-[10px] text-ab-faint">
             {property.commute_info ? "OSRM route" : "Point-to-point"}
           </p>
         </div>
 
         {/* Estimated Time */}
-        <div className="rounded-lg bg-white p-2.5 border border-slate-100 shadow-2xs">
-          <div className="flex items-center space-x-1 text-slate-400 mb-1">
+        <div className="rounded-lg bg-ab-card-2 p-2.5 border border-ab-border shadow-2xs">
+          <div className="flex items-center space-x-1 text-ab-faint mb-1">
             <Clock className="h-3.5 w-3.5" />
-            <span className="text-[11px] font-medium text-slate-500">Est. Travel Time</span>
+            <span className="text-[11px] font-medium text-ab-muted">Est. Travel Time</span>
           </div>
-          <p className="text-sm font-bold text-slate-900">~{duration} mins</p>
-          <p className="text-[10px] text-slate-500">Best commute route</p>
+          <p className="text-sm font-bold text-ab-text">~{duration} mins</p>
+          <p className="text-[10px] text-ab-muted">Best commute route</p>
         </div>
       </div>
 
       {/* Workplace details footer */}
-      <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
+      <div className="mt-3 flex items-center justify-between text-[11px] text-ab-muted pt-2 border-t border-ab-border">
         <span className="truncate max-w-[200px]">
           Workplace: <strong>{workplace.name}</strong>
         </span>
         <button
           onClick={onSetWorkplaceClick}
-          className="text-emerald-600 hover:underline font-medium shrink-0 ml-1"
+          className="text-ab-accent hover:underline font-medium shrink-0 ml-1"
         >
           Change
         </button>

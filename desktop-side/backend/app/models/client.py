@@ -15,7 +15,22 @@ if TYPE_CHECKING:
     from app.models.transaction import PropertyTransaction
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+CLIENT_STATUSES = ("PROSPECT", "RESERVED", "SOLD", "CANCELLED")
+
+
 class Client(Base):
+    """A buyer/client derived from documents or website submissions.
+
+    A client may exist before any transaction (Buyer Document), so the
+    property, agent and transaction summary columns are nullable. The
+    authoritative transaction history lives in ``transactions``; the
+    ``transaction_type``/``status`` columns summarize the latest one.
+    """
+
     __tablename__ = "clients"
     __table_args__ = (
         CheckConstraint(
@@ -23,7 +38,7 @@ class Client(Base):
             name="ck_clients_transaction_type",
         ),
         CheckConstraint(
-            "status IN ('RESERVED', 'SOLD', 'CANCELLED')",
+            "status IN ('PROSPECT', 'RESERVED', 'SOLD', 'CANCELLED')",
             name="ck_clients_status",
         ),
     )
@@ -40,40 +55,46 @@ class Client(Base):
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    agent_id: Mapped[str] = mapped_column(
+    occupation: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    civil_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    preferred_contact: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    purpose_of_purchase: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    agent_id: Mapped[str | None] = mapped_column(
         String(32),
         ForeignKey("agents.agent_id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
-    property_id: Mapped[int] = mapped_column(
-        ForeignKey("property_listings.listing_id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
+    property_id: Mapped[int | None] = mapped_column(
+        ForeignKey("property_listings.listing_id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
-    transaction_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    transaction_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     transaction_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="PROSPECT", index=True
+    )
+    source: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="DOCUMENT", server_default="SYNC"
+    )
+    sync_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="PENDING", server_default="SYNCED"
+    )
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        nullable=False,
+        DateTime, default=_utcnow, nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
-        nullable=False,
+        DateTime, default=_utcnow, onupdate=_utcnow, nullable=False
     )
 
-    property_listing: Mapped[PropertyListing] = relationship(
+    property_listing: Mapped[PropertyListing | None] = relationship(
         "PropertyListing", lazy="joined"
     )
-    agent: Mapped[Agent] = relationship("Agent", lazy="joined")
+    agent: Mapped[Agent | None] = relationship("Agent", lazy="joined")
     transactions: Mapped[list[PropertyTransaction]] = relationship(
         "PropertyTransaction", back_populates="client", lazy="selectin"
     )

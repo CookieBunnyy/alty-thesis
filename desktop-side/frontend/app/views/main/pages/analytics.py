@@ -1,146 +1,63 @@
 from __future__ import annotations
 
-from typing import Any
+from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel
 
-import httpx
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
-    QHBoxLayout,
-    QHeaderView,
-    QLabel,
-    QMessageBox,
-    QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
-    QVBoxLayout,
-    QWidget,
-)
-
-from app.api.client import ApiClient
+from app.views.main.pages._common import INSUFFICIENT, Card, DataPage, fill, fmt_money, table
 
 
-class AnalyticsPage(QWidget):
-    def __init__(self, controller=None) -> None:
-        super().__init__()
-        self.controller = controller
-        self.api = ApiClient()
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(14)
+class AnalyticsPage(DataPage):
+    title = "Analytics"
+    subtitle = ("Sales volume, revenue, absorption, status distribution, agent performance and "
+                "price levels — computed from properties, clients, transactions and agents.")
 
-        header = QHBoxLayout()
-        title = QLabel("Analytics")
-        title.setStyleSheet("color: #17310a; font-size: 26px; font-weight: 700;")
-        header.addWidget(title)
-        header.addStretch()
-        self.refresh_button = QPushButton("Refresh")
-        self.refresh_button.clicked.connect(self.refresh)
-        header.addWidget(self.refresh_button)
-        layout.addLayout(header)
+    def build(self) -> None:
+        cards = QGridLayout()
+        self.revenue = Card("Sales revenue", "#17310a")
+        self.sales = Card("Completed sales", "#477489")
+        self.average = Card("Average sale value", "#486b2a")
+        self.absorption = Card("Absorption (sold / listings)", "#9a6a13")
+        self.reservations = Card("Active reservations", "#486b2a")
+        for index, card in enumerate(
+            (self.revenue, self.sales, self.average, self.absorption, self.reservations)
+        ):
+            cards.addWidget(card, index // 3, index % 3)
+        self.layout_.addLayout(cards)
+        row = QHBoxLayout()
+        self.status_table = table(["Property status", "Listings"])
+        self.monthly = table(["Month", "Transactions", "Reservations", "Sales", "Revenue", "Average sale"])
+        row.addWidget(self.status_table, 1)
+        row.addWidget(self.monthly, 3)
+        self.layout_.addLayout(row, 1)
+        self.layout_.addWidget(QLabel("Agent performance (recorded transactions)"))
+        self.agents = table(["Agent", "Status", "Transactions", "Completed sales", "Sales value",
+                             "Recorded commission"])
+        self.layout_.addWidget(self.agents, 1)
+        self.layout_.addWidget(QLabel("Listing price by category"))
+        self.prices = table(["Category", "Listings", "Average price", "Minimum", "Maximum"])
+        self.prices.setMaximumHeight(180)
+        self.layout_.addWidget(self.prices)
 
-        self.summary_label = QLabel("Sign in to load analytics.")
-        self.summary_label.setStyleSheet("color: #65745b; font-size: 13px;")
-        layout.addWidget(self.summary_label)
-
-        section_row = QHBoxLayout()
-        section_row.setSpacing(16)
-        self.month_table = QTableWidget(0, 2)
-        self.month_table.setHorizontalHeaderLabels(["Month", "Transactions"])
-        self.month_table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.Stretch
+    def load(self) -> None:
+        data = self.api.get_analytics_overview(token=self.token)
+        tx = data["transactions"]
+        self.revenue.set(fmt_money(tx["revenue"]))
+        self.sales.set(tx["completed_sales"])
+        self.average.set(fmt_money(tx["average_sale_value"]) if tx["average_sale_value"] else INSUFFICIENT)
+        rate = data["absorption_rate"]
+        self.absorption.set(f"{rate * 100:.1f}%" if rate is not None else INSUFFICIENT)
+        self.reservations.set(tx["active_reservations"])
+        fill(self.status_table, sorted(data["properties"]["by_status"].items()))
+        fill(self.monthly, ([m["month"], m["transactions"], m["reservations"], m["sales"],
+                             fmt_money(m["revenue"]), fmt_money(m["average_sale"]) if m["average_sale"] else "—"]
+                            for m in data["monthly"]))
+        fill(self.agents, ([a["full_name"], a["status"], a["transactions"], a["completed_sales"],
+                            fmt_money(a["sales_value"]), fmt_money(a["recorded_total_commission"])]
+                           for a in data["agents"]))
+        fill(self.prices, ([p["category"], p["listings"], fmt_money(p["average_price"]),
+                            fmt_money(p["min_price"]), fmt_money(p["max_price"])]
+                           for p in data["price_by_category"]))
+        has_activity = any(m["transactions"] for m in data["monthly"])
+        self.status.setText(
+            f"{data['properties']['total']} listings · {tx['total']} transactions · {data['clients']} clients"
+            + ("" if has_activity else f" · {INSUFFICIENT} for monthly trends (no transactions in 12 months)")
         )
-        self.month_table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.ResizeToContents
-        )
-        self.agent_table = QTableWidget(0, 4)
-        self.agent_table.setHorizontalHeaderLabels(
-            ["Agent", "Status", "Transactions", "Completed Revenue"]
-        )
-        self.agent_table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.Stretch
-        )
-        for table in (self.month_table, self.agent_table):
-            table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-            table.setAlternatingRowColors(True)
-            table.setShowGrid(False)
-            table.verticalHeader().setVisible(False)
-            table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-            table.setStyleSheet(
-                "QTableWidget { background: #ffffff; alternate-background-color: #f5f7f2; "
-                "border: 1px solid #d4dccf; border-radius: 8px; color: #26351f; }"
-                "QHeaderView::section { background: #e4ebdf; color: #17310a; "
-                "border: none; padding: 8px; font-weight: 700; }"
-            )
-        section_row.addWidget(self.month_table, 1)
-        section_row.addWidget(self.agent_table, 2)
-        layout.addLayout(section_row, 1)
-
-    @property
-    def token(self) -> str | None:
-        if self.controller is None:
-            return None
-        return self.controller.session.state.token
-
-    def refresh(self) -> None:
-        if not self.token:
-            self.summary_label.setText("Sign in to load analytics.")
-            return
-        self.refresh_button.setEnabled(False)
-        try:
-            summary = self.api.get_dashboard_summary(token=self.token)
-            self.summary_label.setText(
-                "Database totals: "
-                f"{summary.get('total_properties', 0)} properties · "
-                f"{summary.get('total_clients', 0)} clients · "
-                f"{summary.get('total_transactions', 0)} transactions · "
-                f"{self._currency(summary.get('completed_revenue'))} completed revenue"
-            )
-            self._load_monthly()
-            self._load_agents()
-        except httpx.HTTPStatusError as exc:
-            self._show_error(exc)
-        except httpx.RequestError as exc:
-            self.summary_label.setText("Unable to connect to the analytics API.")
-            QMessageBox.warning(self, "Connection Error", str(exc))
-        finally:
-            self.refresh_button.setEnabled(True)
-
-    def _load_monthly(self) -> None:
-        trend = self.api.get_dashboard_transaction_trend(token=self.token)
-        months = list(trend.get("months", []))
-        counts = list(trend.get("counts", []))
-        self.month_table.setRowCount(len(months))
-        for row, (month, count) in enumerate(zip(months, counts)):
-            self.month_table.setItem(row, 0, QTableWidgetItem(str(month)))
-            self.month_table.setItem(row, 1, QTableWidgetItem(str(count)))
-
-    def _load_agents(self) -> None:
-        agents = self.api.get_dashboard_agent_performance(token=self.token)
-        self.agent_table.setRowCount(len(agents))
-        for row, agent in enumerate(agents):
-            values = [
-                f"{agent.get('full_name', '—')} ({agent.get('agent_id', '')})",
-                str(agent.get("status") or "—"),
-                str(agent.get("transactions", 0)),
-                self._currency(agent.get("completed_revenue")),
-            ]
-            for column, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                self.agent_table.setItem(row, column, item)
-
-    @staticmethod
-    def _currency(value: Any) -> str:
-        try:
-            return f"₱{float(value):,.2f}"
-        except (TypeError, ValueError):
-            return "—"
-
-    def _show_error(self, exc: httpx.HTTPStatusError) -> None:
-        try:
-            detail = exc.response.json().get("detail")
-        except ValueError:
-            detail = None
-        message = str(detail or f"The server returned HTTP {exc.response.status_code}.")
-        self.summary_label.setText(message)
-        QMessageBox.warning(self, "Analytics Error", message)

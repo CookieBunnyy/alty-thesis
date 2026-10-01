@@ -23,7 +23,16 @@ class DocumentResponse(BaseModel):
     related_party_external_id: str | None = None
     description: str | None = None
     extracted_fields: dict[str, Any] = Field(default_factory=dict)
+    # Business-data processing outcome (distinct from file storage).
+    processing_stage: str | None = None
     processing_error: str | None = None
+    extraction_method: str | None = None
+    source_format: str | None = None
+    processed_at: datetime | None = None
+    processing: dict[str, Any] = Field(default_factory=dict)
+    # File storage + cloud metadata state.
+    stored: bool = True
+    sync_status: str | None = None
     mime_type: str
     file_size: int
     version: int
@@ -66,11 +75,16 @@ class DocumentFolderResponse(BaseModel):
 
 
 class DocumentUpdate(BaseModel):
+    """Filing metadata only. Entity links are derived by processing."""
+
+    model_config = ConfigDict(extra="forbid")
+
     document_name: str | None = Field(default=None, min_length=1, max_length=255)
-    document_type: str | None = Field(default=None, max_length=80)
     folder_id: int | None = None
-    property_id: int | None = None
-    transaction_id: int | None = None
-    related_party_id: int | None = None
-    related_party_name: str | None = Field(default=None, max_length=200)
     description: str | None = None
+
+
+class DocumentReprocess(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_type: str | None = Field(default=None, max_length=80)

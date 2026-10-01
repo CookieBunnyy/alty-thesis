@@ -1,5 +1,44 @@
 # Abellar Realty Desktop Backend
 
+## Quick start (document-first build)
+
+```
+cd desktop-side/backend
+pip install -r requirements.txt
+copy .env.example .env          # then set DATABASE_URL and SECRET_KEY
+python -m alembic upgrade head  # current head: 20260930_0005
+python main.py                  # API on http://localhost:8000 (docs at /docs)
+```
+
+- Run `supabase_document_first.sql` once in the Supabase SQL Editor so the
+  central tables accept document-derived clients/transactions.
+- Tests: `python -m pytest tests` — uses a separate `<db>_test` database that
+  is recreated and migrated each run; Supabase is never contacted.
+- Desktop: `cd desktop-side/frontend && pip install -r requirements.txt && python main.py`
+  (`ALTY_API_URL` overrides the API address).
+- Website: `cd website-side/frontend && npm install && npm run dev`
+  (`VITE_API_URL` points at this API).
+
+### How records enter the system
+
+Documents (PDF, DOCX, scanned PDF / images via OCR) and website submissions
+are the only sources of properties, clients and transactions. Each upload is
+stored, then processed: EXTRACTION → CLASSIFICATION → VALIDATION →
+ENTITY_MATCHING → DUPLICATE_CHECK → DATABASE_WRITE. A failure is recorded
+with its stage and exact reason (for example `ENTITY_MATCHING: Property
+PROP-TEST-0004 not found`), writes nothing, and can be reprocessed later with
+`POST /api/v1/documents/{id}/reprocess`. Re-uploading the same document
+matches existing records instead of duplicating them.
+
+Modules: `document_extraction.py` (text/OCR, fields, normalization),
+`ocr_service.py`, `document_classification.py` (type registry served at
+`GET /api/v1/documents/types`), `document_validation.py`,
+`entity_matching.py`, `document_processing.py` (orchestration and
+property lifecycle), `document_storage.py`, `cloud_sync.py` (push to
+Supabase), `analytics.py` (dashboard, forecast, DSS, workforce).
+
+> The sections below describe the original design and are kept for reference.
+
 ## 1. Recommended desktop system architecture
 
 The desktop application is the internal enterprise layer that manages operational data, documents, workforce, properties, and transactions for Abellar Realty. It is separated from the public website and functions as the authoritative system of record for internal operations.

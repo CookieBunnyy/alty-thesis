@@ -20,7 +20,9 @@ from PyQt6.QtWidgets import (
 )
 
 from app.api.client import ApiClient
+from app.theme import TOKENS as T
 from app.views.login.signup_window import SignUpWindow
+from app.views.window_frame import is_drag_area, start_move
 
 
 class FloatingLabelInput(QFrame):
@@ -59,7 +61,7 @@ class FloatingLabelInput(QFrame):
             self.toggle_button.setCursor(Qt.CursorShape.PointingHandCursor)
             self.toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
             self.toggle_button.setAutoRaise(True)
-            self.toggle_button.setIcon(qta.icon("fa5.eye", color="#294c16"))
+            self.toggle_button.setIcon(qta.icon("fa5.eye", color=T["text_muted"]))
             self.toggle_button.setIconSize(QSize(18, 18))
             self.toggle_button.clicked.connect(self._toggle_visibility)
             self.toggle_button.raise_()
@@ -71,46 +73,23 @@ class FloatingLabelInput(QFrame):
 
     def apply_styles(self):
         self.setStyleSheet(
-            """
-            QFrame#floatingLabelInput {
-                background: #edf0e9;
-                border: 1px solid #607e49;
-                border-radius: 8px;
-            }
-
-            QFrame#floatingLabelInput[focused="true"] {
-                border: 1px solid #2b4713;
-            }
-
-            QLabel#floatingLabel {
-                color: #999999;
-                background: transparent;
-                font-size: 8px;
-                font-weight: bold;
-                padding: 0;
-                margin: 0;
-            }
-
-            QLineEdit#floatingLineEdit {
-                background: transparent;
-                border: none;
-                color: #17240f;
-                font-size: 13px;
-                padding: 0;
-                margin: 0;
-            }
-
-            QToolButton#togglePassword {
-                background: transparent;
-                border: none;
-                padding: 0;
-                margin: 0;
-            }
-
-            QToolButton#togglePassword:hover {
-                background: rgba(15, 23, 42, 0.06);
-                border-radius: 6px;
-            }
+            f"""/*alty-raw*/
+            QFrame#floatingLabelInput {{
+                background: {T['input']};
+                border: 1px solid {T['border']};
+                border-radius: 10px;
+            }}
+            QFrame#floatingLabelInput[focused="true"] {{ border: 1px solid {T['accent']}; }}
+            QLabel#floatingLabel {{
+                color: {T['text_faint']}; background: transparent; font-size: 8px;
+                font-weight: bold; padding: 0; margin: 0;
+            }}
+            QLineEdit#floatingLineEdit {{
+                background: transparent; border: none; color: {T['text']};
+                font-size: 13px; padding: 0; margin: 0;
+            }}
+            QToolButton#togglePassword {{ background: transparent; border: none; padding: 0; margin: 0; }}
+            QToolButton#togglePassword:hover {{ background: {T['hover']}; border-radius: 6px; }}
             """
         )
         self.setProperty("focused", self.line_edit.hasFocus())
@@ -272,7 +251,7 @@ class ResponsiveLoginButton(QPushButton):
         self.shadow.setBlurRadius(0)
         self.shadow.setXOffset(0)
         self.shadow.setYOffset(6)
-        self.shadow.setColor(QColor(72, 107, 42, 100))
+        self.shadow.setColor(QColor(199, 240, 0, 70))
         self.setGraphicsEffect(self.shadow)
 
     def enterEvent(self, event):
@@ -349,158 +328,47 @@ class LoginWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._drag_position = None
         self.setStyleSheet(
-            """
-            QWidget#loginWindow {
-                background: transparent;
-            }
-
-            QWidget#cardShell {
-                background: transparent;
-            }
-
-            QWidget#loginCard {
-                background: rgba(18, 38, 8, 0.96);
-                border: 1px solid rgba(180, 180, 180, 0.22);
-                border-radius: 20px;
-            }
-
-            QWidget#brandPanel {
-                background: #d8ecb6;
-            }
-
-            QWidget#formPanel {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 rgba(16, 34, 7, 0.98), stop:1 rgba(23, 49, 10, 0.98));
-            }
-
-            QLabel {
-                color: #d8d8d8;
-                background: transparent;
-            }
-
-            QLabel#brandTitle {
-                color: #e8e8e8;
-                font-size: 35px;
-                font-weight: 700;
-                letter-spacing: 1.5px;
-            }
-
-            QLabel#brandSubtitle {
-                color: #c8c8c8;
-                font-size: 11px;
-                letter-spacing: 2px;
-                background: transparent;
-            }
-
-            QLabel#brandMessage {
-                color: #d8d8d8;
-                font-size: 16px;
-                line-height: 1.5;
-                background: transparent;
-            }
-
-            QLabel#pageTitle {
-                color: #e8e8e8;
-                font-size: 30px;
-                font-weight: 700;
-                background: transparent;
-            }
-
-            QLabel#pageSubtitle {
-                color: #a9a9a9;
-                font-size: 13px;
-                background: transparent;
-            }
-
-            QLabel#fieldLabel {
-                color: #c8c8c8;
-                font-size: 12px;
-                font-weight: 600;
-                padding-bottom: 6px;
-                background: transparent;
-            }
-
-            QLabel#helperText {
-                color: #a9a9a9;
-                font-size: 11px;
-                background: transparent;
-            }
-
-            QLabel#errorLabel {
-                color: #fca5a5;
-                font-size: 12px;
-                min-height: 18px;
-                background: transparent;
-            }
-
-            QCheckBox {
-                color: #c8c8c8;
-                font-size: 12px;
-            }
-
-            QCheckBox::indicator {
-                width: 15px;
-                height: 15px;
-                border-radius: 4px;
-                border: 1px solid #b4b4b4;
-                background: rgba(15, 23, 42, 0.85);
-                
-            }
-
-            QCheckBox::indicator:checked {
-                background: #486b2a;
-                border: 1px solid #486b2a;
-                color: #c8c8c8;
-            }
-
-            QPushButton {
-                background: #486b2a;
-                color: white;
-                border: none;
-                border-radius: 12px;
-                padding: 14px 18px;
-                font-size: 16px;
-                font-weight: 700;
-            }
-
-            QPushButton:hover {
-                background: #5d8138;
-            }
-
-            QPushButton:pressed {
-                background: #294c16;
-            }
-
-            QPushButton:disabled {
-                background: #b4b4b4;
-                color: #c8c8c8;
-            }
-
-            QPushButton#togglePassword {
-                background: transparent;
-                color: #b4b4b4;
-                border: 1px solid #536b43;
-                border-radius: 10px;
-                padding: 8px 10px;
-                font-size: 11px;
-                font-weight: 600;
-                min-width: 58px;
-            }
-
-            QPushButton#togglePassword:hover {
-                background: rgba(180, 180, 180, 0.10);
-            }
-
-            QLabel#forgotPassword {
-                color: #b4b4b4;
-                font-size: 12px;
-                font-weight: 600;
-            }
-
-            QLabel#versionLabel {
-                color: #999999;
-                font-size: 11px;
-            }
+            f"""/*alty-raw*/
+            QWidget#loginWindow {{
+                background: qradialgradient(cx:0.3, cy:0.2, radius:1.1, fx:0.3, fy:0.2,
+                    stop:0 {T['login_glow']}, stop:0.45 {T['bg']}, stop:1 {T['bg']});
+            }}
+            QWidget#cardShell {{ background: transparent; }}
+            QWidget#loginCard {{
+                background: {T['card']}; border: 1px solid {T['border']}; border-radius: 20px;
+            }}
+            QWidget#brandPanel {{ background: {T['card_2']}; }}
+            QWidget#formPanel {{ background: {T['card']}; }}
+            QLabel {{ color: {T['text_muted']}; background: transparent; }}
+            QLabel#brandTitle {{ color: {T['text']}; font-size: 35px; font-weight: 800; letter-spacing: 1.5px; }}
+            QLabel#brandSubtitle {{ color: {T['accent']}; font-size: 11px; letter-spacing: 2px; }}
+            QLabel#brandMessage {{ color: {T['text_muted']}; font-size: 16px; }}
+            QLabel#pageTitle {{ color: {T['text']}; font-size: 30px; font-weight: 800; }}
+            QLabel#pageSubtitle {{ color: {T['text_muted']}; font-size: 13px; }}
+            QLabel#fieldLabel {{ color: {T['text_muted']}; font-size: 12px; font-weight: 600; padding-bottom: 6px; }}
+            QLabel#helperText {{ color: {T['text_faint']}; font-size: 11px; }}
+            QLabel#errorLabel {{ color: {T['danger']}; font-size: 12px; min-height: 18px; }}
+            QCheckBox {{ color: {T['text_muted']}; font-size: 12px; }}
+            QCheckBox::indicator {{
+                width: 15px; height: 15px; border-radius: 4px;
+                border: 1px solid {T['border_strong']}; background: {T['input']};
+            }}
+            QCheckBox::indicator:checked {{ background: {T['accent']}; border: 1px solid {T['accent']}; }}
+            QPushButton {{
+                background: {T['accent']}; color: {T['accent_ink']}; border: none; border-radius: 12px;
+                padding: 14px 18px; font-size: 16px; font-weight: 800;
+            }}
+            QPushButton:hover {{ background: {T['accent_hover']}; }}
+            QPushButton:pressed {{ background: #aacc00; }}
+            QPushButton:disabled {{ background: {T['disabled']}; color: {T['text_faint']}; }}
+            QPushButton#togglePassword {{
+                background: transparent; color: {T['text_muted']}; border: 1px solid {T['border']};
+                border-radius: 10px; padding: 8px 10px; font-size: 11px; font-weight: 600; min-width: 58px;
+            }}
+            QPushButton#togglePassword:hover {{ background: {T['hover']}; }}
+            QLabel#forgotPassword {{ color: {T['text_muted']}; font-size: 12px; font-weight: 600; }}
+            QLabel#versionLabel {{ color: {T['text_faint']}; font-size: 11px; }}
+            QToolButton {{ background: transparent; border: none; }}
             """
         )
 
@@ -714,32 +582,20 @@ class LoginWindow(QWidget):
         self.window().close()
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            child = self.childAt(event.position().toPoint())
-
-            if child in (
-                self.minimize_button,
-                self.maximize_button,
-                self.close_button,
-            ):
-                self._drag_position = None
-            else:
-                self._drag_position = (
-                    event.globalPosition().toPoint()
-                    - self.window().frameGeometry().topLeft()
-                )
-        else:
-            self._drag_position = None
-
-    def mouseMoveEvent(self, event):
-        if self._drag_position is not None:
-            self.window().move(event.globalPosition().toPoint() - self._drag_position)
+        if event.button() == Qt.MouseButton.LeftButton and is_drag_area(
+            self, event.position().toPoint()
+        ):
+            start_move(self)
             return
-        super().mouseMoveEvent(event)
+        super().mousePressEvent(event)
 
-    def mouseReleaseEvent(self, event):
-        self._drag_position = None
-        super().mouseReleaseEvent(event)
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and is_drag_area(
+            self, event.position().toPoint()
+        ):
+            self.maximize_window()
+            return
+        super().mouseDoubleClickEvent(event)
 
     def open_signup_window(self) -> None:
         """Open the basic account registration window."""
@@ -788,27 +644,15 @@ class LoginWindow(QWidget):
 
         try:
             token_response = self.api.login(username, password)
+            token = token_response.get("access_token", "")
+            # Role and permissions come from the server, never from the client.
+            me = self.api.me(token)
             self.controller.session.set_session(
-                token=token_response.get("access_token", ""),
-                user={"username": username, "full_name": username.title()},
-                role="General Manager",
-                permissions=[
-                    "dashboard",
-                    "properties",
-                    "partners",
-                    "clients",
-                    "transactions",
-                    "documents",
-                    "agents",
-                    "workforce",
-                    "media",
-                    "analytics",
-                    "forecasting",
-                    "dss",
-                    "users",
-                    "audit",
-                    "settings",
-                ],
+                token=token,
+                user=me,
+                role=me.get("role", "Employee"),
+                permissions=list(me.get("permissions", [])),
+                branch_id=me.get("branch_id"),
             )
             self._stop_loading()
             self.controller.show_main()

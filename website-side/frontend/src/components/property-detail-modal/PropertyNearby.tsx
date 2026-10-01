@@ -36,9 +36,9 @@ export const PropertyNearby: React.FC<NearbyProps> = ({ nearbyData }) => {
   if (!hasNearbyData) return null;
 
   return (
-    <div className="pt-2 border-t border-slate-100">
-      <h3 className="text-xs font-semibold uppercase text-slate-400 mb-2.5 flex items-center">
-        <Navigation className="h-3.5 w-3.5 mr-1 text-slate-400" />
+    <div className="pt-2 border-t border-ab-border">
+      <h3 className="text-xs font-semibold uppercase text-ab-faint mb-2.5 flex items-center">
+        <Navigation className="h-3.5 w-3.5 mr-1 text-ab-faint" />
         Nearby Establishments
       </h3>
       <div className="flex flex-wrap gap-2">
@@ -49,11 +49,11 @@ export const PropertyNearby: React.FC<NearbyProps> = ({ nearbyData }) => {
           return places.map((place, idx) => (
             <span
               key={`${category}-${idx}`}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200/60"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-ab-card-2 text-ab-muted border border-ab-border"
             >
               <span>{meta.icon}</span>
               <span className="font-semibold">{place.name}</span>
-              <span className="text-slate-400 text-[11px]">({place.distance_km} km)</span>
+              <span className="text-ab-faint text-[11px]">({place.distance_km} km)</span>
             </span>
           ));
         })}

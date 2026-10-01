@@ -90,12 +90,9 @@ async def get_active_agents():
     ]
 
 
-@app.post("/client-transactions", status_code=410)
-async def submit_client_transaction():
-    raise HTTPException(
-        status_code=410,
-        detail="Client and transaction records are created from validated documents.",
-    )
+# Client transactions are submitted to the main Alty API
+# (POST /api/v1/public/transactions), which validates the property, matches or
+# creates the client, records the transaction and updates the property status.
 
 
 @app.post("/admin/retrain")

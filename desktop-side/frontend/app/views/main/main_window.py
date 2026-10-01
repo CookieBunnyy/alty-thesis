@@ -28,12 +28,109 @@ from app.views.main.pages.documents import DocumentsPage
 from app.views.main.pages.dss import DssPage
 from app.views.main.pages.forecasting import ForecastingPage
 from app.views.main.pages.media import MediaPage
-from app.views.main.pages.partners import PartnersPage
+from app.views.main.pages.partners import PARTNERS, PartnersPage
 from app.views.main.pages.properties import PropertiesPage
 from app.views.main.pages.settings import SettingsPage
 from app.views.main.pages.transactions import TransactionsPage
 from app.views.main.pages.users import UsersPage
 from app.views.main.pages.workforce import WorkforcePage
+from app.views.window_frame import is_drag_area, start_move, toggle_maximized
+from app.views.main.global_search import GlobalSearchDialog
+from app.theme import TOKENS
+
+
+def shell_stylesheet() -> str:
+    t = TOKENS
+    return f"""/*alty-raw*/
+QWidget {{ background: transparent; color: {t['text']}; }}
+QWidget#appShell {{ background: {t['bg']}; border: 1px solid {t['border']}; border-radius: 14px; }}
+QWidget#sidebar {{ background: {t['sidebar']}; border: 1px solid {t['border']}; border-radius: 14px; }}
+QWidget#contentArea {{ background: {t['bg']}; border: none; }}
+QWidget#topBar {{ background: {t['sidebar']}; border: 1px solid {t['border']}; border-radius: 12px; }}
+QLabel {{ background: transparent; border: none; color: {t['text']}; }}
+QLabel#navBrand {{ color: {t['text']}; font-size: 18px; font-weight: 800; letter-spacing: 1px; }}
+QLabel#navSubtitle {{ color: {t['text_faint']}; font-size: 10px; font-weight: 700; letter-spacing: 1.4px; }}
+QLabel#brandMark {{ background: {t['accent']}; color: {t['accent_ink']}; border-radius: 9px;
+    font-size: 18px; font-weight: 900; }}
+QToolButton#sectionButton {{ background: transparent; color: {t['text_faint']}; border: none;
+    text-align: left; padding: 12px 6px 4px 10px; font-size: 10px; font-weight: 700; letter-spacing: 1.6px; }}
+QToolButton#sectionButton:hover {{ color: {t['text_muted']}; }}
+QLabel#sectionArrow {{ color: transparent; }}
+QPushButton#navButton {{ background: transparent; color: {t['text_muted']}; text-align: left;
+    padding: 9px 12px; border: none; border-radius: 9px; font-size: 13px; font-weight: 600; }}
+QPushButton#navButton:hover {{ background: {t['hover']}; color: {t['text']}; }}
+QPushButton#navButton[active="true"] {{ background: {t['accent']}; color: {t['accent_ink']}; }}
+QToolButton#headerAction, QToolButton#windowAction {{ background: {t['card']}; color: {t['text']};
+    border: 1px solid {t['border']}; border-radius: 9px; min-width: 38px; min-height: 38px; }}
+QToolButton#windowAction {{ min-width: 30px; min-height: 30px; }}
+QToolButton#headerAction:hover, QToolButton#windowAction:hover {{ background: {t['hover']};
+    border-color: {t['border_strong']}; }}
+QToolButton#headerAction::menu-indicator {{ image: none; }}
+QToolButton#statusChip {{ background: {t['card']}; color: {t['text_muted']}; border: 1px solid {t['border']};
+    border-radius: 9px; padding: 0 10px; min-height: 38px; font-size: 12px; font-weight: 600; }}
+QToolButton#statusChip:hover {{ background: {t['hover']}; color: {t['text']}; }}
+QToolButton#statusChip[alert="true"] {{ color: {t['danger']}; border-color: {t['danger']}; }}
+QToolButton#statusChip[ok="true"] {{ color: {t['success']}; }}
+QWidget#userChip {{ background: {t['card']}; border: 1px solid {t['border']}; border-radius: 10px; }}
+QLabel#avatar {{ background: {t['accent_soft_2']}; color: {t['accent']}; border-radius: 16px;
+    font-weight: 800; font-size: 12px; }}
+QLabel#userName {{ color: {t['text']}; font-weight: 700; font-size: 12px; }}
+QLabel#userRole {{ color: {t['text_faint']}; font-size: 11px; }}
+QWidget#sidebarUser {{ background: {t['card']}; border: 1px solid {t['border']}; border-radius: 12px; }}
+QScrollArea#pageScroll {{ background: transparent; border: none; }}
+QLineEdit#searchField {{ background: {t['card']}; color: {t['text']}; border: 1px solid {t['border']};
+    border-radius: 10px; padding: 9px 14px; font-size: 13px; }}
+QLineEdit#searchField:focus {{ border: 1px solid {t['accent']}; }}
+QLabel#pageTitle {{ color: {t['text']}; font-size: 20px; font-weight: 800; }}
+"""
+
+
+NAV_ICONS = {
+    "dashboard": "fa5s.tachometer-alt",
+    "properties": "fa5s.home",
+    "partners": "fa5s.handshake",
+    "clients": "fa5s.users",
+    "transactions": "fa5s.exchange-alt",
+    "documents": "fa5s.folder-open",
+    "media": "fa5s.images",
+    "agents": "fa5s.user-tie",
+    "workforce": "fa5s.sitemap",
+    "analytics": "fa5s.chart-bar",
+    "forecasting": "fa5s.chart-line",
+    "dss": "fa5s.lightbulb",
+    "users": "fa5s.user-shield",
+    "audit": "fa5s.clipboard-list",
+    "settings": "fa5s.cog",
+}
+
+
+class CurrentPageStack(QStackedWidget):
+    """A stack that sizes itself by the visible page only.
+
+    QStackedWidget normally reports the largest size (and height-for-width)
+    of *all* pages, so every page became as tall/wide as the biggest one and
+    its tables stopped scrolling.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.currentChanged.connect(lambda _index: self.updateGeometry())
+
+    def sizeHint(self) -> QSize:
+        page = self.currentWidget()
+        return page.sizeHint() if page is not None else super().sizeHint()
+
+    def minimumSizeHint(self) -> QSize:
+        page = self.currentWidget()
+        return page.minimumSizeHint() if page is not None else super().minimumSizeHint()
+
+    def hasHeightForWidth(self) -> bool:
+        return False
+
+    def heightForWidth(self, _width: int) -> int:
+        # QScrollArea asks this (via the internal layout, which would answer
+        # with the tallest page). -1 = "use the minimum size we set".
+        return -1
 
 
 class MainWindow(QWidget):
@@ -41,6 +138,9 @@ class MainWindow(QWidget):
         super().__init__()
         self.controller = controller
         self.all_pages = []
+        from app.api.client import ApiClient
+
+        self.search_api = ApiClient()
         self.nav_map = {}
         self.group_buttons = {}
         self.group_contents = {}
@@ -49,155 +149,7 @@ class MainWindow(QWidget):
         self.build_ui()
 
     def build_ui(self) -> None:
-        self.setStyleSheet(
-            """
-            QWidget {
-                background: transparent;
-                color: #17310a;
-            }
-
-            QWidget#appShell {
-                background: #eef3e5;
-                border: none;
-                border-radius: 14px;
-            }
-
-            QWidget#sidebar {
-                background: #17310a;
-                border: 1px solid rgba(72, 107, 42, 0.10);
-                border-radius: 14px;
-            }
-
-            QWidget#contentArea {
-                background: #eef3e5;
-                border: none;
-                border-radius: 14px;
-            }
-
-            QWidget#topBar {
-                background: #f7f9f3;
-                border: none;
-                border-radius: 12px;
-            }
-
-            QLabel {
-                color: #17310a;
-                border: none;
-                background: transparent;
-            }
-
-            QLabel#navBrand {
-                color: #f1f5eb;
-                font-size: 18px;
-                font-weight: 800;
-                letter-spacing: 0.8px;
-            }
-
-            QLabel#navSubtitle {
-                color: #a9b39f;
-                font-size: 11px;
-                font-weight: 600;
-                letter-spacing: 0.8px;
-            }
-
-
-            QToolButton#sectionButton {
-                background: transparent;
-                color: #f7f9f3;
-                border: none;
-                text-align: left;
-                padding: 7px 5px 7px 28px;
-                min-height: 26px;
-                font-size: 10px;
-                font-weight: 700;
-                letter-spacing: 1.7px;
-            }
-
-            QToolButton#sectionButton:hover {
-                background: rgba(180, 180, 180, 0.07);
-                color: #f7f9f3;
-                border-radius: 7px;
-            }
-
-            QToolButton#sectionButton:checked {
-                color: #f7f9f3;
-            }
-
-            QLabel#sectionArrow {
-                color: #f7f9f3;
-                background: transparent;
-                font-size: 16px;
-                font-weight: 700;
-                min-width: 18px;
-            }
-
-            QLabel#sectionLabel {
-                color: #f7f9f3;
-                background: transparent;
-                font-size: 10px;
-                font-weight: 700;
-                letter-spacing: 1.7px;
-            }
-
-            QPushButton {
-                background: transparent;
-                border: none;
-                padding: 8px 12px;
-            }
-
-            QLabel, QToolButton {
-                border: none;
-            }
-
-            QPushButton#navButton {
-                background: transparent;
-                color: #b8c4ad;
-                text-align: left;
-                padding: 9px 12px;
-                border-radius: 9px;
-                font-size: 13px;
-                font-weight: 600;
-            }
-
-            QPushButton#navButton:hover {
-                background: rgba(180, 180, 180, 0.07);
-            }
-
-            QPushButton#navButton[active="true"] {
-                background: rgba(72, 107, 42, 0.16);
-                color: #edf5df;
-                border: 1px solid rgba(72, 107, 42, 0.34);
-            }
-
-            QToolButton#headerAction,
-            QToolButton#windowAction {
-                background: #edf2e7;
-                color: #17310a;
-                border: none;
-                border-radius: 9px;
-                min-width: 42px;
-                min-height: 42px;
-            }
-
-            QToolButton#windowAction {
-                min-width: 30px;
-                min-height: 30px;
-            }
-
-            QScrollArea#pageScroll { background: transparent; border: none; }
-            QScrollBar#pageScrollBar:vertical { width: 10px; background: transparent; }
-            QScrollBar#pageScrollBar::handle:vertical { background: #b8c4ad; border-radius: 5px; min-height: 32px; }
-            QScrollBar#pageScrollBar::handle:vertical:hover { background: #a9b39f; }
-
-            QLineEdit#searchField {
-                background: #f1f5eb;
-                color: #17310a;
-                border: 1px solid #c9d5bb;
-                border-radius: 10px;
-                padding: 10px 14px;
-            }
-            """
-        )
+        self.setStyleSheet(shell_stylesheet())
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(6, 6, 6, 6)
@@ -220,18 +172,9 @@ class MainWindow(QWidget):
         brand_row = QHBoxLayout()
 
         self.brand_icon = QLabel("A")
+        self.brand_icon.setObjectName("brandMark")
         self.brand_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.brand_icon.setFixedSize(34, 34)
-        self.brand_icon.setStyleSheet(
-            """
-            background: rgba(72,107,42,0.18);
-            color: #d7e8b7;
-            border: none;
-            border-radius: 9px;
-            font-size: 19px;
-            font-weight: 800;
-            """
-        )
+        self.brand_icon.setFixedSize(36, 36)
 
         brand_col = QVBoxLayout()
         brand_col.setSpacing(1)
@@ -239,7 +182,7 @@ class MainWindow(QWidget):
         self.brand = QLabel("ALTY")
         self.brand.setObjectName("navBrand")
 
-        self.brand_subtitle = QLabel("INTERNAL MANAGEMENT")
+        self.brand_subtitle = QLabel("ABELLAR REALTY")
         self.brand_subtitle.setObjectName("navSubtitle")
 
         brand_col.addWidget(self.brand)
@@ -255,33 +198,23 @@ class MainWindow(QWidget):
         nav_groups = [
             ("MAIN", [
                 ("Dashboard", "dashboard"),
-            ]),
-            ("PROPERTY OPERATIONS", [
                 ("Properties", "properties"),
-                ("Partners / Developers", "partners"),
-            ]),
-            ("CLIENT & TRANSACTIONS", [
                 ("Buyers & Sellers", "clients"),
                 ("Transactions", "transactions"),
-                ("Commissions", "commissions"),
-            ]),
-            ("RECORDS", [
-                ("Document Repository", "documents"),
-                ("Digital Preview", "media"),
-            ]),
-            ("WORKFORCE", [
                 ("Agents", "agents"),
-                ("Workforce", "workforce"),
+                ("Partners / Developers", "partners"),
             ]),
             ("INTELLIGENCE", [
                 ("Analytics", "analytics"),
                 ("Forecasting", "forecasting"),
                 ("Decision Support", "dss"),
+                ("Digital Preview", "media"),
             ]),
-            ("SYSTEM", [
+            ("OPERATIONS", [
+                ("Document Repository", "documents"),
+                ("Workforce", "workforce"),
                 ("Users & Access", "users"),
                 ("Audit Logs", "audit"),
-                ("Settings", "settings"),
             ]),
         ]
 
@@ -303,7 +236,6 @@ class MainWindow(QWidget):
         )
 
         nav_container = QWidget()
-        nav_container.setStyleSheet("background: transparent;")
         nav_layout = QVBoxLayout(nav_container)
         nav_layout.setContentsMargins(0, 4, 4, 4)
         nav_layout.setSpacing(2)
@@ -316,7 +248,7 @@ class MainWindow(QWidget):
             group_button = QToolButton()
             group_button.setObjectName("sectionButton")
             group_button.setCheckable(True)
-            group_button.setChecked(index == 0)
+            group_button.setChecked(True)
             group_button.setCursor(Qt.CursorShape.PointingHandCursor)
             group_button.setToolButtonStyle(
                 Qt.ToolButtonStyle.ToolButtonTextOnly
@@ -324,7 +256,7 @@ class MainWindow(QWidget):
 
             group_button.setText(group_name)
 
-            arrow_label = QLabel("▼" if index == 0 else "▶", group_button)
+            arrow_label = QLabel("", group_button)
             arrow_label.setObjectName("sectionArrow")
             arrow_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             arrow_label.setAttribute(
@@ -333,14 +265,17 @@ class MainWindow(QWidget):
             self.group_arrows[group_name] = arrow_label
 
             group_content = QWidget()
-            group_content.setStyleSheet("background: transparent;")
             group_layout = QVBoxLayout(group_content)
             group_layout.setContentsMargins(0, 0, 0, 3)
             group_layout.setSpacing(2)
 
             for label, key in items:
-                btn = QPushButton(label)
+                btn = QPushButton(label.replace("&", "&&"))  # "&" is Qt's mnemonic marker
                 btn.setObjectName("navButton")
+                btn.setIcon(qta.icon(NAV_ICONS.get(key, "fa5s.circle"), color=TOKENS["text_muted"]))
+                btn.setIconSize(QSize(16, 16))
+                btn.setToolTip(label)
+                btn.setProperty("fullText", label.replace("&", "&&"))
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn.clicked.connect(
                     lambda _, k=key: self.show_page(k)
@@ -362,7 +297,7 @@ class MainWindow(QWidget):
 
             self._toggle_nav_group(
                 group_name,
-                index == 0,
+                True,
                 update_button=False,
             )
 
@@ -370,32 +305,7 @@ class MainWindow(QWidget):
         self.sidebar_scroll.setWidget(nav_container)
         self.sidebar_layout.addWidget(self.sidebar_scroll, 1)
 
-        user_widget = QWidget(self.sidebar)
-        user_widget.setStyleSheet(
-            """
-            QWidget {
-                background: rgba(32, 59, 18, 0.96);
-                border: none;
-                border-radius: 12px;
-            }
-            """
-        )
-
-        user_layout = QVBoxLayout(user_widget)
-        user_layout.setContentsMargins(10, 8, 10, 8)
-        user_layout.setSpacing(2)
-
-        self.user_label = QLabel("User")
-        self.user_label.setStyleSheet("color: white; font-weight: 600;")
-
-        self.role_label = QLabel("Role")
-        self.role_label.setStyleSheet(
-            "color: #b8c4ad; font-size: 12px; border: none;"
-        )
-
-        user_layout.addWidget(self.user_label)
-        user_layout.addWidget(self.role_label)
-        self.sidebar_layout.addWidget(user_widget)
+        # The signed-in user is shown in the header chip (no duplicate here).
 
         content = QWidget(self.app_shell)
         content.setObjectName("contentArea")
@@ -413,7 +323,11 @@ class MainWindow(QWidget):
 
         self.search_input = QLineEdit()
         self.search_input.setObjectName("searchField")
-        self.search_input.setPlaceholderText("Search something...")
+        self.search_input.setPlaceholderText(
+            "Search properties, clients, transactions, agents, documents… (press Enter)"
+        )
+        self.search_input.setClearButtonEnabled(True)
+        self.search_input.returnPressed.connect(self.run_global_search)
         self.search_input.setFixedHeight(40)
 
         search_button = QToolButton()
@@ -421,14 +335,67 @@ class MainWindow(QWidget):
         search_button.setToolButtonStyle(
             Qt.ToolButtonStyle.ToolButtonIconOnly
         )
-        search_button.setIcon(qta.icon("fa5s.search", color="#486b2a"))
+        search_button.setIcon(qta.icon("fa5s.search", color=TOKENS["accent"]))
         search_button.setIconSize(QSize(16, 16))
         search_button.setCursor(Qt.CursorShape.PointingHandCursor)
         search_button.setFixedSize(40, 40)
-        search_button.clicked.connect(self.search_input.setFocus)
+        search_button.setToolTip("Search all records")
+        search_button.clicked.connect(self.run_global_search)
 
+        self.sidebar_toggle = QToolButton()
+        self.sidebar_toggle.setObjectName("headerAction")
+        self.sidebar_toggle.setIcon(qta.icon("fa5s.bars", color=TOKENS["text"]))
+        self.sidebar_toggle.setIconSize(QSize(16, 16))
+        self.sidebar_toggle.setFixedSize(40, 40)
+        self.sidebar_toggle.setToolTip("Collapse / expand the sidebar")
+        self.sidebar_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.sidebar_toggle.clicked.connect(self.toggle_sidebar)
+        self.sidebar_collapsed = False
+
+        self.sync_chip = QToolButton()
+        self.sync_chip.setObjectName("statusChip")
+        self.sync_chip.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.sync_chip.setIcon(qta.icon("fa5s.cloud", color=TOKENS["text_muted"]))
+        self.sync_chip.setText("Sync")
+        self.sync_chip.setToolTip("Central database synchronization status")
+        self.sync_chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.sync_chip.clicked.connect(lambda: self.show_page("settings"))
+
+        self.alert_chip = QToolButton()
+        self.alert_chip.setObjectName("statusChip")
+        self.alert_chip.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.alert_chip.setIcon(qta.icon("fa5s.bell", color=TOKENS["text_muted"]))
+        self.alert_chip.setText("0")
+        self.alert_chip.setToolTip("Documents that failed processing")
+        self.alert_chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.alert_chip.clicked.connect(self.open_failed_documents)
+
+        self.user_chip = QWidget()
+        self.user_chip.setObjectName("userChip")
+        chip_layout = QHBoxLayout(self.user_chip)
+        chip_layout.setContentsMargins(6, 3, 12, 3)
+        chip_layout.setSpacing(8)
+        self.header_avatar = QLabel("—")
+        self.header_avatar.setObjectName("avatar")
+        self.header_avatar.setFixedSize(32, 32)
+        self.header_avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        chip_text = QVBoxLayout()
+        chip_text.setSpacing(0)
+        self.header_user = QLabel("User")
+        self.header_user.setObjectName("userName")
+        self.header_role = QLabel("Role")
+        self.header_role.setObjectName("userRole")
+        chip_text.addWidget(self.header_user)
+        chip_text.addWidget(self.header_role)
+        chip_layout.addWidget(self.header_avatar)
+        chip_layout.addLayout(chip_text)
+
+        header_layout.addWidget(self.sidebar_toggle)
         header_layout.addWidget(self.search_input, 1)
         header_layout.addWidget(search_button)
+        header_layout.addWidget(self.sync_chip)
+        header_layout.addWidget(self.alert_chip)
+        header_layout.addWidget(self.user_chip)
 
         self.minimize_button = QToolButton()
         self.minimize_button.setObjectName("windowAction")
@@ -485,26 +452,7 @@ class MainWindow(QWidget):
         )
 
         self.settings_menu = QMenu(self)
-        self.settings_menu.setStyleSheet(
-            """
-            QMenu {
-                background: #17310a;
-                color: #c9d5bb;
-                border: none;
-                border-radius: 10px;
-                padding: 8px;
-            }
-
-            QMenu::item {
-                padding: 8px 14px;
-                border-radius: 8px;
-            }
-
-            QMenu::item:selected {
-                background: rgba(72,107,42,0.32);
-            }
-            """
-        )
+        # Styled by the global theme (QMenu).
 
         logout_action = QAction(
             qta.icon("fa5s.sign-out-alt"),
@@ -562,18 +510,22 @@ class MainWindow(QWidget):
         self.page_scroll = QScrollArea()
         self.page_scroll.setObjectName("pageScroll")
         self.page_scroll.setWidgetResizable(True)
+        # Safety net: a page wider than the window scrolls instead of clipping.
         self.page_scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
         )
         self.page_scroll.setVerticalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAsNeeded
         )
 
-        self.stack = QStackedWidget()
+        self.stack = CurrentPageStack()
         self.stack.setContentsMargins(0, 0, 0, 0)
+        # Height comes only from _resize_current_page (viewport height, or the
+        # current page's content height if taller). With a "Minimum" policy the
+        # stack grew to its tallest page and table pages stopped scrolling.
         self.stack.setSizePolicy(
             QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Minimum,
+            QSizePolicy.Policy.Ignored,
         )
 
         self.pages = {
@@ -582,24 +534,26 @@ class MainWindow(QWidget):
             "partners": PartnersPage(),
             "clients": ClientsPage(self.controller),
             "transactions": TransactionsPage(self.controller),
-            # Temporary: Commissions currently reuses the transaction page
-            # until a dedicated CommissionsPage is implemented.
-            "commissions": TransactionsPage(self.controller),
             "documents": DocumentsPage(self.controller),
-            "media": MediaPage(),
+            "media": MediaPage(self.controller),
             "agents": AgentsPage(self.controller),
-            "workforce": WorkforcePage(),
+            "workforce": WorkforcePage(self.controller),
             "analytics": AnalyticsPage(self.controller),
             "forecasting": ForecastingPage(self.controller),
-            "dss": DssPage(),
-            "users": UsersPage(),
-            "audit": AuditPage(),
-            "settings": SettingsPage(),
+            "dss": DssPage(self.controller),
+            "users": UsersPage(self.controller),
+            "audit": AuditPage(self.controller),
+            "settings": SettingsPage(self.controller),
         }
 
         for key, page in self.pages.items():
             self.stack.addWidget(page)
             self.all_pages.append(page)
+            # Long captions must wrap, otherwise their single-line width
+            # becomes the page's minimum width and the page overflows.
+            for label in page.findChildren(QLabel):
+                if not label.wordWrap() and len(label.text()) > 24:
+                    label.setWordWrap(True)
 
         self.page_scroll.setWidget(self.stack)
         content_layout.addWidget(self.page_scroll, 1)
@@ -609,8 +563,6 @@ class MainWindow(QWidget):
 
         root_layout.addWidget(self.app_shell, 1)
 
-        self.user_label.setText(self.controller.session.user_name)
-        self.role_label.setText(self.controller.session.state.role)
 
         self._apply_responsive_sidebar()
         self.show_page("dashboard")
@@ -651,7 +603,9 @@ class MainWindow(QWidget):
         else:
             width = screen.availableGeometry().width()
 
-        sidebar_width = max(220, min(280, int(width * 0.17)))
+        sidebar_width = 76 if getattr(self, "sidebar_collapsed", False) else max(
+            220, min(260, int(width * 0.16))
+        )
         self.sidebar.setFixedWidth(sidebar_width)
 
         brand_size = max(12, min(19, int(width * 0.013)))
@@ -692,16 +646,19 @@ class MainWindow(QWidget):
         self.controller.root.showMinimized()
 
     def maximize_window(self) -> None:
-        if self.controller.root.isMaximized():
-            self.controller.root.showNormal()
-            self.maximize_button.setIcon(
-                qta.icon("fa5.window-maximize", color="#486b2a")
-            )
-        else:
-            self.controller.root.showMaximized()
-            self.maximize_button.setIcon(
-                qta.icon("fa5.window-restore", color="#486b2a")
-            )
+        toggle_maximized(self)
+        self._update_maximize_icon()
+
+    def _update_maximize_icon(self) -> None:
+        maximized = self.controller.root.isMaximized()
+        self.maximize_button.setIcon(qta.icon(
+            "fa5.window-restore" if maximized else "fa5.window-maximize", color="#486b2a"
+        ))
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if hasattr(self, "maximize_button"):
+            self._update_maximize_icon()
 
     def close_window(self) -> None:
         self.controller.root.close()
@@ -714,64 +671,185 @@ class MainWindow(QWidget):
             "Internal desktop management application.",
         )
 
-    def mousePressEvent(self, event) -> None:
-        if (
-            event.button() == Qt.MouseButton.LeftButton
-            and self.header.geometry().contains(event.pos())
-        ):
-            self._drag_position = (
-                event.globalPosition().toPoint()
-                - self.controller.root.frameGeometry().topLeft()
-            )
-        else:
-            self._drag_position = None
+    def _on_title_bar(self, event) -> bool:
+        pos = self.header.mapFrom(self, event.position().toPoint())
+        return self.header.rect().contains(pos) and is_drag_area(self.header, pos)
 
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._on_title_bar(event):
+            start_move(self)  # OS move: supports snap and dragging out of maximized
+            return
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event) -> None:
-        if self._drag_position is not None:
-            self.controller.root.move(
-                event.globalPosition().toPoint() - self._drag_position
-            )
+    def mouseDoubleClickEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._on_title_bar(event):
+            self.maximize_window()
             return
+        super().mouseDoubleClickEvent(event)
 
-        super().mouseMoveEvent(event)
+    def refresh_status_chips(self) -> None:
+        """Sync + alert indicators from real API data (no fabricated values)."""
+        token = self.controller.session.state.token
+        if not token:
+            return
+        try:
+            sync = self.search_api.get_sync_status(token=token)
+            pending = sum(counts.get("PENDING", 0) for counts in sync.get("counts", {}).values())
+            if not sync.get("enabled"):
+                text, ok, alert = "Local only", False, False
+            elif pending:
+                text, ok, alert = f"{pending} pending", False, False
+            else:
+                text, ok, alert = "Synced", True, False
+        except Exception:
+            text, ok, alert = "Offline", False, True
+        self.sync_chip.setText(text)
+        self.sync_chip.setIcon(qta.icon("fa5s.cloud" if not alert else "fa5s.exclamation-circle",
+                                        color=TOKENS["success"] if ok else
+                                        TOKENS["danger"] if alert else TOKENS["text_muted"]))
+        self._set_chip_state(self.sync_chip, ok=ok, alert=alert)
+        try:
+            failed = int(self.search_api.get_document_summary(token=token).get("failed", 0))
+        except Exception:
+            failed = 0
+        self.alert_chip.setText(str(failed))
+        self.alert_chip.setToolTip(f"{failed} document(s) failed processing — click to review")
+        self.alert_chip.setIcon(qta.icon("fa5s.bell", color=TOKENS["danger"] if failed else TOKENS["text_muted"]))
+        self._set_chip_state(self.alert_chip, ok=False, alert=bool(failed))
 
-    def mouseReleaseEvent(self, event) -> None:
-        self._drag_position = None
-        super().mouseReleaseEvent(event)
+    @staticmethod
+    def _set_chip_state(chip, ok: bool, alert: bool) -> None:
+        chip.setProperty("ok", "true" if ok else "false")
+        chip.setProperty("alert", "true" if alert else "false")
+        chip.style().unpolish(chip)
+        chip.style().polish(chip)
+
+    def open_failed_documents(self) -> None:
+        self.show_page("documents")
+        page = self.pages.get("documents")
+        combo = getattr(page, "status_filter", None)
+        if combo is not None:
+            index = combo.findText("Failed")
+            if index >= 0:
+                combo.setCurrentIndex(index)
+
+    def toggle_sidebar(self) -> None:
+        """Collapse the sidebar to icons only (and back)."""
+        self.sidebar_collapsed = not self.sidebar_collapsed
+        collapsed = self.sidebar_collapsed
+        for btn in self.nav_map.values():
+            btn.setText("" if collapsed else btn.property("fullText"))
+        for button in self.group_buttons.values():
+            button.setVisible(not collapsed)
+        for widget in (self.brand, self.brand_subtitle):
+            widget.setVisible(not collapsed)
+        self._apply_responsive_sidebar()
+
+    def run_global_search(self) -> None:
+        query = self.search_input.text().strip()
+        if len(query) < 2:
+            self.search_input.setFocus()
+            self.search_input.setPlaceholderText("Type at least 2 characters, then press Enter")
+            return
+        token = self.controller.session.state.token
+        permissions = set(self.controller.session.state.permissions)
+        try:
+            data = self.search_api.search(query, token=token)
+            results = {
+                group: [item for item in items if not permissions or item["page"] in permissions]
+                for group, items in data.get("results", {}).items()
+            }
+        except Exception as exc:
+            from app.api.client import error_message
+
+            QMessageBox.warning(self, "Search failed", error_message(exc))
+            return
+        partners_page = self.pages.get("partners")
+        partner_names = PARTNERS
+        if partners_page is not None and (not permissions or "partners" in permissions):
+            results["partners"] = [
+                {"title": name, "subtitle": "Developer / partner", "page": "partners", "filter": name}
+                for name in partner_names if query.casefold() in name.casefold()
+            ]
+        GlobalSearchDialog(query, results, self.open_search_result, self).exec()
+
+    def open_search_result(self, page_key: str, filter_text: str) -> None:
+        """Open the page and apply the result to that page's own filter."""
+        self.show_page(page_key)
+        page = self.pages.get(page_key)
+        field = getattr(page, "search_input", None) or getattr(page, "search", None)
+        if field is not None and hasattr(field, "setText"):
+            field.setText(filter_text)
+            if page_key == "audit":
+                page.refresh()  # the audit page searches on the server
+
+    def apply_session(self) -> None:
+        """Show the signed-in user's real name/role and only permitted pages."""
+        state = self.controller.session.state
+        name = self.controller.session.user_name
+        initials = "".join(part[0] for part in name.split()[:2]).upper() or "?"
+        for label in (self.header_user,):
+            label.setText(name)
+        for label in (self.header_role,):
+            label.setText(state.role)
+        for avatar in (self.header_avatar,):
+            avatar.setText(initials)
+        self.refresh_status_chips()
+        if not hasattr(self, "status_timer"):
+            from PyQt6.QtCore import QTimer
+
+            self.status_timer = QTimer(self)
+            self.status_timer.setInterval(60_000)  # light: two small requests per minute
+            self.status_timer.timeout.connect(self.refresh_status_chips)
+        self.status_timer.start()
+        allowed = set(state.permissions)
+        for key, btn in self.nav_map.items():
+            btn.setVisible(key in allowed)
+        for group_name, content in self.group_contents.items():
+            layout = content.layout()
+            visible = any(
+                layout.itemAt(index).widget() is not None
+                and not layout.itemAt(index).widget().isHidden()
+                for index in range(layout.count())
+            ) if layout is not None else True
+            if group_name in self.group_buttons:
+                self.group_buttons[group_name].setVisible(visible)
 
     def show_page(self, key: str) -> None:
         if key not in self.pages:
             return
+        permissions = self.controller.session.state.permissions
+        if permissions and key not in permissions:
+            QMessageBox.information(self, "Access restricted", "Your role does not have access to this page.")
+            return
 
+        self.current_page = key
         self.stack.setCurrentWidget(self.pages[key])
+        # Size the stack by the visible page only; otherwise every page is
+        # stretched to the tallest page and its table stops scrolling.
+        for other in self.pages.values():
+            other.setSizePolicy(
+                QSizePolicy.Policy.Preferred,
+                QSizePolicy.Policy.Preferred if other is self.pages[key] else QSizePolicy.Policy.Ignored,
+            )
         self.page_title.setText(self.page_title_for_key(key))
-        if key == "dashboard":
-            self.pages[key].refresh()
-        elif key == "properties":
-            self.pages[key].load_properties()
-        elif key == "documents":
-            self.pages[key].refresh()
-        elif key == "agents":
-            self.pages[key].load_agents()
-        elif key == "clients":
-            self.pages[key].load_clients()
-        elif key in {"transactions", "commissions"}:
-            self.pages[key].load_transactions()
-        elif key == "analytics":
-            self.pages[key].refresh()
-        elif key == "forecasting":
-            self.pages[key].refresh()
+        page = self.pages[key]
+        for loader in ("refresh", "load_agents", "load_clients", "load_transactions"):
+            if hasattr(page, loader):
+                getattr(page, loader)()
+                break
 
         for nav_key, btn in self.nav_map.items():
             is_active = nav_key == key
             btn.setProperty("active", "true" if is_active else "false")
+            btn.setIcon(qta.icon(
+                NAV_ICONS.get(nav_key, "fa5s.circle"),
+                color=TOKENS["accent_ink"] if is_active else TOKENS["text_muted"],
+            ))
             btn.style().unpolish(btn)
             btn.style().polish(btn)
             btn.update()
 
-        self.stack.adjustSize()
         self._resize_current_page()
 
     def _resize_current_page(self) -> None:
@@ -785,15 +863,24 @@ class MainWindow(QWidget):
             return
 
         viewport_height = self.page_scroll.viewport().height()
-        content_height = max(
-            page.sizeHint().height(),
-            page.minimumSizeHint().height(),
-            page.minimumHeight(),
-        )
+        # Minimum (not preferred) height: a page only outgrows the window
+        # when its essential content does not fit; otherwise its tables take
+        # the remaining space and scroll inside themselves.
+        content_height = max(page.minimumSizeHint().height(), page.minimumHeight())
+        layout = page.layout()
+        if layout is not None and layout.hasHeightForWidth():
+            # Wrapped text: the real minimum depends on the available width.
+            width = max(self.page_scroll.viewport().width(), page.minimumSizeHint().width())
+            # Qt's height-for-width distribution squeezes rows below their
+            # minimum unless the page gets its preferred height at this width.
+            content_height = max(content_height, layout.heightForWidth(width))
 
-        self.stack.setMinimumHeight(
-            max(viewport_height, content_height + 12)
-        )
+        # Table pages fit the viewport (their tables scroll); pages whose
+        # content is taller than the viewport scroll as a whole.
+        target_height = max(viewport_height, content_height + 12)
+        target_width = max(self.page_scroll.viewport().width(), page.minimumSizeHint().width())
+        self.stack.setMinimumHeight(target_height)
+        self.stack.resize(target_width, target_height)
 
     def page_title_for_key(self, key: str) -> str:
         mapping = {
@@ -802,7 +889,6 @@ class MainWindow(QWidget):
             "partners": "Partners / Developers",
             "clients": "Buyers & Sellers",
             "transactions": "Transactions",
-            "commissions": "Commissions",
             "documents": "Document Repository",
             "agents": "Agents",
             "workforce": "Workforce",

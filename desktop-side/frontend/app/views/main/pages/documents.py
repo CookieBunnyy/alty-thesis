@@ -32,27 +32,68 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from app.theme import badge_colors
 from app.api.client import ApiClient
 
 
-DOCUMENT_TYPES = [
-    "Receipt",
-    "Voucher",
-    "Contract",
-    "Deed",
-    "Invoice",
-    "Proof of Payment",
-    "Buyer Document",
-    "Seller Document",
-    "Transaction Document",
-    "Property Document",
-    "Other",
-]
-STATUSES = [
-    "All Statuses", "Processing", "Success", "Failed", "Pending Review",
-    "Confirmed", "Archived", "Rejected", "Duplicate",
-]
-MANAGER_ROLES = {"administrator", "general manager", "filing manager"}
+# Fallback only; the live list comes from GET /api/v1/documents/types so the
+# UI never offers a type the processing engine cannot handle.
+DOCUMENT_TYPES: list[dict[str, str]] = [{"code": "AUTO", "label": "Auto-detect"}]
+STATUSES = ["All Statuses", "Processing", "Success", "Failed", "Archived", "Superseded"]
+MANAGER_ROLES = {"administrator", "general manager", "president", "filing manager"}
+
+
+def _type_label(code: str | None) -> str:
+    for item in DOCUMENT_TYPES:
+        if item["code"] == code:
+            return item["label"]
+    return str(code or "—").replace("_", " ").title()
+
+
+def processing_report(document: dict[str, Any]) -> str:
+    """Plain-text account of what processing did (or why it failed)."""
+    processing = document.get("processing") or {}
+    status = document.get("status", "")
+    lines = [
+        "FILE STORAGE: stored" + (f" (cloud metadata: {document.get('sync_status')})"
+                                  if document.get("sync_status") else ""),
+        f"PROCESSING: {status}",
+    ]
+    if processing.get("stage"):
+        lines.append(f"Stage: {processing['stage']}")
+    if processing.get("error_reason"):
+        lines.append(f"Reason: {processing['error_reason']}")
+    extraction = processing.get("extraction") or {}
+    if extraction:
+        pages = f", OCR pages {extraction.get('ocr_pages')}" if extraction.get("ocr_pages") else ""
+        lines.append(f"Extraction: {extraction.get('method')} from {extraction.get('source_format')}{pages}")
+    classification = processing.get("classification") or {}
+    if classification:
+        lines.append(
+            f"Classification: {processing.get('document_type') or '—'} "
+            f"(detected {classification.get('detected_type') or 'nothing'}, "
+            f"{classification.get('confidence')}: {classification.get('reason')})"
+        )
+    errors = (processing.get("validation_result") or {}).get("errors") or []
+    if errors:
+        lines.append("Validation errors:")
+        lines += [f"  • {error.get('field')}: {error.get('message')}" for error in errors]
+    for entity, match in (processing.get("matched_entities") or {}).items():
+        lines.append(f"Matched {entity}: {match.get('id')} (by {match.get('matched_by')})")
+    for label, key in (("Created", "created_records"), ("Updated", "updated_records")):
+        if processing.get(key):
+            lines.append(f"{label}: " + ", ".join(processing[key]))
+    if processing.get("idempotent") and status == "SUCCESS":
+        lines.append("No changes were needed — every record already existed.")
+    for warning in processing.get("warnings") or []:
+        lines.append(f"Warning: {warning}")
+    for field, values in (processing.get("field_conflicts") or {}).items():
+        lines.append(f"Conflicting values for {field}: {', '.join(values)}")
+    fields = processing.get("extracted_fields") or {}
+    if fields:
+        lines.append("Extracted fields:")
+        lines += [f"  {name}: {value}" for name, value in fields.items()]
+    return "\n".join(lines)
 
 
 def _error_text(error: Exception) -> str:
@@ -127,31 +168,38 @@ class UploadDocumentDialog(QDialog):
 
         self.name_input = QLineEdit()
         self.type_input = QComboBox()
-        self.type_input.addItems(DOCUMENT_TYPES)
+        for item in DOCUMENT_TYPES:
+            self.type_input.addItem(item["label"], item["code"])
+            if item.get("processing"):
+                self.type_input.setItemData(
+                    self.type_input.count() - 1, item["processing"], Qt.ItemDataRole.ToolTipRole
+                )
         self.folder_input = QComboBox()
         self.folder_input.addItem("Unfiled", None)
         self.folder_names: dict[int, str] = {}
         for folder in folders:
             self.folder_input.addItem(folder["name"], folder["id"])
             self.folder_names[int(folder["id"])] = folder["name"]
-        self.property_input = QLineEdit()
-        self.property_input.setPlaceholderText("Optional property ID")
-        self.transaction_input = QLineEdit()
-        self.transaction_input.setPlaceholderText("Optional transaction ID")
+        hint = QLabel(
+            "The document is stored, then processed automatically: fields are extracted "
+            "(OCR for scanned files), matched to existing records, and properties, clients, "
+            "transactions or agents are created or updated."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #65745b; font-size: 12px;")
 
         form = QFormLayout()
         form.addRow("File", file_row)
         form.addRow("Document name", self.name_input)
         form.addRow("Document type", self.type_input)
         form.addRow("Folder", self.folder_input)
-        form.addRow("Property ID", self.property_input)
-        form.addRow("Transaction ID", self.transaction_input)
+        form.addRow("", hint)
 
         self.error_label = QLabel()
         self.error_label.setStyleSheet("color: #9b3030;")
         cancel = QPushButton("Cancel")
         cancel.setIcon(qta.icon("fa5s.times", color="#486b2a"))
-        upload = QPushButton("Upload and process")
+        upload = QPushButton("Upload Document")
         upload.setIcon(qta.icon("fa5s.cloud-upload-alt", color="#ffffff"))
         upload.setObjectName("primaryAction")
         cancel.clicked.connect(self.reject)
@@ -167,7 +215,10 @@ class UploadDocumentDialog(QDialog):
         layout.addLayout(actions)
 
     def _choose_file(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Choose document")
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choose document", "",
+            "Documents (*.pdf *.docx *.png *.jpg *.jpeg *.tif *.tiff *.bmp *.webp)",
+        )
         if path:
             self.file_path.setText(path)
             if not self.name_input.text().strip():
@@ -176,24 +227,10 @@ class UploadDocumentDialog(QDialog):
     def values(self) -> tuple[str, dict[str, Any]]:
         payload: dict[str, Any] = {
             "document_name": self.name_input.text().strip() or Path(self.file_path.text()).name,
-            "document_type": self.type_input.currentText(),
+            "document_type": self.type_input.currentData() or "AUTO",
             "folder_id": self.folder_input.currentData(),
-            "transaction_id": self._optional_id(self.transaction_input.text()),
         }
-        property_id = self._optional_id(self.property_input.text())
-        if property_id is not None:
-            payload["property_id"] = property_id
         return self.file_path.text(), payload
-
-    @staticmethod
-    def _optional_id(value: str) -> int | None:
-        value = value.strip()
-        if not value:
-            return None
-        try:
-            return int(value)
-        except ValueError as exc:
-            raise ValueError("Property and transaction IDs must be whole numbers.") from exc
 
 
 class DocumentDetailsDialog(QDialog):
@@ -238,7 +275,7 @@ class DocumentDetailsDialog(QDialog):
         extracted_fields = self.document.get("extracted_fields") or {}
         details = [
             ("Document ID", "document_id"),
-            ("Type", "document_type"),
+            ("Type", "document_type_label"),
             ("Folder", "folder_name"),
             ("Property", "property_listing_title"),
             ("Listing ID", "property_listing_external_id"),
@@ -251,9 +288,11 @@ class DocumentDetailsDialog(QDialog):
             ("File type", "mime_type"),
             ("File size", "file_size"),
             ("Version", "version"),
-            ("Status", "status"),
+            ("Processing", "status"),
+            ("Extraction", "extraction_method"),
             ("Last updated", "updated_at"),
         ]
+        document = {**document, "document_type_label": _type_label(document.get("document_type"))}
         for label, key in details:
             value = document.get(key)
             if key == "property_listing_title":
@@ -282,24 +321,31 @@ class DocumentDetailsDialog(QDialog):
         self.message = QLabel()
         self.message.setWordWrap(True)
         self.message.setStyleSheet("color: #9b3030;")
-        self.message.setText(str(document.get("processing_error") or ""))
+        if document.get("status") == "FAILED":
+            processing = document.get("processing") or {}
+            self.message.setText(
+                f"FAILED at {processing.get('stage') or document.get('processing_stage') or '—'}: "
+                f"{document.get('processing_error') or processing.get('error_reason') or 'no reason recorded'}"
+            )
+        self.buttons: dict[str, QPushButton] = {}
         actions = QHBoxLayout()
-        for text, icon_name, callback in (
-            ("Preview", "fa5s.eye", self.preview),
-            ("Download", "fa5s.download", self.download),
-            ("Print", "fa5s.print", self.print_document),
-            ("Confirm", "fa5s.check", lambda: self._change_status("confirm")),
-            ("Archive", "fa5s.archive", lambda: self._change_status("archive")),
-            ("Reject", "fa5s.times", lambda: self._change_status("reject")),
-            ("Replace Version", "fa5s.file-upload", self.replace_version),
-            ("Version History", "fa5s.history", self.show_version_history),
-            ("Classify / Move", "fa5s.folder-open", self.classify_or_move),
-            ("Delete", "fa5s.trash-alt", self.delete_document),
+        for key, text, icon_name, callback in (
+            ("preview", "Preview", "fa5s.eye", self.preview),
+            ("download", "Download", "fa5s.download", self.download),
+            ("print", "Print", "fa5s.print", self.print_document),
+            ("report", "Processing Report", "fa5s.clipboard-list", self.show_processing_report),
+            ("reprocess", "Reprocess", "fa5s.redo", self.reprocess),
+            ("archive", "Archive", "fa5s.archive", lambda: self._change_status("archive")),
+            ("version", "Replace Version", "fa5s.file-upload", self.replace_version),
+            ("history", "Version History", "fa5s.history", self.show_version_history),
+            ("move", "Move / Rename", "fa5s.folder-open", self.classify_or_move),
+            ("delete", "Delete", "fa5s.trash-alt", self.delete_document),
         ):
             button = QPushButton(text)
             button.setIcon(qta.icon(icon_name, color="#17310a"))
             button.clicked.connect(callback)
             actions.addWidget(button)
+            self.buttons[key] = button
         close = QPushButton("Close")
         close.setIcon(qta.icon("fa5s.times-circle", color="#486b2a"))
         close.clicked.connect(self.accept)
@@ -310,7 +356,7 @@ class DocumentDetailsDialog(QDialog):
         layout.addWidget(self.message)
         layout.addLayout(actions)
         layout.addWidget(close, alignment=Qt.AlignmentFlag.AlignRight)
-        self._apply_permissions(actions)
+        self._apply_permissions()
 
     @staticmethod
     def _format_size(size: Any) -> str:
@@ -320,25 +366,62 @@ class DocumentDetailsDialog(QDialog):
             return "—"
         return f"{size / 1024:.1f} KB" if size < 1024 * 1024 else f"{size / (1024 * 1024):.2f} MB"
 
-    def _apply_permissions(self, actions: QHBoxLayout) -> None:
+    def _apply_permissions(self) -> None:
         manager = self.role in MANAGER_ROLES
-        for index in (3, 4, 5, 6):
-            item = actions.itemAt(index)
-            if item and item.widget():
-                item.widget().setVisible(manager)
-            actions.itemAt(8).widget().setVisible(manager)
-            actions.itemAt(9).widget().setVisible(manager)
         status = self.document.get("status", "")
-        if status not in {"PENDING_REVIEW", "DUPLICATE"}:
-            actions.itemAt(3).widget().setVisible(False)
-            actions.itemAt(5).widget().setVisible(False)
+        for key in ("reprocess", "archive", "version", "move", "delete"):
+            self.buttons[key].setVisible(manager)
+        self.buttons["reprocess"].setVisible(manager and status in {"FAILED", "SUCCESS"})
         if status == "ARCHIVED":
-            actions.itemAt(4).widget().setText("Restore")
-            actions.itemAt(4).widget().clicked.disconnect()
-            actions.itemAt(4).widget().clicked.connect(lambda: self._change_status("restore"))
-        if status in {"ARCHIVED", "REJECTED"}:
-            actions.itemAt(6).widget().setVisible(False)
-            actions.itemAt(8).widget().setVisible(False)
+            archive = self.buttons["archive"]
+            archive.setText("Restore")
+            archive.clicked.disconnect()
+            archive.clicked.connect(lambda: self._change_status("restore"))
+            self.buttons["version"].setVisible(False)
+        if status == "SUPERSEDED":
+            for key in ("reprocess", "archive", "version"):
+                self.buttons[key].setVisible(False)
+
+    def show_processing_report(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Processing Report")
+        dialog.resize(640, 520)
+        text = QTextEdit()
+        text.setReadOnly(True)
+        text.setPlainText(processing_report(self.document))
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(text)
+        try:
+            events = self.api.get_document_audit(self.document["document_id"], token=self.token)
+            audit = QTextEdit()
+            audit.setReadOnly(True)
+            audit.setMaximumHeight(150)
+            audit.setPlainText("\n".join(
+                f"{event.get('created_at', '')[:19]}  v{event.get('version')}  "
+                f"{event.get('event_type')}  by {event.get('actor')}"
+                for event in events
+            ))
+            layout.addWidget(QLabel("Processing audit"))
+            layout.addWidget(audit)
+        except Exception:
+            pass
+        dialog.exec()
+
+    def reprocess(self) -> None:
+        if QMessageBox.question(
+            self, "Reprocess document",
+            "Run processing again on the stored file? Records that already exist are "
+            "matched, not duplicated.",
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            result = self.api.reprocess_document(self.document["document_id"], token=self.token)
+            self.document.update(result)
+            self.refresh()
+            QMessageBox.information(self, "Reprocessed", processing_report(result))
+            self.accept()
+        except Exception as exc:
+            self.message.setText(_error_text(exc))
 
     def delete_document(self) -> None:
         answer = QMessageBox.question(
@@ -357,10 +440,8 @@ class DocumentDetailsDialog(QDialog):
 
     def _change_status(self, action: str) -> None:
         messages = {
-            "confirm": "Confirm this document into the repository?",
-            "archive": "Archive this document?",
-            "restore": "Restore this document to pending review?",
-            "reject": "Reject this document?",
+            "archive": "Archive this document? Records it created are kept.",
+            "restore": "Restore this document to its last processing status?",
         }
         if QMessageBox.question(self, "Confirm action", messages[action]) != QMessageBox.StandardButton.Yes:
             return
@@ -500,9 +581,7 @@ class DocumentDetailsDialog(QDialog):
             QPushButton:hover { background: #dce8ce; }
             """
         )
-        type_input = QComboBox()
-        type_input.addItems(DOCUMENT_TYPES)
-        type_input.setCurrentText(self.document.get("document_type", "Other"))
+        name_input = QLineEdit(self.document.get("document_name") or "")
         folder_input = QComboBox()
         folder_input.addItem("Unfiled", None)
         for folder in self.folders:
@@ -513,7 +592,7 @@ class DocumentDetailsDialog(QDialog):
         description_input.setPlainText(self.document.get("description") or "")
         description_input.setMaximumHeight(100)
         form = QFormLayout()
-        form.addRow("Document type", type_input)
+        form.addRow("Document name", name_input)
         form.addRow("Folder", folder_input)
         form.addRow("Description", description_input)
         buttons = QDialogButtonBox(
@@ -530,7 +609,7 @@ class DocumentDetailsDialog(QDialog):
             result = self.api.update_document(
                 self.document["document_id"],
                 {
-                    "document_type": type_input.currentText(),
+                    "document_name": name_input.text().strip() or self.document.get("document_name"),
                     "folder_id": folder_input.currentData(),
                     "description": description_input.toPlainText().strip() or None,
                 },
@@ -539,7 +618,7 @@ class DocumentDetailsDialog(QDialog):
             self.document.update(result)
             self.refresh()
             self.message.setStyleSheet("color: #294c16;")
-            self.message.setText("Classification and folder were saved for review.")
+            self.message.setText("Document details saved.")
         except Exception as exc:
             self.message.setText(_error_text(exc))
 
@@ -553,19 +632,17 @@ class DocumentDetailsDialog(QDialog):
                 path,
                 {
                     "document_name": self.document.get("document_name"),
-                    "document_type": self.document.get("document_type"),
                     "folder_id": self.document.get("folder_id"),
-                    "property_id": self.document.get("property_id"),
-                    "transaction_id": self.document.get("transaction_id"),
-                    "related_party_id": self.document.get("related_party_id"),
-                    "related_party_name": self.document.get("related_party_name"),
                     "description": self.document.get("description"),
                 },
                 token=self.token,
             )
             self.document.update(result)
             self.refresh()
-            QMessageBox.information(self, "Version created", f"Saved as version {result['version']}.")
+            QMessageBox.information(
+                self, "Version created",
+                f"Saved as version {result['version']}.\n\n{processing_report(result)}",
+            )
         except Exception as exc:
             QMessageBox.warning(self, "Replacement failed", _error_text(exc))
 
@@ -639,7 +716,10 @@ class DocumentsPage(QWidget):
 
         header = QHBoxLayout()
         header.setSpacing(8)
-        subtitle = QLabel("Centralized document storage, filing, preview, and records management.")
+        subtitle = QLabel(
+            "Upload documents to store them and automatically update properties, clients, "
+            "transactions and agents. Failed documents show the stage and reason."
+        )
         subtitle.setStyleSheet("color: #65745b; font-size: 13px; font-weight: 600;")
         header.addWidget(subtitle, 1)
         self.upload_button = QPushButton("Upload Document")
@@ -659,8 +739,7 @@ class DocumentsPage(QWidget):
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search filename, type, transaction, property, buyer / seller...")
         self.type_filter = QComboBox()
-        self.type_filter.addItem("All Types")
-        self.type_filter.addItems(DOCUMENT_TYPES)
+        self.type_filter.addItem("All Types", None)
         self.status_filter = QComboBox()
         self.status_filter.addItems(STATUSES)
         self.folder_filter = QComboBox()
@@ -740,6 +819,7 @@ class DocumentsPage(QWidget):
         self.refresh_button.setEnabled(False)
         self.status_message.setText("Loading documents and folders…")
         try:
+            self._load_types()
             self.folders = self.api.get_folders(token=self.token)
             self._populate_folder_controls()
             self._load_documents()
@@ -749,6 +829,21 @@ class DocumentsPage(QWidget):
             self._populate_table([])
         finally:
             self.refresh_button.setEnabled(True)
+
+    def _load_types(self) -> None:
+        global DOCUMENT_TYPES
+        types = self.api.get_document_types(token=self.token)
+        if types:
+            DOCUMENT_TYPES = types
+        current = self.type_filter.currentData()
+        self.type_filter.blockSignals(True)
+        self.type_filter.clear()
+        self.type_filter.addItem("All Types", None)
+        for item in DOCUMENT_TYPES:
+            if item["code"] != "AUTO":
+                self.type_filter.addItem(item["label"], item["code"])
+        self.type_filter.setCurrentIndex(max(self.type_filter.findData(current), 0))
+        self.type_filter.blockSignals(False)
 
     def _populate_folder_controls(self) -> None:
         current = self.folder_filter.currentData()
@@ -790,12 +885,12 @@ class DocumentsPage(QWidget):
     def _load_documents(self, *_args: Any) -> None:
         params: dict[str, Any] = {}
         search = self.search_input.text().strip()
-        document_type = self.type_filter.currentText()
+        document_type = self.type_filter.currentData()
         status = self.status_filter.currentText()
         folder_id = self.folder_filter.currentData()
         if search:
             params["search"] = search
-        if document_type != "All Types":
+        if document_type:
             params["document_type"] = document_type
         if status != "All Statuses":
             params["status"] = status.upper().replace(" ", "_")
@@ -804,7 +899,13 @@ class DocumentsPage(QWidget):
         try:
             self.documents = self.api.get_documents(token=self.token, params=params)
             self._populate_table(self.documents)
-            self.status_message.setText(f"{len(self.documents)} document(s)")
+            counts: dict[str, int] = {}
+            for document in self.documents:
+                counts[document.get("status", "")] = counts.get(document.get("status", ""), 0) + 1
+            self.status_message.setText(
+                f"{len(self.documents)} document(s)  ·  "
+                + "  ·  ".join(f"{status.title()}: {count}" for status, count in sorted(counts.items()))
+            )
         except Exception as exc:
             self.status_message.setText(_error_text(exc))
 
@@ -815,7 +916,7 @@ class DocumentsPage(QWidget):
             values = [
                 document.get("document_id"),
                 document.get("document_name"),
-                document.get("document_type"),
+                _type_label(document.get("document_type")),
                 document.get("folder_name"),
                 document.get("property_listing_title")
                 or document.get("property_name")
@@ -834,6 +935,10 @@ class DocumentsPage(QWidget):
                 item = QTableWidgetItem(str(value if value is not None else "—"))
                 if column == 0:
                     item.setData(Qt.ItemDataRole.UserRole, document)
+                if column == 10 and document.get("status") == "FAILED":
+                    item.setToolTip(
+                        f"{document.get('processing_stage')}: {document.get('processing_error')}"
+                    )
                 if column == 10:
                     colors = {
                         "PROCESSING": "#1d6384",
@@ -845,7 +950,9 @@ class DocumentsPage(QWidget):
                         "REJECTED": "#9b3030",
                         "DUPLICATE": "#8b4c85",
                     }
-                    item.setForeground(QColor(colors.get(document.get("status"), "#17240f")))
+                    _text, _bg = badge_colors(document.get("status"))
+                    item.setForeground(_text)
+                    item.setBackground(_bg)
                 self.table.setItem(row, column, item)
         self.table.setSortingEnabled(True)
 
@@ -887,7 +994,7 @@ class DocumentsPage(QWidget):
             if not path or not Path(path).is_file():
                 raise ValueError("Choose a readable file to upload.")
             try:
-                self.api.upload_document(path, payload, token=self.token)
+                result = self.api.upload_document(path, payload, token=self.token)
             except httpx.HTTPStatusError as exc:
                 detail = exc.response.json().get("detail", {})
                 if exc.response.status_code != 409 or not isinstance(detail, dict):
@@ -899,13 +1006,21 @@ class DocumentsPage(QWidget):
                     f"ID: {existing.get('document_id', existing.get('id', 'Unknown'))}\n"
                     f"Uploaded: {existing.get('created_at', 'Unknown')}\n"
                     f"Status: {existing.get('status', 'Unknown')}\n\n"
-                    "Upload another copy anyway? It will be marked as a duplicate for review."
+                    "Upload another copy anyway? It is processed again; records that already "
+                    "exist are matched, not duplicated."
                 )
                 if QMessageBox.question(self, "Possible duplicate", prompt) != QMessageBox.StandardButton.Yes:
                     return
                 payload["allow_duplicate"] = True
-                self.api.upload_document(path, payload, token=self.token)
+                result = self.api.upload_document(path, payload, token=self.token)
             self.refresh()
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Information if result.get("status") == "SUCCESS"
+                        else QMessageBox.Icon.Warning)
+            box.setWindowTitle("Document stored — processing " + str(result.get("status", "")).lower())
+            box.setText(processing_report(result).split("\nExtracted fields:")[0])
+            box.setDetailedText(processing_report(result))
+            box.exec()
         except Exception as exc:
             QMessageBox.warning(self, "Upload failed", _error_text(exc))
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QGridLayout,
@@ -16,28 +16,34 @@ from PyQt6.QtWidgets import (
 )
 
 from app.api.client import ApiClient
+from app.theme import TOKENS
 
 
-STATUS_COLORS = {
-    "available": "#486b2a",
-    "reserved": "#91b8d3",
-    "sold": "#b4b9b5",
-    "on_hold": "#deb753",
-    "unavailable": "#ce756f",
-}
+def status_colors() -> dict[str, str]:
+    """Donut/legend colours for the active theme (read at paint time)."""
+    return {
+        "available": TOKENS["accent"],
+        "reserved": TOKENS["info"],
+        "sold": TOKENS["chart_bar"],
+        "on_hold": TOKENS["warning"],
+        "unavailable": TOKENS["danger"],
+    }
 
 
 class StatCard(QWidget):
     def __init__(self, value: str, label: str, delta: str, accent: str = "#486b2a") -> None:
         super().__init__()
+        # Plain QWidget subclasses only paint stylesheet backgrounds with this.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setObjectName("statCard")
         self.setStyleSheet(
             """
-            QWidget {
+            QWidget#statCard {
                 background: #f7f9f3;
-                border: none;
-                border-radius: 16px;
+                border: 1px solid #d9e2d0;
+                border-radius: 14px;
             }
-            QLabel { background: transparent; }
+            QLabel { background: transparent; border: none; }
             """
         )
         self.value = value
@@ -57,7 +63,7 @@ class StatCard(QWidget):
         top.addWidget(self.card_label)
         top.addStretch()
 
-        more = QLabel("•••")
+        more = QLabel("")
         more.setStyleSheet("color: #9aa58f; font-size: 16px;")
         top.addWidget(more)
         layout.addLayout(top)
@@ -93,47 +99,43 @@ class TrendChart(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        rect = self.rect().adjusted(10, 12, -10, -12)
-        w = rect.width()
-        h = rect.height()
-
-        painter.setPen(QPen(QColor(180, 180, 180, 90), 1))
-        for i in range(5):
-            y = rect.top() + int((i / 4) * h)
-            painter.drawLine(rect.left(), y, rect.right(), y)
-
-        if not self.values:
-            painter.setPen(QPen(QColor(101, 116, 91), 1))
-            painter.drawText(
-                self.rect(),
-                Qt.AlignmentFlag.AlignCenter,
-                "Insufficient transaction history",
-            )
+        rect = self.rect().adjusted(8, 22, -8, -26)
+        if not self.values or not any(self.values):
+            painter.setPen(QPen(QColor(TOKENS["text_faint"]), 1))
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Insufficient transaction history")
             return
+        count = len(self.values)
+        slot = rect.width() / count
+        bar_width = max(10.0, min(46.0, slot * 0.62))
+        peak = max(self.values) or 1
+        small = painter.font()
+        small.setPointSizeF(max(7.5, small.pointSizeF() - 1))
+        painter.setFont(small)
+        for index, value in enumerate(self.values):
+            x = rect.left() + slot * index + (slot - bar_width) / 2
+            height = max(4.0, (value / peak) * (rect.height() - 18)) if value else 4.0
+            y = rect.bottom() - height
+            current = index == count - 1
+            color = QColor(TOKENS["accent"] if current else (TOKENS["chart_bar"] if value else TOKENS["border_strong"]))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            painter.drawRoundedRect(QRectF(x, y, bar_width, height), 7, 7)
+            if value:
+                painter.setPen(QPen(QColor(TOKENS["accent_ink"] if current else TOKENS["text"]), 1))
+                label_rect = QRectF(x - 6, y - 18, bar_width + 12, 16)
+                painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, str(value))
+            month = self.months[index] if index < len(self.months) else ""
+            painter.setPen(QPen(QColor(TOKENS["text"] if current else TOKENS["text_faint"]), 1))
+            painter.drawText(QRectF(x - 10, rect.bottom() + 6, bar_width + 20, 16),
+                             Qt.AlignmentFlag.AlignCenter, _month_label(month))
 
-        max_value = max(self.values) if self.values else 100
-        min_value = min(self.values) if self.values else 0
-        points = []
-        for idx, value in enumerate(self.values):
-            x = rect.left() + int((idx / max(len(self.values) - 1, 1)) * (w - 20)) + 10
-            y = rect.bottom() - int(((value - min_value) / max(max_value - min_value, 1)) * (h - 28)) - 10
-            points.append((x, y))
 
-        painter.setPen(QPen(QColor(72, 107, 42), 3))
-        for i in range(len(points) - 1):
-            x1, y1 = points[i]
-            x2, y2 = points[i + 1]
-            painter.drawLine(x1, y1, x2, y2)
-
-        for x, y in points:
-            painter.setBrush(QColor(72, 107, 42))
-            painter.drawEllipse(x - 4, y - 4, 8, 8)
-
-        for label_idx, label in enumerate(self.months):
-            x = rect.left() + int((label_idx / max(len(self.values) - 1, 1)) * (w - 20)) + 10
-            month_label = label[5:] if len(label) >= 7 else label
-            painter.drawText(int(x), int(rect.bottom() - 4), month_label)
+def _month_label(value: str) -> str:
+    names = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+    try:
+        return names[int(value[5:7]) - 1]
+    except (ValueError, IndexError):
+        return value
 
 
 class StatusDonutChart(QWidget):
@@ -169,7 +171,7 @@ class StatusDonutChart(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         center = self.rect().center()
-        radius = min(self.rect().width(), self.rect().height()) * 0.30
+        radius = min(self.rect().width(), self.rect().height()) * 0.36
         total = (
             self.available
             + self.reserved
@@ -180,17 +182,17 @@ class StatusDonutChart(QWidget):
         segments = []
         if total:
             segments = [
-                (self.available / total, QColor(STATUS_COLORS["available"])),
-                (self.reserved / total, QColor(STATUS_COLORS["reserved"])),
-                (self.sold / total, QColor(STATUS_COLORS["sold"])),
-                (self.on_hold / total, QColor(STATUS_COLORS["on_hold"])),
-                (self.unavailable / total, QColor(STATUS_COLORS["unavailable"])),
+                (self.available / total, QColor(status_colors()["available"])),
+                (self.reserved / total, QColor(status_colors()["reserved"])),
+                (self.sold / total, QColor(status_colors()["sold"])),
+                (self.on_hold / total, QColor(status_colors()["on_hold"])),
+                (self.unavailable / total, QColor(status_colors()["unavailable"])),
             ]
 
         start_angle = 90 * 16
         for ratio, color in segments:
             span = int(360 * ratio * 16)
-            painter.setPen(QPen(color, 12, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.setPen(QPen(color, 22, Qt.PenStyle.SolidLine, Qt.PenCapStyle.FlatCap))
             painter.drawArc(
                 int(center.x() - radius),
                 int(center.y() - radius),
@@ -202,7 +204,7 @@ class StatusDonutChart(QWidget):
             start_angle -= span
 
         inner_radius = radius * 0.72
-        painter.setPen(QPen(QColor(238, 243, 229), 12))
+        painter.setPen(QPen(QColor(TOKENS["card"]), 12))
         painter.drawEllipse(
             int(center.x() - inner_radius),
             int(center.y() - inner_radius),
@@ -210,7 +212,7 @@ class StatusDonutChart(QWidget):
             int(inner_radius * 2),
         )
 
-        painter.setPen(QPen(QColor(23, 36, 15), 1))
+        painter.setPen(QPen(QColor(TOKENS["text"]), 1))
         painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, str(total))
 
 
@@ -270,7 +272,7 @@ class DashboardPage(QWidget):
         )
         stats.addWidget(self.transaction_card, 0, 2)
         self.revenue_card = StatCard(
-            "—", "Completed Revenue", "Completed transactions", "#6f9348"
+            "—", "Sales Revenue", "Completed sales", "#6f9348"
         )
         stats.addWidget(self.revenue_card, 1, 0)
         self.total_agents_card = StatCard(
@@ -278,7 +280,7 @@ class DashboardPage(QWidget):
         )
         stats.addWidget(self.total_agents_card, 1, 1)
         self.pending_documents_card = StatCard(
-            "—", "Pending Documents", "Processing / pending review", "#9b5555"
+            "—", "Documents Needing Attention", "Processing or failed", "#9b5555"
         )
         stats.addWidget(self.pending_documents_card, 1, 2)
         layout.addLayout(stats)
@@ -287,35 +289,43 @@ class DashboardPage(QWidget):
         top_row.setSpacing(16)
 
         trend_panel = QWidget()
-        trend_panel.setStyleSheet("background: #f7f9f3; border: none; border-radius: 18px;")
+        trend_panel.setObjectName("dashPanel")
+        trend_panel.setStyleSheet(
+            "QWidget#dashPanel { background: #f7f9f3; border: 1px solid #d9e2d0; border-radius: 14px; }"
+        )
         trend_layout = QVBoxLayout(trend_panel)
         trend_layout.setContentsMargins(18, 18, 18, 18)
 
-        trend_heading = QHBoxLayout()
+        trend_heading = QVBoxLayout()  # badge sits under the heading, not beside it
+        trend_heading.setSpacing(6)
         heading = QLabel("Monthly Transaction Trend")
+        heading.setWordWrap(True)
         heading.setStyleSheet("font-size: 18px; font-weight: 700; color: #17240f;")
         trend_heading.addWidget(heading)
-        trend_heading.addStretch()
         self.trend_status_label = QLabel("Awaiting transaction data")
         self.trend_status_label.setStyleSheet(
             "font-size: 10px; font-weight: 700; color: #708064; "
             "background: #e7eedc; border-radius: 8px; padding: 4px 8px;"
         )
-        trend_heading.addWidget(self.trend_status_label)
+        trend_heading.addWidget(self.trend_status_label, 0, Qt.AlignmentFlag.AlignLeft)
         trend_layout.addLayout(trend_heading)
         self.trend_chart = TrendChart()
         trend_layout.addWidget(self.trend_chart)
         top_row.addWidget(trend_panel, 2)
 
         status_panel = QWidget()
-        status_panel.setStyleSheet("background: #f7f9f3; border: none; border-radius: 18px;")
+        status_panel.setObjectName("dashPanel")
+        status_panel.setStyleSheet(
+            "QWidget#dashPanel { background: #f7f9f3; border: 1px solid #d9e2d0; border-radius: 14px; }"
+        )
         status_layout = QVBoxLayout(status_panel)
         status_layout.setContentsMargins(18, 18, 18, 18)
 
         status_heading_row = QHBoxLayout()
         status_heading = QLabel("Property Status Distribution")
+        status_heading.setWordWrap(True)
         status_heading.setStyleSheet("font-size: 18px; font-weight: 700; color: #17240f;")
-        status_heading_row.addWidget(status_heading)
+        status_heading_row.addWidget(status_heading, 1)
         status_heading_row.addStretch()
         self.status_refresh_button = QPushButton("Refresh")
         self.status_refresh_button.clicked.connect(self.refresh_property_status)
@@ -339,7 +349,7 @@ class DashboardPage(QWidget):
             color_swatch = QLabel()
             color_swatch.setFixedSize(10, 10)
             color_swatch.setStyleSheet(
-                f"background-color: {STATUS_COLORS[key]}; border-radius: 5px;"
+                f"background-color: {status_colors()[key]}; border-radius: 5px;"
             )
             legend_row.addWidget(color_swatch)
             legend_row.addWidget(label)
@@ -354,7 +364,10 @@ class DashboardPage(QWidget):
         second_row.setSpacing(16)
 
         capacity_panel = QWidget()
-        capacity_panel.setStyleSheet("background: #f7f9f3; border: none; border-radius: 18px;")
+        capacity_panel.setObjectName("dashPanel")
+        capacity_panel.setStyleSheet(
+            "QWidget#dashPanel { background: #f7f9f3; border: 1px solid #d9e2d0; border-radius: 14px; }"
+        )
         capacity_layout = QVBoxLayout(capacity_panel)
         capacity_layout.setContentsMargins(18, 18, 18, 18)
         capacity_title = QLabel("Agent Performance")
@@ -380,7 +393,10 @@ class DashboardPage(QWidget):
         second_row.addWidget(capacity_panel, 1)
 
         forecast_panel = QWidget()
-        forecast_panel.setStyleSheet("background: #f7f9f3; border: none; border-radius: 18px;")
+        forecast_panel.setObjectName("dashPanel")
+        forecast_panel.setStyleSheet(
+            "QWidget#dashPanel { background: #f7f9f3; border: 1px solid #d9e2d0; border-radius: 14px; }"
+        )
         forecast_layout = QVBoxLayout(forecast_panel)
         forecast_layout.setContentsMargins(18, 18, 18, 18)
         forecast_title = QLabel("Forecast Snapshot")
@@ -400,7 +416,10 @@ class DashboardPage(QWidget):
         lower_row.setSpacing(16)
 
         transactions_panel = QWidget()
-        transactions_panel.setStyleSheet("background: #f7f9f3; border: none; border-radius: 18px;")
+        transactions_panel.setObjectName("dashPanel")
+        transactions_panel.setStyleSheet(
+            "QWidget#dashPanel { background: #f7f9f3; border: 1px solid #d9e2d0; border-radius: 14px; }"
+        )
         transactions_layout = QVBoxLayout(transactions_panel)
         transactions_layout.setContentsMargins(18, 18, 18, 18)
         transactions_title = QLabel("Recent Transactions")
@@ -462,6 +481,19 @@ class DashboardPage(QWidget):
             )
             self.pending_documents_card.set_value(
                 f"{int(summary.get('pending_documents', 0)):,}"
+            )
+            self.total_properties_card.delta_label.setText(
+                f"{summary.get('available_properties', 0)} available · "
+                f"{summary.get('reserved_properties', 0)} reserved · "
+                f"{summary.get('sold_properties', 0)} sold"
+            )
+            self.pending_documents_card.delta_label.setText(
+                f"{summary.get('failed_documents', 0)} failed · "
+                f"{summary.get('processing_documents', 0)} processing · "
+                f"{summary.get('successful_documents', 0)} succeeded"
+            )
+            self.total_agents_card.delta_label.setText(
+                f"of {summary.get('total_agents', 0)} agent records"
             )
         except Exception as exc:
             print(f"Dashboard summary error: {exc}")
@@ -573,7 +605,7 @@ class DashboardPage(QWidget):
             self.forecast_label.setText(str(forecast.get("message")))
             return
         self.forecast_label.setText(
-            "Estimated next-month completed revenue: "
+            "Estimated sales revenue this month (linear trend, indicative): "
             f"{self._format_currency(forecast.get('next_month_revenue'))}\n"
             f"Linear trend based on {forecast.get('historical_months', 0)} "
             "months of completed transactions."

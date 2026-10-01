@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 
 import qtawesome as qta
 
+from app.theme import badge_colors
 from app.api.client import ApiClient
 
 
@@ -1036,17 +1037,11 @@ class AgentsPage(QWidget):
                         )
                     ).upper()
 
-                    if status == "ACTIVE":
-                        item.setForeground(
-                            Qt.GlobalColor.darkGreen
-                        )
-                    elif status in (
-                        "INACTIVE",
-                        "SUSPENDED",
-                    ):
-                        item.setForeground(
-                            Qt.GlobalColor.darkRed
-                        )
+                    _text, _bg = badge_colors(
+                        "ACTIVE" if status == "ACTIVE" else "FAILED" if status in ("INACTIVE", "SUSPENDED") else status
+                    )
+                    item.setForeground(_text)
+                    item.setBackground(_bg)
 
                 self.table.setItem(
                     row,

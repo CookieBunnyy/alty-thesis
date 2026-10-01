@@ -24,9 +24,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from app.theme import badge_colors
 from app.api.client import ApiClient
 
 STATUS_COLORS = {
+    "PROSPECT": "#f3ecd6",
     "RESERVED": "#dcebd3",
     "SOLD": "#d9e8ef",
     "CANCELLED": "#f2dfdc",
@@ -36,9 +38,11 @@ STATUS_COLORS = {
 class ClientSummaryCard(QWidget):
     def __init__(self, title: str, accent: str) -> None:
         super().__init__()
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setObjectName("summaryCard")
         self.setStyleSheet(
-            "QWidget { background: none; border: 1px solid #d9e2d0; "
-            "border-radius: 8px; }"
+            "QWidget#summaryCard { background: #f7f9f3; border: 1px solid #d9e2d0; "
+            "border-radius: 12px; } QLabel { background: transparent; border: none; }"
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
@@ -60,10 +64,11 @@ class ClientSummaryCard(QWidget):
 
 
 class ClientProfileDialog(QDialog):
-    def __init__(self, client: dict[str, Any], parent=None) -> None:
+    def __init__(self, client: dict[str, Any], parent=None,
+                 profile: dict[str, Any] | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Client Profile")
-        self.setMinimumWidth(440)
+        self.setMinimumWidth(620)
         self.setStyleSheet(
             "QDialog { background: #f7f9f3; color: #17310a; }"
             "QLabel { background: transparent; }"
@@ -82,10 +87,11 @@ class ClientProfileDialog(QDialog):
         transaction_type = str(client.get("transaction_type") or "").upper()
         client_status = str(client.get("status") or "").upper()
         outcome = {
-            "SOLD": "Purchased / Sold",
+            "SOLD": "Purchased / Sold property",
             "CANCELLED": "Cancelled transaction",
-        }.get(client_status, "Reserved")
-        outcome_label = QLabel(f"{outcome} property")
+            "PROSPECT": "Prospective buyer (no transaction yet)",
+        }.get(client_status, "Reserved property")
+        outcome_label = QLabel(outcome)
         outcome_label.setStyleSheet(
             f"background: {STATUS_COLORS.get(client_status, '#e7eedc')}; "
             "color: #17310a; border-radius: 6px; padding: 7px 10px; "
@@ -97,6 +103,7 @@ class ClientProfileDialog(QDialog):
         details.setHorizontalSpacing(10)
         details.setVerticalSpacing(10)
         fields = [
+            ("Client ID", client.get("external_client_id") or client.get("client_id")),
             ("Location", client.get("location")),
             ("Phone Number", client.get("phone_number")),
             ("Email", client.get("email")),
@@ -111,6 +118,11 @@ class ClientProfileDialog(QDialog):
             ("Transaction Date", self._format_date(client.get("transaction_date"))),
             ("Transaction Amount", self._format_currency(client.get("amount"))),
             ("Current Status", client_status),
+            ("Occupation", client.get("occupation")),
+            ("Civil Status", client.get("civil_status")),
+            ("Preferred Contact", client.get("preferred_contact")),
+            ("Purpose of Purchase", client.get("purpose_of_purchase")),
+            ("Source", client.get("source")),
         ]
         for label, value in fields:
             value_label = QLabel(str(value) if value not in (None, "") else "—")
@@ -120,6 +132,37 @@ class ClientProfileDialog(QDialog):
             )
             details.addRow(f"{label}:", value_label)
         layout.addLayout(details)
+
+        if profile is not None:
+            layout.addWidget(self._section("Transaction History"))
+            history = QTableWidget(len(profile.get("transactions", [])), 6)
+            history.setHorizontalHeaderLabels(["Date", "Type", "Status", "Amount", "Property", "Agent"])
+            for row, item in enumerate(profile.get("transactions", [])):
+                values = [
+                    self._format_date(item.get("transaction_date")), item.get("transaction_type"),
+                    item.get("status"), self._format_currency(item.get("amount")),
+                    item.get("property_title"), item.get("agent_name"),
+                ]
+                for column, value in enumerate(values):
+                    history.setItem(row, column, QTableWidgetItem(str(value or "—")))
+            history.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            history.horizontalHeader().setStretchLastSection(True)
+            history.setMaximumHeight(150)
+            layout.addWidget(history)
+
+            layout.addWidget(self._section("Related Documents"))
+            documents = profile.get("documents", [])
+            docs = QTableWidget(len(documents), 4)
+            docs.setHorizontalHeaderLabels(["Document", "Type", "Status", "Uploaded"])
+            for row, item in enumerate(documents):
+                values = [item.get("document_name"), item.get("document_type"), item.get("status"),
+                          self._format_date(item.get("created_at"))]
+                for column, value in enumerate(values):
+                    docs.setItem(row, column, QTableWidgetItem(str(value or "—")))
+            docs.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            docs.horizontalHeader().setStretchLastSection(True)
+            docs.setMaximumHeight(130)
+            layout.addWidget(docs)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.reject)
@@ -141,6 +184,12 @@ class ClientProfileDialog(QDialog):
             return f"₱{float(value):,.2f}"
         except (TypeError, ValueError):
             return "—"
+
+    @staticmethod
+    def _section(text: str) -> QLabel:
+        label = QLabel(text)
+        label.setStyleSheet("font-size: 14px; font-weight: 700; color: #17310a; padding-top: 6px;")
+        return label
 
 
 class ClientsPage(QWidget):
@@ -171,7 +220,8 @@ class ClientsPage(QWidget):
             "color: #17310a; font-size: 26px; font-weight: 700;"
         )
         subtitle = QLabel(
-            "Manage clients associated with reserved and sold properties."
+            "Clients are created automatically from buyer, reservation and sale "
+            "documents and from website transactions."
         )
         subtitle.setStyleSheet("color: #60705a; font-size: 13px;")
         title_stack.addWidget(title)
@@ -215,10 +265,12 @@ class ClientsPage(QWidget):
         summary_row = QHBoxLayout()
         summary_row.setSpacing(12)
         self.total_card = ClientSummaryCard("Total Clients", "#17310a")
+        self.prospect_card = ClientSummaryCard("Prospects", "#9a6a13")
         self.reserved_card = ClientSummaryCard("Reserved Clients", "#486b2a")
         self.sold_card = ClientSummaryCard("Completed / Sold", "#477489")
         self.cancelled_card = ClientSummaryCard("Cancelled", "#9b5555")
         summary_row.addWidget(self.total_card)
+        summary_row.addWidget(self.prospect_card)
         summary_row.addWidget(self.reserved_card)
         summary_row.addWidget(self.sold_card)
         summary_row.addWidget(self.cancelled_card)
@@ -242,7 +294,8 @@ class ClientsPage(QWidget):
 
         self.status_filter = QComboBox()
         self.status_filter.setFixedHeight(38)
-        self.status_filter.addItem("All Transactions", "")
+        self.status_filter.addItem("All Clients", "")
+        self.status_filter.addItem("Prospect", "PROSPECT")
         self.status_filter.addItem("Reserved", "RESERVED")
         self.status_filter.addItem("Sold", "SOLD")
         self.status_filter.addItem("Cancelled", "CANCELLED")
@@ -320,6 +373,7 @@ class ClientsPage(QWidget):
             self.clients = self.api.get_clients(token=self.token)
             summary = self.api.get_client_summary(token=self.token)
             self.total_card.set_value(int(summary.get("total", 0)))
+            self.prospect_card.set_value(int(summary.get("prospect", 0)))
             self.reserved_card.set_value(int(summary.get("reserved", 0)))
             self.sold_card.set_value(int(summary.get("sold", 0)))
             self.cancelled_card.set_value(int(summary.get("cancelled", 0)))
@@ -353,7 +407,8 @@ class ClientsPage(QWidget):
                 self,
                 "Client Sync Complete",
                 "Supabase records: {total}\nAdded: {inserted}\nUpdated: {updated}\n"
-                "Cancelled: {cancelled}\nSkipped with errors: {errors}".format(**result),
+                "Kept local (pending push): {skipped_pending}\n"
+                "Skipped with errors: {errors}".format(**{"skipped_pending": 0, **result}),
             )
         except httpx.HTTPStatusError as exc:
             self._show_api_error(exc, "Client Sync Failed")
@@ -377,6 +432,7 @@ class ClientsPage(QWidget):
                 str(client.get(field) or "")
                 for field in (
                     "full_name",
+                    "external_client_id",
                     "location",
                     "phone_number",
                     "email",
@@ -396,13 +452,13 @@ class ClientsPage(QWidget):
         for row, client in enumerate(visible_clients):
             status_value = str(client.get("status") or "").upper()
             values = [
-                str(client.get("client_id") or "")[:8],
+                str(client.get("external_client_id") or str(client.get("client_id") or "")[:8]),
                 str(client.get("full_name") or ""),
                 str(client.get("location") or "—"),
                 str(client.get("phone_number") or "—"),
                 str(client.get("property_title") or "—"),
                 str(client.get("agent_name") or "—"),
-                str(client.get("transaction_type") or "").title(),
+                str(client.get("transaction_type") or "—").title(),
                 self._format_date(client.get("transaction_date")),
                 status_value,
             ]
@@ -417,10 +473,9 @@ class ClientsPage(QWidget):
                     item.setData(Qt.ItemDataRole.UserRole, full_client_id)
                     item.setToolTip(full_client_id)
                 if column == 8:
-                    item.setBackground(
-                        QColor(STATUS_COLORS.get(status_value, "#ffffff"))
-                    )
-                    item.setForeground(QColor("#17310a"))
+                    _text, _bg = badge_colors(status_value)
+                    item.setForeground(_text)
+                    item.setBackground(_bg)
                     font = item.font()
                     font.setBold(True)
                     item.setFont(font)
@@ -446,8 +501,14 @@ class ClientsPage(QWidget):
             return
         client_id = item.data(Qt.ItemDataRole.UserRole) or item.text()
         client = self.clients_by_id.get(str(client_id))
-        if client is not None:
-            ClientProfileDialog(client, self).exec()
+        if client is None:
+            return
+        try:
+            profile = self.api.get_client_profile(str(client_id), token=self.token)
+            client = profile.get("client", client)
+        except (httpx.HTTPError, ValueError):
+            profile = None  # still show the row data
+        ClientProfileDialog(client, self, profile).exec()
 
     def view_selected_client(self) -> None:
         row = self.table.currentRow()
@@ -466,7 +527,7 @@ class ClientsPage(QWidget):
             else ""
         )
         self.delete_button.setVisible(
-            user_role in {"administrator", "general manager"}
+            user_role in {"administrator", "general manager", "president"}
         )
 
     def delete_selected_client(self) -> None:
@@ -484,7 +545,8 @@ class ClientsPage(QWidget):
         confirmation.setWindowTitle("Delete Client and History")
         confirmation.setText(
             f"Permanently delete {client.get('full_name') or 'this client'} "
-            f"and all linked transaction history for {property_title}? "
+            f"and their reservation history for {property_title}? "
+            "Only clients created in error without a completed sale can be deleted. "
             "A reserved property will return to AVAILABLE. This cannot be undone."
         )
         confirmation.setStandardButtons(

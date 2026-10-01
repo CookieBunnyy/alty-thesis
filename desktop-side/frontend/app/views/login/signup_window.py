@@ -395,8 +395,8 @@ class SignUpWindow(QWidget):
             self.message.setText("Username must be at least 3 characters.")
             return
 
-        if len(password) < 6:
-            self.message.setText("Password must be at least 6 characters.")
+        if len(password) < 8:
+            self.message.setText("Password must be at least 8 characters.")
             return
 
         if password != confirm:

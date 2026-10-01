@@ -74,7 +74,17 @@ class Document(Base):
     file_hash: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     status: Mapped[str] = mapped_column(
-        String(32), default="PENDING_REVIEW", nullable=False, index=True
+        String(32), default="PROCESSING", nullable=False, index=True
+    )
+    # Processing outcome (business-data processing, distinct from storage).
+    processing_stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extraction_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    source_format: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Cloud metadata synchronization state (storage upload is separate).
+    sync_status: Mapped[str] = mapped_column(
+        String(24), default="PENDING", server_default="SYNCED", nullable=False
     )
     uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -97,7 +107,7 @@ class DocumentAuditEvent(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     document_row_id: Mapped[int | None] = mapped_column(
-        ForeignKey("documents.id"), nullable=True, index=True
+        ForeignKey("documents.id", ondelete="SET NULL"), nullable=True, index=True
     )
     folder_id: Mapped[int | None] = mapped_column(
         ForeignKey("document_folders.id"), nullable=True, index=True

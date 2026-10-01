@@ -23,6 +23,9 @@ export interface LocationPoint {
 
 export interface Property {
   listing_id: number | string;
+  listing_code?: string | null;
+  status?: 'AVAILABLE' | 'RESERVED' | 'SOLD';
+  media?: string[];
   title: string;
   category?: string;
   price_total: number;

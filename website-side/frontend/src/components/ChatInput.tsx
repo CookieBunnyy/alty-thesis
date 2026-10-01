@@ -19,7 +19,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onQuickChatSelect,
 }) => {
   return (
-    <div className="border-t bg-white p-2 sm:p-2.5">
+    <div className="border-t bg-ab-card-2 p-2 sm:p-2.5">
       {quickChats.length > 0 && (
         <div className="mb-2 overflow-x-auto">
           <div className="flex min-w-max gap-1.5 pb-1">
@@ -28,7 +28,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 key={chat}
                 type="button"
                 onClick={() => onQuickChatSelect?.(chat)}
-                className="shrink-0 rounded-full border border-[#d8d1c8] bg-[#f5f3ee] px-2 py-1 text-[10px] font-medium text-[#183c32] transition hover:border-[#123f33] hover:bg-[#edf3ef]"
+                className="shrink-0 rounded-full border border-ab-border bg-ab-card px-2 py-1 text-[10px] font-medium text-ab-text transition hover:border-ab-accent hover:bg-ab-hover"
               >
                 {chat}
               </button>
@@ -41,14 +41,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <button
           type="button"
           aria-label="Attach file"
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-[#d8d1c8] bg-[#f9f6f2] text-[#183c32] transition hover:bg-[#eef2ee]"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-ab-border bg-ab-card text-ab-text transition hover:bg-ab-hover"
         >
           <Paperclip className="h-4 w-4" />
         </button>
 
         <input
           type="text"
-          className="flex-1 rounded-full border border-[#d8d1c8] bg-[#f9f6f2] px-3 py-2 text-xs text-[#183c32] focus:ring-2 focus:ring-[#123f33] focus:outline-none sm:text-sm"
+          className="flex-1 rounded-full border border-ab-border bg-ab-card px-3 py-2 text-xs text-ab-text focus:ring-2 focus:ring-ab-accent focus:outline-none sm:text-sm"
           placeholder="Ask about properties or work commute..."
           value={input}
           onChange={(e) => onInputChange(e.target.value)}
@@ -56,7 +56,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <button
           type="submit"
           disabled={isLoading}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0d3529] text-[#f3efe7] transition hover:bg-[#173f32] disabled:opacity-50"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-ab-accent text-ab-ink transition hover:bg-ab-accent-hover disabled:opacity-50"
         >
           <Send className="h-4 w-4" />
         </button>

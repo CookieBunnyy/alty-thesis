@@ -6,9 +6,11 @@ from pydantic import BaseModel
 
 class TransactionResponse(BaseModel):
     transaction_id: str
+    external_transaction_id: str | None = None
     client_id: str
     client_name: str
     property_id: int
+    property_external_id: str | None = None
     property_title: str | None = None
     agent_id: str
     agent_name: str
@@ -17,6 +19,9 @@ class TransactionResponse(BaseModel):
     amount: Decimal
     status: str
     notes: str | None = None
+    source: str | None = None
+    source_document_id: str | None = None
+    sync_status: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -24,13 +29,16 @@ class TransactionResponse(BaseModel):
 class TransactionSummary(BaseModel):
     total: int
     reserved: int
-    completed: int
-    amount_total: Decimal
+    completed: int  # completed sales
+    cancelled: int = 0
+    amount_total: Decimal  # revenue from completed sales
 
 
 class TransactionSyncResult(BaseModel):
     total: int
     inserted: int
     updated: int
+    skipped_pending: int = 0
     errors: int
+    error_messages: list[str] = []
     last_synced_at: datetime

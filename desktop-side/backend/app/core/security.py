@@ -13,6 +13,53 @@ from app.models.user import User
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
+# Canonical role names (users.role). Comparisons are case-insensitive.
+ADMINISTRATOR = "Administrator"
+GENERAL_MANAGER = "General Manager"
+PRESIDENT = "President"
+FILING_MANAGER = "Filing Manager"
+AGENT = "Agent"
+EMPLOYEE = "Employee"
+ROLES = (ADMINISTRATOR, GENERAL_MANAGER, PRESIDENT, FILING_MANAGER, AGENT, EMPLOYEE)
+
+MANAGEMENT_ROLES = {ADMINISTRATOR, GENERAL_MANAGER, PRESIDENT}
+FILING_ROLES = MANAGEMENT_ROLES | {FILING_MANAGER}
+
+_ALL_PAGES = [
+    "dashboard", "properties", "partners", "clients", "transactions",
+    "documents", "media", "agents", "workforce", "analytics",
+    "forecasting", "dss", "users", "audit", "settings",
+]
+# Desktop navigation keys each role may open. The API enforces the same
+# boundaries independently; this list only drives what the UI shows.
+ROLE_PERMISSIONS: dict[str, list[str]] = {
+    ADMINISTRATOR: _ALL_PAGES,
+    GENERAL_MANAGER: _ALL_PAGES,
+    PRESIDENT: [page for page in _ALL_PAGES if page != "users"],
+    FILING_MANAGER: ["dashboard", "properties", "partners", "clients", "transactions",
+                     "documents", "media", "agents", "settings"],
+    AGENT: ["dashboard", "properties", "partners", "clients", "transactions",
+            "documents", "media", "agents", "settings"],
+    EMPLOYEE: ["dashboard", "properties", "partners", "clients", "transactions",
+               "documents", "media", "agents", "settings"],
+}
+
+
+def canonical_role(role: str | None) -> str:
+    lowered = (role or "").strip().casefold()
+    for name in ROLES:
+        if name.casefold() == lowered:
+            return name
+    return EMPLOYEE
+
+
+def permissions_for(role: str | None) -> list[str]:
+    return list(ROLE_PERMISSIONS[canonical_role(role)])
+
+
+def has_role(user: User, roles: set[str]) -> bool:
+    return canonical_role(user.role) in roles
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
@@ -56,3 +103,24 @@ def get_current_user(
     if user is None or not user.is_active:
         raise credentials_error
     return user
+
+
+def require_roles(*roles: str):
+    """Dependency factory: the current user must hold one of ``roles``."""
+    allowed = {canonical_role(role) for role in roles}
+
+    def dependency(user: User = Depends(get_current_user)) -> User:
+        if canonical_role(user.role) not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your role does not permit this action ("
+                + ", ".join(sorted(allowed)) + " required).",
+            )
+        return user
+
+    return dependency
+
+
+require_management = require_roles(*MANAGEMENT_ROLES)
+require_filing = require_roles(*FILING_ROLES)
+require_admin = require_roles(ADMINISTRATOR)
