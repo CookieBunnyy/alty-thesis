@@ -19,13 +19,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Unqualified table names: resolved through the connection's search_path,
+    # so this works in `public` locally and in a dedicated schema in the cloud.
     op.execute(
         sa.text(
             "SELECT setval("
-            "pg_get_serial_sequence('public.property_listings', 'listing_id'), "
+            "pg_get_serial_sequence('property_listings', 'listing_id'), "
             "GREATEST(COALESCE((SELECT MAX(listing_id) "
-            "FROM public.property_listings), 1), 1), "
-            "EXISTS(SELECT 1 FROM public.property_listings)"
+            "FROM property_listings), 1), 1), "
+            "EXISTS(SELECT 1 FROM property_listings)"
             ")"
         )
     )
