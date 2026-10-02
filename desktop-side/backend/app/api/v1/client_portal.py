@@ -1,5 +1,8 @@
 """Website client accounts: sign up, sign in, my transactions, my reviews.
 
+Transactions are read-only here: they are recorded from the agent's
+documents and appear for the client whose record matches (email/phone).
+
 Client accounts live in the same ``users`` table, use the same bcrypt hashing
 and JWT tokens as staff, and carry the role "Client". They are refused by
 every internal endpoint (``get_current_user``) and staff accounts are refused
@@ -17,7 +20,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.v1.public import WebsiteTransaction, _RateLimiter, record_client_transaction
+from app.api.v1.public import _RateLimiter
 from app.core.database import get_db
 from app.core.security import CLIENT, create_access_token, get_current_client, get_password_hash, \
     is_client, verify_password
@@ -210,12 +213,6 @@ def my_transactions(user: User = Depends(get_current_client), db: Session = Depe
             "can_review": t.status == "COMPLETED" and review is None,
         })
     return out
-
-
-@router.post("/transactions", status_code=201)
-def create_my_transaction(payload: WebsiteTransaction, request: Request,
-                          user: User = Depends(get_current_client), db: Session = Depends(get_db)):
-    return record_client_transaction(db, request, user, payload)
 
 
 @router.get("/reviews")

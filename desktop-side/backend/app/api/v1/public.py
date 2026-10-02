@@ -1,9 +1,9 @@
-"""Public endpoints used by the website.
+"""Public (read-only) endpoints used by the website.
 
 Anyone may read live property data, agents, reviews and the home page here.
-Reserving or purchasing requires a signed-in website client account; the
-submission goes through the same matching and property-lifecycle rules as
-documents. The website never writes to Supabase or keeps its own store.
+Reservations and purchases are NOT made through the website: clients
+contact an agent, and the transaction is recorded from the documents the
+agent submits (Document Repository). The website never writes to Supabase.
 """
 
 from __future__ import annotations
@@ -11,26 +11,17 @@ from __future__ import annotations
 import threading
 import time
 from collections import defaultdict, deque
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_current_client
 from app.models.agent import Agent
-from app.models.client import Client
-from app.models.user import User
 from app.services import reviews as review_service
 from app.models.media import PropertyMedia
 from app.models.property_listing import PropertyListing
-from app.services.audit import record_audit
-from app.services.cloud_sync import try_push_pending
-from app.services.document_processing import Context, ProcessingError, apply_transaction, new_result
 from app.services.document_storage import StorageError, read_file
 
 router = APIRouter(prefix="/public", tags=["Public website"])
@@ -55,8 +46,6 @@ class _RateLimiter:
                 raise HTTPException(status_code=429, detail=detail)
             hits.append(now)
 
-
-rate_limiter = _RateLimiter()
 
 
 def _media_urls(db: Session, listing_ids: list[int]) -> dict[int, list[str]]:
@@ -285,92 +274,3 @@ def get_public_media(media_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail="Media unavailable") from exc
     return Response(content=content, media_type=media.mime_type,
                     headers={"Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff"})
-
-
-class WebsiteTransaction(BaseModel):
-    """Reserve/purchase request. The client's identity comes from the
-    signed-in account, never from the form, so ``extra`` contact fields sent
-    by older website builds are ignored."""
-    model_config = ConfigDict(extra="ignore")
-
-    property_id: int
-    agent_id: str = Field(min_length=1, max_length=32)
-    transaction_type: str = Field(pattern="^(RESERVED|SOLD)$")
-
-
-def record_client_transaction(db: Session, request: Request, user: User,
-                              payload: WebsiteTransaction) -> dict:
-    """USER SELECTS PROPERTY -> signed-in client -> validate property & status
-    -> match the client's own record -> create transaction -> update property."""
-    rate_limiter.check(request.client.host if request.client else "unknown",
-                       settings.PUBLIC_SUBMISSIONS_PER_HOUR)
-    listing = db.get(PropertyListing, payload.property_id)
-    if listing is None:
-        raise HTTPException(status_code=404, detail="Property not found")
-    if listing.price_total is None:
-        raise HTTPException(status_code=409, detail="This property has no listed price yet; contact an agent.")
-    agent = db.get(Agent, payload.agent_id)
-    if agent is None or str(agent.status or "").upper() != "ACTIVE":
-        raise HTTPException(status_code=422, detail="Choose an active agent")
-    client = db.get(Client, user.client_id)
-    if client is None:
-        raise HTTPException(status_code=403, detail="Your client profile is missing; contact Abellar Realty.")
-
-    fields = {
-        "listing_id": str(listing.listing_id),
-        "agent_id": agent.agent_id,
-        # The account's own client record: matching cannot attach this
-        # transaction to anyone else.
-        "client_id": client.client_id,
-        "full_name": client.full_name,
-        "email": client.email,
-        "contact_number": client.phone_number,
-        "address": client.location,
-        "transaction_date": datetime.now(timezone.utc),
-        # The website records the listed contract price; reservation fees and
-        # payments are captured later from receipts/agreements.
-        "amount": listing.price_total,
-    }
-    fields = {key: value for key, value in fields.items() if value is not None}
-    result = new_result(None, None, "WEBSITE")
-    context = Context(db, None, "WEBSITE_TRANSACTION", fields, result, source="WEBSITE")
-    savepoint = db.begin_nested()
-    try:
-        apply_transaction(context, payload.transaction_type)
-        db.flush()
-    except ProcessingError as exc:
-        savepoint.rollback()
-        record_audit(db, "WEBSITE_TRANSACTION_REJECTED", actor=user, entity_type="property_listings",
-                     entity_id=listing.listing_id, result="FAILED",
-                     details={"stage": exc.stage, "reason": str(exc),
-                              "transaction_type": payload.transaction_type})
-        db.commit()
-        status = 409 if exc.stage in {"ENTITY_MATCHING", "DUPLICATE_CHECK"} else 422
-        raise HTTPException(status_code=status, detail=str(exc)) from exc
-    savepoint.commit()
-    for event in context.events:
-        record_audit(db, event["action"], actor=user, entity_type=event["entity_type"],
-                     entity_id=event["entity_id"], details={**event["details"], "source": "WEBSITE"})
-    db.commit()
-    try_push_pending(db)
-    matched = result["matched_entities"]
-    return {
-        "status": "SUCCESS",
-        "already_recorded": result["idempotent"],
-        "transaction_id": matched.get("transaction", {}).get("id"),
-        "property_id": listing.listing_id,
-        "property_status": listing.status,
-        "transaction_type": payload.transaction_type,
-        "message": (
-            "Your request was already recorded." if result["idempotent"]
-            else "Your request was recorded. An agent will contact you."
-        ),
-    }
-
-
-@router.post("/transactions", status_code=201)
-def submit_website_transaction(payload: WebsiteTransaction, request: Request,
-                               db: Session = Depends(get_db),
-                               user: User = Depends(get_current_client)):
-    """Kept at its original path; now requires a signed-in client account."""
-    return record_client_transaction(db, request, user, payload)

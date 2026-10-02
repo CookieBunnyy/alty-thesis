@@ -72,55 +72,25 @@ def test_user_management_and_last_admin_protection(api, admin):
 
 # ---- website transaction flow ------------------------------------------------------
 
-def _client_session(api, name="Ana Reyes", email="ana.reyes@example.com", phone="0917 111 2222"):
-    response = api.post("/api/v1/client/register", json={
-        "full_name": name, "email": email, "phone_number": phone, "password": "s3cret-pass"})
-    assert response.status_code == 201, response.text
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
-
-
-def test_website_flow_creates_client_transaction_and_reserves(api, agents, db):
+def test_website_cannot_create_transactions(api, agents, db):
+    """Reservations and purchases come only from agents' documents: the
+    public website can browse but has no way to record a transaction."""
     listing = _listing(db, title="Garden Home", price_total=Decimal("3500000"), lat=14.5, lng=121.0)
     properties = api.get("/api/v1/public/properties").json()
     assert [p["listing_id"] for p in properties] == [listing.listing_id]
     assert "sync_status" not in properties[0]
-    agent_ids = [a["agent_id"] for a in api.get("/api/v1/public/agents").json()]
-    assert "AGT-0003" in agent_ids
+    assert "AGT-0003" in [a["agent_id"] for a in api.get("/api/v1/public/agents").json()]
 
+    signup = api.post("/api/v1/client/register", json={
+        "full_name": "Ana Reyes", "email": "ana.reyes@example.com", "phone_number": "0917 111 2222",
+        "password": "s3cret-pass"})
+    ana = {"Authorization": f"Bearer {signup.json()['access_token']}"}
     payload = {"property_id": listing.listing_id, "agent_id": "AGT-0003", "transaction_type": "RESERVED"}
-    # Reserving requires a signed-in client account.
-    assert api.post("/api/v1/public/transactions", json=payload).status_code == 401
-    ana = _client_session(api)
-    response = api.post("/api/v1/client/transactions", json=payload, headers=ana)
-    assert response.status_code == 201, response.text
-    assert response.json()["property_status"] == "RESERVED"
+    assert api.post("/api/v1/public/transactions", json=payload).status_code in {404, 405}
+    assert api.post("/api/v1/client/transactions", json=payload, headers=ana).status_code in {404, 405}
     db.expire_all()
-    transaction = db.execute(select(PropertyTransaction)).scalar_one()
-    assert transaction.source == "WEBSITE" and float(transaction.amount) == 3_500_000
-    client = db.execute(select(Client)).unique().scalar_one()  # the account's own record, no duplicate
-    assert client.source == "WEBSITE" and client.full_name == "Ana Reyes"
-    assert transaction.client_id == client.client_id
-
-    # Same client again (old path, old payload shape): idempotent.
-    again = api.post("/api/v1/public/transactions", headers=ana,
-                     json={**payload, "full_name": "Someone Else", "email": "x@example.com"})
-    assert again.status_code == 201 and again.json()["already_recorded"] is True
-    ben = _client_session(api, "Ben Cruz", "ben@example.com", "0918 222 3333")
-    other = api.post("/api/v1/client/transactions", json=payload, headers=ben)
-    assert other.status_code == 409 and "RESERVED" in other.json()["detail"]
-    assert api.get("/api/v1/public/properties").json() == []
-
-
-def test_website_validation(api, agents, db):
-    listing = _listing(db, title="No Price Home")
-    ana = _client_session(api)
-    base = {"property_id": listing.listing_id, "agent_id": "AGT-0003", "transaction_type": "RESERVED"}
-    post = lambda body: api.post("/api/v1/client/transactions", json=body, headers=ana)  # noqa: E731
-    assert post(base).status_code == 409  # no price
-    assert post({**base, "property_id": 999}).status_code == 404
-    assert post({**base, "transaction_type": "RENT"}).status_code == 422
-    priced = _listing(db, title="Priced Home", price_total=Decimal("2000000"))
-    assert post({**base, "property_id": priced.listing_id, "agent_id": "AGT-9999"}).status_code == 422
+    assert db.execute(select(PropertyTransaction)).first() is None
+    assert db.get(PropertyListing, listing.listing_id).status == "AVAILABLE"
 
 
 # ---- property lifecycle via management edits ---------------------------------------

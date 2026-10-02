@@ -35,7 +35,7 @@ export function PropertiesPage() {
       .catch((loadError: Error) => setError(loadError.message))
   }, [])
   useEffect(load, [load])
-  const viewer = usePropertyViewer(load)
+  const viewer = usePropertyViewer()
 
   // Keep the URL shareable as filters change.
   useEffect(() => {

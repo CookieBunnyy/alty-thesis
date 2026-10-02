@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.v1 import client_portal
 from app.models.agent import Agent
@@ -13,7 +14,9 @@ from app.models.property_listing import PropertyListing
 from app.models.review import AgentReview
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
+from tests import documents as build
 from tests.conftest import login
+from tests.test_document_pipeline import assert_success, upload
 
 
 def _register(api, name="Ana Reyes", email="ana.reyes@example.com", phone="0917 111 2222"):
@@ -33,12 +36,18 @@ def _listing(db, title="Garden Home", price="3500000", photos=None):
     return listing
 
 
-def _complete_purchase(api, db, headers, listing_id, agent_id="AGT-0003"):
-    response = api.post("/api/v1/client/transactions", headers=headers, json={
-        "property_id": listing_id, "agent_id": agent_id, "transaction_type": "SOLD"})
-    assert response.status_code == 201, response.text
-    db.expire_all()
-    return db.get(PropertyTransaction, response.json()["transaction_id"])
+def _record_transaction(db, email, listing_id, transaction_type="SOLD", agent_id="AGT-0003"):
+    """What the document pipeline stores for this client's agent-submitted
+    document (see test_agent_documents_reach_the_client_account)."""
+    user = db.execute(select(User).where(User.username == email)).scalar_one()
+    status = "COMPLETED" if transaction_type == "SOLD" else "RESERVED"
+    transaction = PropertyTransaction(client_id=user.client_id, property_id=listing_id, agent_id=agent_id,
+                                      transaction_type=transaction_type, status=status,
+                                      transaction_date=datetime.now(timezone.utc), amount=Decimal("3500000"),
+                                      source="DOCUMENT")
+    db.add(transaction)
+    db.commit()
+    return transaction
 
 
 def test_register_creates_linked_client_and_hashes_password(api, db):
@@ -93,7 +102,7 @@ def test_client_and_staff_accounts_are_separated(api, admin, agents):
 def test_reviews_only_for_own_completed_transactions(api, admin, agents, db):
     listing = _listing(db)
     ana, ben = _register(api), _register(api, "Ben Cruz", "ben@example.com", "0918 222 3333")
-    sale = _complete_purchase(api, db, ana, listing.listing_id)
+    sale = _record_transaction(db, "ana.reyes@example.com", listing.listing_id)
     assert sale.status == "COMPLETED"
     review = {"transaction_id": sale.transaction_id, "rating": 5, "review": "  Very helpful throughout.  "}
 
@@ -121,9 +130,7 @@ def test_reviews_only_for_own_completed_transactions(api, admin, agents, db):
 def test_reservation_is_not_reviewable_until_completed(api, agents, db):
     listing = _listing(db)
     ana = _register(api)
-    response = api.post("/api/v1/client/transactions", headers=ana, json={
-        "property_id": listing.listing_id, "agent_id": "AGT-0003", "transaction_type": "RESERVED"})
-    transaction_id = response.json()["transaction_id"]
+    transaction_id = _record_transaction(db, "ana.reyes@example.com", listing.listing_id, "RESERVED").transaction_id
     assert api.get("/api/v1/client/transactions", headers=ana).json()[0]["can_review"] is False
     rejected = api.post("/api/v1/client/reviews", headers=ana,
                         json={"transaction_id": transaction_id, "rating": 5})
@@ -136,7 +143,7 @@ def test_ratings_are_aggregated_from_reviews_everywhere(api, admin, agents, db):
     for index, (stars, text) in enumerate(((5, "Excellent assistance."), (3, None))):
         session = _register(api, f"Client {index} Tester", f"c{index}@example.com", f"0917 000 100{index}")
         listing = _listing(db, title=f"Home {index}")
-        sale = _complete_purchase(api, db, session, listing.listing_id)
+        sale = _record_transaction(db, f"c{index}@example.com", listing.listing_id)
         api.post("/api/v1/client/reviews", headers=session,
                  json={"transaction_id": sale.transaction_id, "rating": stars, "review": text})
 
@@ -180,3 +187,28 @@ def test_home_page_uses_live_data_only(api, agents, db):
 def test_staff_login_still_works(api, admin):
     assert api.get("/api/v1/auth/me", headers=admin).json()["role"] == "Administrator"
     assert login(api, "admin")
+
+
+def test_agent_documents_reach_the_client_account(api, admin, agents, db):
+    """The real flow: the client contacts an agent; the filing manager uploads
+    the agent's reservation and sale documents; the transactions appear in
+    the client's account (matched by email) and the agent can then be rated."""
+    michael = _register(api, "Michael Santos", "michael.santos.test@example.com", "0917 222 3333")
+    assert api.get("/api/v1/client/transactions", headers=michael).json() == []
+
+    without_client_id = lambda lines: [line for line in lines if not line.startswith("Client ID:")]  # noqa: E731
+    assert_success(upload(api, admin, "property.docx", build.docx(build.PROPERTY_LINES)))
+    assert_success(upload(api, admin, "reservation.docx", build.docx(without_client_id(build.RESERVATION_LINES))))
+    mine = api.get("/api/v1/client/transactions", headers=michael).json()
+    assert [(t["transaction_type"], t["status"], t["can_review"]) for t in mine] == [("RESERVED", "RESERVED", False)]
+    assert mine[0]["agent"]["agent_id"] == "AGT-0006"
+
+    sale_lines = without_client_id(build.SALE_LINES) + ["Email: michael.santos.test@example.com"]
+    assert_success(upload(api, admin, "sale.docx", build.docx(sale_lines)))
+    mine = {t["transaction_type"]: t for t in api.get("/api/v1/client/transactions", headers=michael).json()}
+    assert mine["SOLD"]["status"] == "COMPLETED" and mine["SOLD"]["can_review"] is True
+    review = api.post("/api/v1/client/reviews", headers=michael, json={
+        "transaction_id": mine["SOLD"]["transaction_id"], "rating": 5, "review": "Smooth from viewing to signing."})
+    assert review.status_code == 201, review.text
+    assert review.json()["agent"]["agent_id"] == "AGT-0006"
+    assert db.scalar(select(func.count()).select_from(Client)) == 1  # the account's record, no duplicate

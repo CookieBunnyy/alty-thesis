@@ -1,4 +1,4 @@
-import { Bath, Bed, Building, FileSignature, Info, MapPin, ShoppingBag, X } from "lucide-react"
+import { Bath, Bed, Building, Info, MapPin, PhoneCall, X } from "lucide-react"
 import { CommuteCard } from "./CommuteCard"
 import { publicUrl } from "@/config"
 import type { LocationPoint, Property, RouteSelection } from "@/types"
@@ -12,7 +12,7 @@ type Props = {
   onSetWorkplaceClick: () => void
   onViewRoute?: () => void
   onOpenDetails: () => void
-  onTransaction: (type: "RESERVED" | "SOLD") => void
+  onContactAgent: () => void
   onClose: () => void
   compact?: boolean
   commute?: CommuteState
@@ -24,7 +24,9 @@ const STATUS_STYLES: Record<string, string> = {
   SOLD: "bg-ab-info/15 text-ab-info",
 }
 
-/** Property → commute (DSS) → Reserve / Purchase, for the selected pin. */
+/** Property → commute (DSS) → Contact Agent, for the selected pin.
+ *  Reservations and purchases are recorded by agents from documents, so the
+ *  website connects the client with an agent instead of transacting. */
 export function SelectedPropertyPanel({
   property,
   workplace,
@@ -33,14 +35,13 @@ export function SelectedPropertyPanel({
   onSetWorkplaceClick,
   onViewRoute,
   onOpenDetails,
-  onTransaction,
+  onContactAgent,
   onClose,
   compact = false,
   commute,
 }: Props) {
   const cover = property.photos?.[0] ?? (property.media?.[0] ? publicUrl(property.media[0]) : null)
   const status = property.status ?? "AVAILABLE"
-  const isAvailable = status === "AVAILABLE"
 
   return (
     <article aria-label={`Selected property: ${property.title}`} className="space-y-4">
@@ -102,32 +103,23 @@ export function SelectedPropertyPanel({
         commute={commute}
       />
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid gap-2">
         <button
           type="button"
-          onClick={() => onTransaction("RESERVED")}
-          disabled={!isAvailable}
-          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-ab-accent px-3 text-sm font-semibold text-ab-ink transition hover:bg-ab-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={onContactAgent}
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-ab-accent px-3 text-sm font-semibold text-ab-ink transition hover:bg-ab-accent-hover"
         >
-          <FileSignature className="h-4 w-4" /> Reserve
-        </button>
-        <button
-          type="button"
-          onClick={() => onTransaction("SOLD")}
-          disabled={!isAvailable}
-          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-ab-accent px-3 text-sm font-semibold text-ab-accent transition hover:bg-ab-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <ShoppingBag className="h-4 w-4" /> Purchase
+          <PhoneCall className="h-4 w-4" /> Contact Agent
         </button>
         <button
           type="button"
           onClick={onOpenDetails}
-          className="col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-ab-border bg-ab-card-2 px-3 text-sm font-medium text-ab-text transition hover:bg-ab-hover"
+          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-ab-border bg-ab-card-2 px-3 text-sm font-medium text-ab-text transition hover:bg-ab-hover"
         >
           <Info className="h-4 w-4 text-ab-accent" /> Full details, photos & amenities
         </button>
       </div>
-      {!isAvailable && <p className="text-center text-xs text-ab-muted">This property is {status.toLowerCase()} and can't be reserved.</p>}
+      <p className="text-center text-xs text-ab-faint">Agents near this property handle reservations and purchases.</p>
     </article>
   )
 }

@@ -90,7 +90,9 @@ export function AccountPage() {
 
         <section id="transactions" className="scroll-mt-24">
           <h2 className="text-xl font-bold">My transactions</h2>
-          <p className="text-sm text-ab-muted">Reservations and purchases, with the agent handling each one.</p>
+          <p className="text-sm text-ab-muted">
+            Reservations and purchases recorded by your agent from your documents, matched to your account's email or phone number.
+          </p>
           {error && <p role="alert" className="mt-4 text-ab-danger">Unable to load your transactions: {error}</p>}
           {!transactions && !error && (
             <div role="status" className="mt-4 space-y-3">
@@ -101,7 +103,8 @@ export function AccountPage() {
           )}
           {transactions?.length === 0 && (
             <p className="mt-4 rounded-2xl border border-dashed border-ab-border bg-ab-card p-8 text-center text-ab-muted">
-              No transactions yet. <Link to="/properties" className="font-semibold text-ab-accent hover:underline">Browse properties</Link>
+              No transactions yet. When your agent submits your reservation or purchase documents, they'll appear here.{" "}
+              <Link to="/properties" className="font-semibold text-ab-accent hover:underline">Browse properties</Link>
             </p>
           )}
           <div className="mt-4 space-y-3">

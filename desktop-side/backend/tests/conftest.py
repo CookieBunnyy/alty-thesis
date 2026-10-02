@@ -93,9 +93,10 @@ TEST_AGENTS = [
 def clean_database():
     with engine.begin() as connection:
         connection.execute(text("TRUNCATE " + ", ".join(BUSINESS_TABLES) + " RESTART IDENTITY CASCADE"))
-    from app.api.v1 import public
+    from app.api.v1 import client_portal, maps
 
-    public.rate_limiter._hits.clear()
+    maps.map_limiter._hits.clear()
+    client_portal.auth_limiter._hits.clear()
     yield
 
 

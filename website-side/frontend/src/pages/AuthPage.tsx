@@ -63,11 +63,9 @@ export function AuthPage({ mode }: { mode: "signin" | "signup" }) {
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-ab-accent">Client account</p>
           <h1 className="mt-1 text-2xl font-extrabold">{isSignUp ? "Create your account" : "Welcome back"}</h1>
           <p className="mt-1 text-sm text-ab-muted">
-            {next?.includes("action=")
-              ? "Sign in to continue your reservation — we'll take you right back to the property."
-              : isSignUp
-                ? "Reserve properties, follow your transactions and rate your agent."
-                : "Sign in to your Abellar Realty client account."}
+            {isSignUp
+              ? "Follow your transactions and rate your agent."
+              : "Sign in to your Abellar Realty client account."}
           </p>
 
           <form onSubmit={submit} className="mt-6 space-y-4">

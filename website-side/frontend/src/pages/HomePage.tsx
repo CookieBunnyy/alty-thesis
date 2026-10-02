@@ -77,7 +77,7 @@ const WHY = [
   { icon: FileCheck2, title: "Listings from real records", text: "Every property on this site comes from Abellar Realty's own documented listings — no placeholders." },
   { icon: Route, title: "Commute-aware search", text: "Set your workplace and compare real road distance and travel time by car, motorcycle, bicycle or on foot." },
   { icon: Users, title: "Agents near the property", text: "See which Abellar agents are closest to a property, with their client reviews, before you reserve." },
-  { icon: ShieldCheck, title: "Secure reservations", text: "Reserve or purchase from your own client account, then follow every transaction in one place." },
+  { icon: ShieldCheck, title: "Agent-handled transactions", text: "Call an agent near the property; they prepare your reservation or purchase documents, and you can follow the recorded transaction in your account." },
 ]
 
 export function HomePage() {
@@ -150,7 +150,7 @@ export function HomePage() {
           </h1>
           <p className="hero-in mt-5 max-w-2xl text-base text-white/80 md:text-lg" style={{ animationDelay: "280ms" }}>
             Browse Abellar Realty's available properties, see how far each one is from your workplace by road, and
-            reserve with an Abellar agent near the property.
+            contact an Abellar agent near the property.
           </p>
 
           <form
@@ -460,7 +460,7 @@ export function HomePage() {
                 <div>
                   <h2 className="text-3xl font-extrabold tracking-tight md:text-4xl">Ready to find your next home?</h2>
                   <p className="mt-2 max-w-xl text-white/75">
-                    Create a free client account to reserve properties, follow your transactions and rate your agent.
+                    Create a free client account to follow your transactions and rate your agent.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">

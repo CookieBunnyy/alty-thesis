@@ -22,13 +22,11 @@ import { ChatMessageList } from "./components/ChatMessageList"
 import { ChatInput } from "./components/ChatInput"
 import { WorkplaceDialog } from "./components/WorkplaceDialog"
 import { SelectedPropertyPanel } from "./components/SelectedPropertyPanel"
-import { ClientTransactionModal } from "./components/ClientTransactionModal"
+import { ContactAgentsModal } from "./components/ContactAgentsModal"
 import type { ChatMessage, Property, LocationPoint, PlaceResult, RouteSelection, TrafficStatus, TravelMode } from "./types"
 import { API_URL, CHAT_API_URL, publicUrl } from "./config"
 import { useTheme } from "./hooks/useTheme"
-import { useAuth } from "./lib/auth"
 import { navigate, useLocation } from "./lib/router"
-import { SignInPrompt } from "./components/SignInPrompt"
 import { RowSkeleton } from "./components/Skeleton"
 import { useCommute } from "./hooks/useCommute"
 import { formatKm, formatMinutes, getCapabilities, requestCurrentPosition, reversePlace, searchPlaces } from "./lib/mapApi"
@@ -80,9 +78,7 @@ const loadSavedWorkplace = (): LocationPoint | null => {
 
 export default function App() {
   const { theme } = useTheme()
-  const { client } = useAuth()
   const { search } = useLocation()
-  const [signInNext, setSignInNext] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "1",
@@ -122,7 +118,8 @@ export default function App() {
   const [placeResults, setPlaceResults] = useState<PlaceResult[] | null>(null)
   const [isSearchingPlaces, setIsSearchingPlaces] = useState(false)
   const [notice, setNotice] = useState("")
-  const [transaction, setTransaction] = useState<{ property: Property; type: "RESERVED" | "SOLD" } | null>(null)
+  // Property whose nearby agents the client is looking at (Contact Agent).
+  const [contactProperty, setContactProperty] = useState<Property | null>(null)
   const [isSheetExpanded, setIsSheetExpanded] = useState(false)
 
   const chatEndRef = useRef<HTMLDivElement | null>(null)
@@ -422,20 +419,8 @@ export default function App() {
   const activeMode = commute.result?.modes[effectiveSelection.mode]
   const activeRoute = activeMode?.routes.find((route) => route.id === effectiveSelection.routeId) ?? activeMode?.routes[0]
 
-  // Reserve / Purchase need a signed-in client; otherwise ask them to sign
-  // in and come back to this property with the same action.
-  const requestTransaction = (property: Property, type: "RESERVED" | "SOLD") => {
-    if (client) {
-      setTransaction({ property, type })
-      return
-    }
-    setPreviewProperty(null)
-    setSignInNext(`/map?property=${encodeURIComponent(String(property.listing_id))}&action=${type}`)
-  }
-
-  // Deep link: /map?property=ID[&action=RESERVED|SOLD] (e.g. after sign-in).
+  // Deep link: /map?property=ID (e.g. "Map" on a property card).
   const linkedPropertyId = search.get("property")
-  const linkedAction = search.get("action")
   useEffect(() => {
     if (!linkedPropertyId || activeProperties.length === 0) return
     // Syncing from the URL (an external system): runs once per link.
@@ -443,9 +428,6 @@ export default function App() {
     const property = activeProperties.find((item) => String(item.listing_id) === linkedPropertyId)
     if (property) {
       selectOnMap(property)
-      if ((linkedAction === "RESERVED" || linkedAction === "SOLD") && client) {
-        setTransaction({ property, type: linkedAction })
-      }
     } else {
       setNotice("That property is no longer available.")
     }
@@ -453,7 +435,7 @@ export default function App() {
     navigate("/map", { replace: true })
     // selectOnMap is recreated each render; the link is consumed once
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linkedPropertyId, linkedAction, activeProperties, client])
+  }, [linkedPropertyId, activeProperties])
 
   // Leave room for the mobile bottom sheet when fitting routes.
   const mapBottomInset = isMobileView && selectedProperty && !isSheetExpanded ? 150 : 0
@@ -507,7 +489,7 @@ export default function App() {
       onSetWorkplaceClick={handleSetWorkplaceClick}
       onViewRoute={isMobileView ? () => setIsSheetExpanded(false) : undefined}
       onOpenDetails={() => setPreviewProperty(selectedProperty)}
-      onTransaction={(type) => requestTransaction(selectedProperty, type)}
+      onContactAgent={() => setContactProperty(selectedProperty)}
       onClose={clearSelection}
       compact={isMobileView}
       commute={commute}
@@ -663,27 +645,9 @@ export default function App() {
         onSetWorkplaceClick={handleSetWorkplaceClick}
         onClose={() => setPreviewProperty(null)}
         onViewOnMap={handleViewOnMap}
-        onRequestTransaction={(property, type) => requestTransaction(property, type)}
-        onTransactionSubmitted={() => {
-          // The property is no longer AVAILABLE: refresh map and listings.
-          setSelectedProperty(null)
-          loadAvailableProperties()
-        }}
       />
 
-      {signInNext && <SignInPrompt next={signInNext} onClose={() => setSignInNext(null)} />}
-
-      {transaction && (
-        <ClientTransactionModal
-          property={transaction.property}
-          initialType={transaction.type}
-          onClose={() => setTransaction(null)}
-          onSubmitted={() => {
-            setSelectedProperty(null)
-            loadAvailableProperties()
-          }}
-        />
-      )}
+      {contactProperty && <ContactAgentsModal property={contactProperty} onClose={() => setContactProperty(null)} />}
 
       <div className="w-full shrink-0">
         <Header

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MapPin, Map as MapIcon, Home, FileSignature } from 'lucide-react';
+import { MapPin, Map as MapIcon, Home, PhoneCall } from 'lucide-react';
 import type { PropertyDetailModalProps, NearbyEstablishmentsMap, LocationPoint } from '../types';
 
 import { PropertyImageGallery } from '@/components/property-detail-modal/PropertyImageGaller';
@@ -8,16 +8,12 @@ import { PropertyFeatures } from '@/components/property-detail-modal/PropertyFea
 import { PropertyAmenities } from '@/components/property-detail-modal/PropertyAmenities';
 import { PropertyNearby } from '@/components/property-detail-modal/PropertyNearby';
 import { CommuteCard } from '@/components/CommuteCard';
-import { ClientTransactionModal } from '@/components/ClientTransactionModal';
+import { ContactAgentsModal } from '@/components/ContactAgentsModal';
 import { publicUrl } from '@/config';
 
 interface ModalProps extends PropertyDetailModalProps {
   workplaceLocation?: LocationPoint | null;
   onViewOnMap?: (property: PropertyDetailModalProps['property']) => void;
-  onTransactionSubmitted?: () => void;
-  // When given, Reserve / Purchase is handed to the page (sign-in check,
-  // agents near the property) instead of opening the form here.
-  onRequestTransaction?: (property: NonNullable<PropertyDetailModalProps['property']>, type: 'RESERVED' | 'SOLD') => void;
 }
 
 export const PropertyDetailModal: React.FC<ModalProps> = ({
@@ -26,12 +22,9 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
   onClose,
   onViewOnMap,
   onSetWorkplaceClick,
-  onTransactionSubmitted,
-  onRequestTransaction,
 }) => {
-  const [isTransactionOpen, setIsTransactionOpen] = useState(false);
+  const [isContactOpen, setIsContactOpen] = useState(false);
   if (!property) return null;
-  const isAvailable = (property.status ?? 'AVAILABLE') === 'AVAILABLE';
 
   const handleViewOnMap = () => {
     if (onViewOnMap) {
@@ -120,32 +113,16 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
           </button>
 
           <button
-            onClick={() => {
-              if (onRequestTransaction) {
-                onRequestTransaction(property, 'RESERVED');
-                onClose();
-              } else {
-                setIsTransactionOpen(true);
-              }
-            }}
-            disabled={!isAvailable}
-            title={isAvailable ? 'Reserve or purchase this property' : `This property is ${property.status}`}
-            className="flex items-center gap-1.5 px-5 py-2 bg-ab-accent text-ab-ink rounded-xl text-sm font-medium hover:bg-ab-accent-hover transition shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => setIsContactOpen(true)}
+            title="Call or text an agent near this property"
+            className="flex items-center gap-1.5 px-5 py-2 bg-ab-accent text-ab-ink rounded-xl text-sm font-medium hover:bg-ab-accent-hover transition shadow-sm"
           >
-            <FileSignature className="h-4 w-4" />
-            <span>{isAvailable ? 'Reserve / Purchase' : property.status}</span>
+            <PhoneCall className="h-4 w-4" />
+            <span>Contact Agent</span>
           </button>
         </div>
       </div>
-      {isTransactionOpen && (
-        <ClientTransactionModal
-          property={property}
-          onClose={() => {
-            setIsTransactionOpen(false);
-          }}
-          onSubmitted={() => onTransactionSubmitted?.()}
-        />
-      )}
+      {isContactOpen && <ContactAgentsModal property={property} onClose={() => setIsContactOpen(false)} />}
     </div>
   );
 };
