@@ -40,6 +40,10 @@ class Settings(BaseSettings):
 
     # Comma-separated origins allowed to call the API from a browser.
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # Optional pattern for origins that change per deploy, e.g. every Vercel
+    # deployment/preview URL of one project:
+    # ^https://alty-thesis(-[a-z0-9]+)*-cookiebunnyys-projects\.vercel\.app$
+    CORS_ORIGIN_REGEX: str = ""
     # Public website transaction submissions per client IP per hour.
     PUBLIC_SUBMISSIONS_PER_HOUR: int = 20
 

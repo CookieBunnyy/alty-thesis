@@ -37,6 +37,8 @@ services:
         sync: false
       - key: CORS_ORIGINS          # e.g. https://your-site.vercel.app
         sync: false
+      - key: CORS_ORIGIN_REGEX     # optional: every Vercel deploy/preview URL of the project
+        sync: false
       - key: SECRET_KEY            # signs login tokens; Render generates it
         generateValue: true
 
