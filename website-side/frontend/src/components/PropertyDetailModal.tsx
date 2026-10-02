@@ -10,6 +10,7 @@ import { PropertyNearby } from '@/components/property-detail-modal/PropertyNearb
 import { CommuteCard } from '@/components/CommuteCard';
 import { ContactAgentsModal } from '@/components/ContactAgentsModal';
 import { publicUrl } from '@/config';
+import { categoryLabel } from '@/lib/categories';
 
 interface ModalProps extends PropertyDetailModalProps {
   workplaceLocation?: LocationPoint | null;
@@ -55,7 +56,7 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
             <div className="flex flex-wrap items-center gap-2">
               {property.category && (
                 <span className="inline-block px-2.5 py-1 bg-ab-accent-soft text-ab-accent text-xs font-semibold rounded-full uppercase tracking-wider">
-                  {property.category}
+                  {categoryLabel(property.category)}
                 </span>
               )}
               {property.layout_type && (

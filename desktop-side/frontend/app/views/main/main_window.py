@@ -35,6 +35,8 @@ from app.views.main.pages.transactions import TransactionsPage
 from app.views.main.pages.users import UsersPage
 from app.views.main.pages.workforce import WorkforcePage
 from app.busy import busy_tracker
+from app.i18n import tr
+from app.views.notifications import NotificationPanel
 from app.views.loading import BusyBar, BusyIndicators, LoadingOverlay
 from app.views.theme_toggle import ThemeToggleButton
 from app.views.window_frame import is_drag_area, start_move, toggle_maximized
@@ -262,7 +264,7 @@ class MainWindow(QWidget):
                 Qt.ToolButtonStyle.ToolButtonTextOnly
             )
 
-            group_button.setText(group_name)
+            group_button.setText(tr(group_name))
 
             arrow_label = QLabel("", group_button)
             arrow_label.setObjectName("sectionArrow")
@@ -278,6 +280,7 @@ class MainWindow(QWidget):
             group_layout.setSpacing(2)
 
             for label, key in items:
+                label = tr(label)
                 btn = QPushButton(label.replace("&", "&&"))  # "&" is Qt's mnemonic marker
                 btn.setObjectName("navButton")
                 btn.setIcon(qta.icon(NAV_ICONS.get(key, "fa5s.circle"), color=TOKENS["text_muted"]))
@@ -332,7 +335,7 @@ class MainWindow(QWidget):
         self.search_input = QLineEdit()
         self.search_input.setObjectName("searchField")
         self.search_input.setPlaceholderText(
-            "Search properties, clients, transactions, agents, documents… (press Enter)"
+            tr("Search properties, clients, transactions, agents, documents… (press Enter)")
         )
         self.search_input.setClearButtonEnabled(True)
         self.search_input.returnPressed.connect(self.run_global_search)
@@ -347,7 +350,7 @@ class MainWindow(QWidget):
         search_button.setIconSize(QSize(16, 16))
         search_button.setCursor(Qt.CursorShape.PointingHandCursor)
         search_button.setFixedSize(40, 40)
-        search_button.setToolTip("Search all records")
+        search_button.setToolTip(tr("Search all records"))
         search_button.clicked.connect(self.run_global_search)
 
         self.sidebar_toggle = QToolButton()
@@ -355,7 +358,7 @@ class MainWindow(QWidget):
         self.sidebar_toggle.setIcon(qta.icon("fa5s.bars", color=TOKENS["text"]))
         self.sidebar_toggle.setIconSize(QSize(16, 16))
         self.sidebar_toggle.setFixedSize(40, 40)
-        self.sidebar_toggle.setToolTip("Collapse / expand the sidebar")
+        self.sidebar_toggle.setToolTip(tr("Collapse / expand the sidebar"))
         self.sidebar_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.sidebar_toggle.clicked.connect(self.toggle_sidebar)
         self.sidebar_collapsed = False
@@ -374,9 +377,13 @@ class MainWindow(QWidget):
         self.alert_chip.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.alert_chip.setIcon(qta.icon("fa5s.bell", color=TOKENS["text_muted"]))
         self.alert_chip.setText("0")
-        self.alert_chip.setToolTip("Documents that failed processing")
+        self.alert_chip.setToolTip(tr("Notifications"))
+        self.alert_chip.setAccessibleName(tr("Notifications"))
         self.alert_chip.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.alert_chip.clicked.connect(self.open_failed_documents)
+        self.alert_chip.clicked.connect(self.toggle_notifications)
+        self.notification_panel = NotificationPanel(
+            self.search_api, lambda: self.controller.session.state.token, self.open_notification, self)
+        self.notification_panel.changed.connect(self._show_notification_count)
 
         self.user_chip = QWidget()
         self.user_chip.setObjectName("userChip")
@@ -464,7 +471,7 @@ class MainWindow(QWidget):
 
         logout_action = QAction(
             qta.icon("fa5s.sign-out-alt", color=TOKENS["text_muted"]),
-            "Logout",
+            tr("Logout"),
             self,
         )
         logout_action.triggered.connect(self.controller.logout)
@@ -472,7 +479,7 @@ class MainWindow(QWidget):
 
         settings_action = QAction(
             qta.icon("fa5s.cog", color=TOKENS["text_muted"]),
-            "Settings",
+            tr("Settings"),
             self,
         )
         settings_action.triggered.connect(
@@ -482,7 +489,7 @@ class MainWindow(QWidget):
 
         about_action = QAction(
             qta.icon("fa5s.info-circle", color=TOKENS["text_muted"]),
-            "About",
+            tr("About"),
             self,
         )
         about_action.triggered.connect(self.show_about)
@@ -599,7 +606,7 @@ class MainWindow(QWidget):
             arrow_label.setGeometry(5, 4, 18, max(24, button.height() - 8))
             arrow_label.raise_()
 
-        button.setText(group_name)
+        button.setText(tr(group_name))
 
         if update_button and button.isChecked() != expanded:
             button.blockSignals(True)
@@ -723,14 +730,34 @@ class MainWindow(QWidget):
                                         color=TOKENS["success"] if ok else
                                         TOKENS["danger"] if alert else TOKENS["text_muted"]))
         self._set_chip_state(self.sync_chip, ok=ok, alert=alert)
-        try:
-            failed = int(self.search_api.get_document_summary(token=token).get("failed", 0))
-        except Exception:
-            failed = 0
-        self.alert_chip.setText(str(failed))
-        self.alert_chip.setToolTip(f"{failed} document(s) failed processing — click to review")
-        self.alert_chip.setIcon(qta.icon("fa5s.bell", color=TOKENS["danger"] if failed else TOKENS["text_muted"]))
-        self._set_chip_state(self.alert_chip, ok=False, alert=bool(failed))
+        if not self.notification_panel.isVisible():
+            self.notification_panel.load()  # updates the bell through ``changed``
+
+    def _show_notification_count(self, data: dict) -> None:
+        unread = [item for item in data.get("items", []) if not item.get("read")]
+        urgent = any(item.get("severity") == "danger" for item in unread)
+        self.alert_chip.setText(str(len(unread)))
+        self.alert_chip.setToolTip(f"{tr('Notifications')}: {len(unread)} {tr('Unread').lower()}")
+        self.alert_chip.setIcon(qta.icon("fa5s.bell", color=TOKENS["danger"] if urgent else
+                                         TOKENS["accent"] if unread else TOKENS["text_muted"]))
+        self._set_chip_state(self.alert_chip, ok=False, alert=urgent)
+
+    def toggle_notifications(self) -> None:
+        if self.notification_panel.isVisible():
+            self.notification_panel.hide()
+        else:
+            self.notification_panel.show_under(self.alert_chip)
+
+    def open_notification(self, item: dict) -> None:
+        """Go to the page a notification is about (if this role can open it)."""
+        page = item.get("page")
+        permissions = self.controller.session.state.permissions
+        if not page or (permissions and page not in permissions and page != "settings"):
+            return
+        if str(item.get("key", "")).startswith("document-failed:"):
+            self.open_failed_documents()
+        else:
+            self.show_page(page)
 
     @staticmethod
     def _set_chip_state(chip, ok: bool, alert: bool) -> None:
@@ -764,7 +791,7 @@ class MainWindow(QWidget):
         query = self.search_input.text().strip()
         if len(query) < 2:
             self.search_input.setFocus()
-            self.search_input.setPlaceholderText("Type at least 2 characters, then press Enter")
+            self.search_input.setPlaceholderText(tr("Type at least 2 characters, then press Enter"))
             return
         token = self.controller.session.state.token
         permissions = set(self.controller.session.state.permissions)
@@ -932,4 +959,4 @@ class MainWindow(QWidget):
             "settings": "Settings",
         }
 
-        return mapping.get(key, "Dashboard")
+        return tr(mapping.get(key, "Dashboard"))

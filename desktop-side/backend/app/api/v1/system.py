@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import DEFAULT_SECRET_KEY, settings
 from app.core.database import get_db
-from app.core.security import get_current_user, require_management
+from app.core.security import get_current_user, require_admin
 from app.models.user import User
 from app.services import ocr_service
 from app.services.audit import record_audit
@@ -27,7 +27,7 @@ def _opencv_status() -> dict:
 
 
 @router.get("/settings")
-def get_system_settings(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_system_settings(db: Session = Depends(get_db), _user: User = Depends(require_admin)):
     """Configuration visible to signed-in users. Secrets are never returned."""
     url = make_url(settings.DATABASE_URL)
     try:
@@ -68,7 +68,7 @@ def get_sync_status(db: Session = Depends(get_db), _user: User = Depends(get_cur
 
 
 @router.post("/sync/push")
-def push_sync(db: Session = Depends(get_db), user: User = Depends(require_management)):
+def push_sync(db: Session = Depends(get_db), user: User = Depends(require_admin)):
     report = push_pending(db)
     failed = any(table["failed"] for table in report.get("tables", {}).values())
     record_audit(db, "CLOUD_PUSH", actor=user, entity_type="sync",

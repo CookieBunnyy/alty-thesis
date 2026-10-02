@@ -23,6 +23,7 @@ from app.api.client import ApiClient
 from app.theme import TOKENS as T
 from app.theme import current_mode as theme_mode
 from app.views.login.signup_window import SignUpWindow
+from app.i18n import tr
 from app.views.loading import Spinner
 from app.views.theme_toggle import ThemeToggleButton
 from app.views.window_frame import is_drag_area, start_move
@@ -435,12 +436,12 @@ class LoginWindow(QWidget):
         left_layout.addLayout(logo_row)
         left_layout.addSpacing(6)
 
-        welcome = QLabel("Welcome back")
+        welcome = QLabel(tr("Welcome back"))
         welcome.setStyleSheet(
             f"/*alty-raw*/ color: {T['text']}; font-size: 24px; font-weight: 800; background: transparent;"
         )
         left_layout.addWidget(welcome)
-        welcome_note = QLabel("Sign in to the Abellar Realty Management System.")
+        welcome_note = QLabel(tr("Sign in to the Abellar Realty Management System."))
         welcome_note.setWordWrap(True)
         welcome_note.setStyleSheet(
             f"/*alty-raw*/ color: {T['text_muted']}; font-size: 12px; background: transparent;"
@@ -448,18 +449,18 @@ class LoginWindow(QWidget):
         left_layout.addWidget(welcome_note)
         left_layout.addSpacing(4)
 
-        self.username_input = FloatingLabelInput("USERNAME")
+        self.username_input = FloatingLabelInput(tr("USERNAME"))
         self.username_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.username_input.line_edit.setFocus()
         left_layout.addWidget(self.username_input)
 
-        self.password_input = FloatingLabelInput("PASSWORD", password=True)
+        self.password_input = FloatingLabelInput(tr("PASSWORD"), password=True)
         self.password_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         left_layout.addWidget(self.password_input)
 
         remember_row = QHBoxLayout()
         remember_row.setContentsMargins(0, 0, 0, 0)
-        self.remember_check = QCheckBox("Stay signed in")
+        self.remember_check = QCheckBox(tr("Stay signed in"))
         self.remember_check.setChecked(True)
         self.remember_check.setStyleSheet(
             f"""/*alty-raw*/
@@ -474,7 +475,7 @@ class LoginWindow(QWidget):
         remember_row.addStretch()
         left_layout.addLayout(remember_row)
 
-        self.login_button = ResponsiveLoginButton("Sign In")
+        self.login_button = ResponsiveLoginButton(tr("Sign In"))
         self.login_button.setFixedHeight(48)
         self.login_button.clicked.connect(self.handle_login)
         left_layout.addWidget(self.login_button)
@@ -502,7 +503,7 @@ class LoginWindow(QWidget):
         )
         left_layout.addWidget(self.error_label)
 
-        self.signup_link = QPushButton("CAN'T SIGN IN?  v13.0.8")
+        self.signup_link = QPushButton(tr("CAN'T SIGN IN?  v13.0.8"))
         self.signup_link.setObjectName("signupLink")
         self.signup_link.setCursor(Qt.CursorShape.PointingHandCursor)
         self.signup_link.setStyleSheet(
@@ -540,7 +541,7 @@ class LoginWindow(QWidget):
 
         self.minimize_button = QPushButton()
         self.minimize_button.setFixedSize(30, 26)
-        self.minimize_button.setToolTip("Minimize")
+        self.minimize_button.setToolTip(tr("Minimize"))
         self.minimize_button.setIcon(qta.icon("fa5.window-minimize", color=T["text_muted"]))
         self.minimize_button.setIconSize(QSize(14, 14))
         self.minimize_button.setStyleSheet(control_style)
@@ -548,7 +549,7 @@ class LoginWindow(QWidget):
 
         self.maximize_button = QPushButton()
         self.maximize_button.setFixedSize(30, 26)
-        self.maximize_button.setToolTip("Maximize")
+        self.maximize_button.setToolTip(tr("Maximize"))
         self.maximize_button.setIcon(qta.icon("fa5.window-maximize", color=T["text_muted"]))
         self.maximize_button.setIconSize(QSize(14, 14))
         self.maximize_button.setStyleSheet(control_style)
@@ -556,7 +557,7 @@ class LoginWindow(QWidget):
 
         self.close_button = QPushButton()
         self.close_button.setFixedSize(30, 26)
-        self.close_button.setToolTip("Close")
+        self.close_button.setToolTip(tr("Close"))
         self.close_button.setIcon(qta.icon("fa5.window-close", color=T["text_muted"]))
         self.close_button.setIconSize(QSize(15, 15))
         self.close_button.setStyleSheet(close_style)
@@ -642,14 +643,14 @@ class LoginWindow(QWidget):
     def _tick_loading(self) -> None:
         self.loading_step += 1
         dots = "." * (self.loading_step % 4)
-        self.loading_label.setText(f"Signing in{dots or ' '}")
+        self.loading_label.setText(f"{tr('Signing in')}{dots or ' '}")
 
     def _start_loading(self) -> None:
         self.loading_step = 0
         self.loading_timer.start(350)
         self.login_button.setEnabled(False)
-        self.login_button.setText("Signing in")
-        self.loading_label.setText("Signing in")
+        self.login_button.setText(tr("Signing in"))
+        self.loading_label.setText(tr("Signing in"))
         self.loading_spinner.show()
 
     def _stop_loading(self) -> None:
@@ -657,14 +658,14 @@ class LoginWindow(QWidget):
         self.loading_spinner.hide()
         self.loading_label.setText("")
         self.login_button.setEnabled(True)
-        self.login_button.setText("Sign In")
+        self.login_button.setText(tr("Sign In"))
 
     def handle_login(self) -> None:
         username = self.username_input.text().strip()
         password = self.password_input.text().strip()
 
         if not username or not password:
-            self.error_label.setText("Please enter both username and password.")
+            self.error_label.setText(tr("Please enter both username and password."))
             return
 
         self.error_label.setText("")

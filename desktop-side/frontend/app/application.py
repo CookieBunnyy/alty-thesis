@@ -66,12 +66,21 @@ class AppController:
     def apply_theme(self, mode: str) -> None:
         """Switch dark/light now: rebuild the windows in the new theme while
         keeping the signed-in session and the current page."""
-        from PyQt6.QtCore import QTimer
-
         from app import theme
 
+        self._rebuild_windows(lambda: theme.set_mode(mode))
+
+    def apply_language(self, code: str) -> None:
+        """Switch the interface language now (same rebuild as the theme)."""
+        from app import i18n
+
+        self._rebuild_windows(lambda: i18n.set_language(code))
+
+    def _rebuild_windows(self, change) -> None:
+        from PyQt6.QtCore import QTimer
+
         def rebuild() -> None:
-            theme.set_mode(mode)
+            change()
             signed_in = self.session.is_authenticated and self.stack.currentWidget() is self.main_window
             current_page = getattr(self.main_window, "current_page", "dashboard")
             old_login = self.login_window

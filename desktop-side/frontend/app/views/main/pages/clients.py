@@ -10,14 +10,15 @@ from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
-    QDialogButtonBox,
-    QFormLayout,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -64,132 +65,264 @@ class ClientSummaryCard(QWidget):
 
 
 class ClientProfileDialog(QDialog):
+    """Client profile: header with identity and contact, cards for the
+    property, agent, latest transaction and personal details, then the full
+    transaction history and related documents (real API data only)."""
+
+    STATUS_TEXT = {
+        "SOLD": "Purchased", "RESERVED": "Reserved", "CANCELLED": "Cancelled", "PROSPECT": "Prospective buyer",
+    }
+
     def __init__(self, client: dict[str, Any], parent=None,
                  profile: dict[str, Any] | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Client Profile")
-        self.setMinimumWidth(620)
+        from app.theme import TOKENS as T
+
+        self.T = T
+        self.client = client
+        self.profile = profile
+        self.setWindowTitle(f"Client Profile — {client.get('full_name') or 'Client'}")
+        self.setMinimumSize(820, 640)
         self.setStyleSheet(
-            "QDialog { background: #f7f9f3; color: #17310a; }"
-            "QLabel { background: transparent; }"
+            f"""/*alty-raw*/
+            QDialog {{ background: {T['bg']}; }}
+            QLabel {{ color: {T['text']}; background: transparent; }}
+            QLabel#muted {{ color: {T['text_muted']}; }}
+            QLabel#faint {{ color: {T['text_faint']}; font-size: 11px; }}
+            QLabel#section {{ color: {T['text']}; font-size: 15px; font-weight: 800; }}
+            QLabel#cardTitle {{ color: {T['text_faint']}; font-size: 10px; font-weight: 800; letter-spacing: 1.2px; }}
+            QLabel#fieldLabel {{ color: {T['text_faint']}; font-size: 11px; }}
+            QLabel#fieldValue {{ color: {T['text']}; font-size: 13px; font-weight: 600; }}
+            QLabel#emptyValue {{ color: {T['text_faint']}; font-size: 13px; font-style: italic; }}
+            QFrame#hero {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 16px; }}
+            QFrame#card {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 14px; }}
+            QFrame#chip {{ background: {T['card_2']}; border: 1px solid {T['border']}; border-radius: 10px; }}
+            QLabel#avatar {{ background: {T['accent']}; color: {T['accent_ink']}; border-radius: 34px;
+                font-size: 24px; font-weight: 900; }}
+            QScrollArea {{ background: transparent; border: none; }}
+            """
         )
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        body = QWidget()
+        self.body = QVBoxLayout(body)
+        self.body.setContentsMargins(22, 20, 22, 16)
+        self.body.setSpacing(16)
+        scroll.setWidget(body)
+        outer.addWidget(scroll, 1)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 20, 22, 18)
-        layout.setSpacing(14)
-
-        full_name = QLabel(str(client.get("full_name") or "Client"))
-        full_name.setStyleSheet(
-            "font-size: 21px; font-weight: 700; color: #17310a;"
-        )
-        layout.addWidget(full_name)
-
-        transaction_type = str(client.get("transaction_type") or "").upper()
-        client_status = str(client.get("status") or "").upper()
-        outcome = {
-            "SOLD": "Purchased / Sold property",
-            "CANCELLED": "Cancelled transaction",
-            "PROSPECT": "Prospective buyer (no transaction yet)",
-        }.get(client_status, "Reserved property")
-        outcome_label = QLabel(outcome)
-        outcome_label.setStyleSheet(
-            f"background: {STATUS_COLORS.get(client_status, '#e7eedc')}; "
-            "color: #17310a; border-radius: 6px; padding: 7px 10px; "
-            "font-size: 12px; font-weight: 700;"
-        )
-        layout.addWidget(outcome_label)
-
-        details = QFormLayout()
-        details.setHorizontalSpacing(10)
-        details.setVerticalSpacing(10)
-        fields = [
-            ("Client ID", client.get("external_client_id") or client.get("client_id")),
-            ("Location", client.get("location")),
-            ("Phone Number", client.get("phone_number")),
-            ("Email", client.get("email")),
-            ("Property ID", client.get("property_id")),
-            ("Property Name", client.get("property_title")),
-            ("Property Location", client.get("property_location")),
-            ("Property Price", self._format_currency(client.get("property_price"))),
-            ("Agent ID", client.get("agent_id")),
-            ("Agent Name", client.get("agent_name")),
-            ("Transaction ID", client.get("transaction_id")),
-            ("Transaction Type", transaction_type.title()),
-            ("Transaction Date", self._format_date(client.get("transaction_date"))),
-            ("Transaction Amount", self._format_currency(client.get("amount"))),
-            ("Current Status", client_status),
-            ("Occupation", client.get("occupation")),
-            ("Civil Status", client.get("civil_status")),
-            ("Preferred Contact", client.get("preferred_contact")),
-            ("Purpose of Purchase", client.get("purpose_of_purchase")),
-            ("Source", client.get("source")),
-        ]
-        for label, value in fields:
-            value_label = QLabel(str(value) if value not in (None, "") else "—")
-            value_label.setWordWrap(True)
-            value_label.setStyleSheet(
-                "color: #26351f; font-size: 13px; padding: 2px;"
-            )
-            details.addRow(f"{label}:", value_label)
-        layout.addLayout(details)
-
+        self._hero()
+        self._cards()
         if profile is not None:
-            layout.addWidget(self._section("Transaction History"))
-            history = QTableWidget(len(profile.get("transactions", [])), 6)
-            history.setHorizontalHeaderLabels(["Date", "Type", "Status", "Amount", "Property", "Agent"])
-            for row, item in enumerate(profile.get("transactions", [])):
-                values = [
-                    self._format_date(item.get("transaction_date")), item.get("transaction_type"),
-                    item.get("status"), self._format_currency(item.get("amount")),
-                    item.get("property_title"), item.get("agent_name"),
-                ]
-                for column, value in enumerate(values):
-                    history.setItem(row, column, QTableWidgetItem(str(value or "—")))
-            history.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-            history.horizontalHeader().setStretchLastSection(True)
-            history.setMaximumHeight(150)
-            layout.addWidget(history)
+            self._history()
+            self._documents()
+        self.body.addStretch()
 
-            layout.addWidget(self._section("Related Documents"))
-            documents = profile.get("documents", [])
-            docs = QTableWidget(len(documents), 4)
-            docs.setHorizontalHeaderLabels(["Document", "Type", "Status", "Uploaded"])
-            for row, item in enumerate(documents):
-                values = [item.get("document_name"), item.get("document_type"), item.get("status"),
-                          self._format_date(item.get("created_at"))]
-                for column, value in enumerate(values):
-                    docs.setItem(row, column, QTableWidgetItem(str(value or "—")))
-            docs.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-            docs.horizontalHeader().setStretchLastSection(True)
-            docs.setMaximumHeight(130)
-            layout.addWidget(docs)
+        footer = QHBoxLayout()
+        footer.setContentsMargins(22, 8, 22, 16)
+        footer.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(self.reject)
+        footer.addWidget(close)
+        outer.addLayout(footer)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+    # -- building blocks --------------------------------------------------
+
+    def _label(self, text: str, name: str | None = None, wrap: bool = False) -> QLabel:
+        label = QLabel(text)
+        if name:
+            label.setObjectName(name)
+        label.setWordWrap(wrap)
+        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        return label
+
+    def _value(self, value: Any) -> QLabel:
+        if value in (None, ""):
+            return self._label("Not provided", "emptyValue")
+        return self._label(str(value), "fieldValue", wrap=True)
+
+    def _card(self, title: str, icon: str) -> tuple[QFrame, QVBoxLayout]:
+        card = QFrame()
+        card.setObjectName("card")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
+        head = QHBoxLayout()
+        head.setSpacing(8)
+        glyph = QLabel()
+        glyph.setPixmap(qta.icon(icon, color=self.T["accent"]).pixmap(16, 16))
+        head.addWidget(glyph)
+        head.addWidget(self._label(title.upper(), "cardTitle"))
+        head.addStretch()
+        layout.addLayout(head)
+        return card, layout
+
+    def _fields(self, layout: QVBoxLayout, rows: list[tuple[str, Any]]) -> None:
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(8)
+        for index, (label, value) in enumerate(rows):
+            grid.addWidget(self._label(label, "fieldLabel"), index, 0, Qt.AlignmentFlag.AlignTop)
+            grid.addWidget(self._value(value), index, 1)
+        grid.setColumnStretch(1, 1)
+        layout.addLayout(grid)
+
+    def _chip(self, icon: str, text: Any) -> QFrame:
+        chip = QFrame()
+        chip.setObjectName("chip")
+        row = QHBoxLayout(chip)
+        row.setContentsMargins(10, 6, 12, 6)
+        row.setSpacing(6)
+        glyph = QLabel()
+        glyph.setPixmap(qta.icon(icon, color=self.T["text_muted"]).pixmap(13, 13))
+        row.addWidget(glyph)
+        row.addWidget(self._value(text) if text not in (None, "") else self._label("Not provided", "emptyValue"))
+        return chip
+
+    # -- sections ------------------------------------------------------------
+
+    def _hero(self) -> None:
+        client = self.client
+        hero = QFrame()
+        hero.setObjectName("hero")
+        layout = QHBoxLayout(hero)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(18)
+
+        name = str(client.get("full_name") or "Client")
+        avatar = QLabel("".join(part[0] for part in name.split()[:2]).upper() or "?")
+        avatar.setObjectName("avatar")
+        avatar.setFixedSize(68, 68)
+        avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(avatar, 0, Qt.AlignmentFlag.AlignTop)
+
+        info = QVBoxLayout()
+        info.setSpacing(6)
+        top = QHBoxLayout()
+        title = self._label(name)
+        title.setStyleSheet(f"/*alty-raw*/ color: {self.T['text']}; font-size: 24px; font-weight: 800;")
+        top.addWidget(title)
+        status = str(client.get("status") or "").upper()
+        text_color, background = badge_colors(status)
+        badge = self._label(self.STATUS_TEXT.get(status, status.title() or "—"))
+        badge.setStyleSheet(
+            f"/*alty-raw*/ background: {background.name()}; color: {text_color.name()}; border-radius: 10px;"
+            " padding: 4px 12px; font-size: 11px; font-weight: 800;")
+        top.addWidget(badge, 0, Qt.AlignmentFlag.AlignVCenter)
+        top.addStretch()
+        info.addLayout(top)
+        reference = client.get("external_client_id") or client.get("client_id") or "—"
+        source = str(client.get("source") or "").title()
+        info.addWidget(self._label(f"Client ID {reference}" + (f"  ·  Source: {source}" if source else ""), "faint"))
+
+        chips = QHBoxLayout()
+        chips.setSpacing(8)
+        chips.addWidget(self._chip("fa5s.phone", client.get("phone_number")))
+        chips.addWidget(self._chip("fa5s.envelope", client.get("email")))
+        chips.addWidget(self._chip("fa5s.map-marker-alt", client.get("location")))
+        chips.addStretch()
+        info.addLayout(chips)
+        layout.addLayout(info, 1)
+        self.body.addWidget(hero)
+
+    def _cards(self) -> None:
+        client = self.client
+        grid = QGridLayout()
+        grid.setSpacing(14)
+
+        prop, layout = self._card("Property", "fa5s.home")
+        self._fields(layout, [
+            ("Name", client.get("property_title")),
+            ("Location", client.get("property_location")),
+            ("Price", self._format_currency(client.get("property_price"))),
+            ("Property ID", client.get("property_id")),
+        ])
+        grid.addWidget(prop, 0, 0)
+
+        agent, layout = self._card("Agent", "fa5s.user-tie")
+        self._fields(layout, [("Name", client.get("agent_name")), ("Agent ID", client.get("agent_id"))])
+        grid.addWidget(agent, 0, 1)
+
+        tx, layout = self._card("Latest transaction", "fa5s.file-signature")
+        self._fields(layout, [
+            ("Type", str(client.get("transaction_type") or "").title() or None),
+            ("Date", self._format_date(client.get("transaction_date"))),
+            ("Amount", self._format_currency(client.get("amount"))),
+            ("Transaction ID", client.get("transaction_id")),
+        ])
+        grid.addWidget(tx, 1, 0)
+
+        personal, layout = self._card("Personal details", "fa5s.id-card")
+        self._fields(layout, [
+            ("Occupation", client.get("occupation")),
+            ("Civil status", client.get("civil_status")),
+            ("Preferred contact", client.get("preferred_contact")),
+            ("Purpose of purchase", client.get("purpose_of_purchase")),
+        ])
+        grid.addWidget(personal, 1, 1)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        self.body.addLayout(grid)
+
+    def _table(self, headers: list[str], rows: list[list[Any]], empty: str) -> QWidget:
+        if not rows:
+            return self._label(empty, "emptyValue")
+        widget = QTableWidget(len(rows), len(headers))
+        widget.setHorizontalHeaderLabels(headers)
+        widget.verticalHeader().setVisible(False)
+        widget.setShowGrid(False)
+        widget.setAlternatingRowColors(True)
+        widget.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        widget.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        for r, row in enumerate(rows):
+            for c, value in enumerate(row):
+                widget.setItem(r, c, QTableWidgetItem("—" if value in (None, "") else str(value)))
+        header = widget.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setStretchLastSection(True)
+        widget.setProperty("altyFixedColumns", True)
+        widget.setWordWrap(False)
+        widget.resizeColumnsToContents()
+        for column in range(len(headers)):  # long titles are elided; drag a column edge to widen it
+            widget.setColumnWidth(column, min(widget.columnWidth(column) + 16, 200))
+        widget.setMinimumHeight(min(60 + 34 * len(rows), 260))
+        return widget
+
+    def _history(self) -> None:
+        transactions = self.profile.get("transactions", [])
+        self.body.addWidget(self._label(f"Transaction history  ({len(transactions)})", "section"))
+        rows = [[self._format_date(t.get("transaction_date")), str(t.get("transaction_type") or "").title(),
+                 t.get("status"), self._format_currency(t.get("amount")), t.get("property_title"),
+                 t.get("agent_name")] for t in transactions]
+        self.body.addWidget(self._table(["Date", "Type", "Status", "Amount", "Property", "Agent"], rows,
+                                        "No transactions recorded yet."))
+
+    def _documents(self) -> None:
+        documents = self.profile.get("documents", [])
+        self.body.addWidget(self._label(f"Related documents  ({len(documents)})", "section"))
+        rows = [[d.get("document_name"), d.get("document_type"), d.get("status"),
+                 self._format_date(d.get("created_at"))] for d in documents]
+        self.body.addWidget(self._table(["Document", "Type", "Status", "Uploaded"], rows,
+                                        "No related documents."))
 
     @staticmethod
-    def _format_date(value: Any) -> str:
+    def _format_date(value: Any) -> str | None:
         if not value:
-            return "—"
+            return None
         try:
-            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-            return parsed.strftime("%b %d, %Y")
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).strftime("%b %d, %Y")
         except ValueError:
             return str(value)
 
     @staticmethod
-    def _format_currency(value: Any) -> str:
+    def _format_currency(value: Any) -> str | None:
         try:
             return f"₱{float(value):,.2f}"
         except (TypeError, ValueError):
-            return "—"
-
-    @staticmethod
-    def _section(text: str) -> QLabel:
-        label = QLabel(text)
-        label.setStyleSheet("font-size: 14px; font-weight: 700; color: #17310a; padding-top: 6px;")
-        return label
+            return None
 
 
 class ClientsPage(QWidget):

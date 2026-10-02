@@ -36,10 +36,13 @@ _ALL_PAGES = [
 ]
 # Desktop navigation keys each role may open. The API enforces the same
 # boundaries independently; this list only drives what the UI shows.
+# Audit Logs are for the Administrator only. Every role keeps "settings",
+# but only the Administrator sees system settings there (the rest see
+# appearance and language).
 ROLE_PERMISSIONS: dict[str, list[str]] = {
     ADMINISTRATOR: _ALL_PAGES,
-    GENERAL_MANAGER: _ALL_PAGES,
-    PRESIDENT: [page for page in _ALL_PAGES if page != "users"],
+    GENERAL_MANAGER: [page for page in _ALL_PAGES if page != "audit"],
+    PRESIDENT: [page for page in _ALL_PAGES if page not in {"users", "audit"}],
     FILING_MANAGER: ["dashboard", "properties", "partners", "clients", "transactions",
                      "documents", "media", "agents", "settings"],
     AGENT: ["dashboard", "properties", "partners", "clients", "transactions",

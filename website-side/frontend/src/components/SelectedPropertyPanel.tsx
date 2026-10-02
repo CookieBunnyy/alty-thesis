@@ -1,6 +1,7 @@
 import { Bath, Bed, Building, Info, MapPin, PhoneCall, X } from "lucide-react"
 import { CommuteCard } from "./CommuteCard"
 import { publicUrl } from "@/config"
+import { categoryLabel } from "@/lib/categories"
 import type { LocationPoint, Property, RouteSelection } from "@/types"
 import type { CommuteState } from "@/hooks/useCommute"
 
@@ -71,7 +72,7 @@ export function SelectedPropertyPanel({
           </span>
           {property.category && (
             <span className="rounded-full bg-ab-accent-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ab-accent">
-              {property.category}
+              {categoryLabel(property.category)}
             </span>
           )}
         </div>

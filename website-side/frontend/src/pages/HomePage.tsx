@@ -18,7 +18,7 @@ import { API_URL } from "@/config"
 import { requestJson } from "@/lib/auth"
 import { Link } from "@/components/Link"
 import { navigate } from "@/lib/router"
-import { propertyImage, sizedImage } from "@/lib/media"
+import { sizedImage } from "@/lib/media"
 import { prefersReducedMotion, useCountUp, useReveal } from "@/hooks/useReveal"
 import { usePropertyViewer } from "@/hooks/usePropertyViewer"
 import { SiteHeader } from "@/components/SiteHeader"
@@ -27,6 +27,7 @@ import { PropertyCard } from "@/components/PropertyCard"
 import { ReviewCard } from "@/components/ReviewCard"
 import { RatingSummary } from "@/components/Stars"
 import { PropertyGridSkeleton, Skeleton } from "@/components/Skeleton"
+import { categoryCounts } from "@/lib/categories"
 import type { HomeData } from "@/types"
 
 function Reveal({ children, className = "", delay = 0, as: Tag = "div" }: {
@@ -265,6 +266,42 @@ export function HomePage() {
             )}
           </section>
 
+          {/* ---------------- REVIEWS ---------------- */}
+          <section className="mx-auto max-w-7xl px-4 pb-20">
+            <SectionHeading
+              eyebrow="Client reviews"
+              title="What our clients say"
+              text={
+                reviewStats && reviewStats.count > 0 && reviewStats.average != null
+                  ? `Average ${reviewStats.average.toFixed(1)} out of 5 from ${reviewStats.count} verified client review${reviewStats.count === 1 ? "" : "s"}.`
+                  : undefined
+              }
+              action={
+                data.reviews.length > 1 ? (
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => scrollReviews(-1)} aria-label="Previous reviews" className="flex h-10 w-10 items-center justify-center rounded-full border border-ab-border bg-ab-card hover:bg-ab-hover">
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <button type="button" onClick={() => scrollReviews(1)} aria-label="Next reviews" className="flex h-10 w-10 items-center justify-center rounded-full border border-ab-border bg-ab-card hover:bg-ab-hover">
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                  </div>
+                ) : undefined
+              }
+            />
+            {data.reviews.length === 0 ? (
+              <EmptyState text="No client reviews yet." />
+            ) : (
+              <div ref={reviewTrack} className="-mx-4 flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth px-4 pb-4" aria-label="Client reviews">
+                {data.reviews.map((review, index) => (
+                  <Reveal key={review.id} delay={Math.min(index, 3) * 90} className="w-[85%] shrink-0 snap-start sm:w-[380px]">
+                    <ReviewCard review={review} />
+                  </Reveal>
+                ))}
+              </div>
+            )}
+          </section>
+
           {/* ---------------- MAP CTA ---------------- */}
           <section className="bg-ab-sidebar py-20">
             <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 md:grid-cols-2">
@@ -340,24 +377,33 @@ export function HomePage() {
           </section>
 
           {/* ---------------- CATEGORIES ---------------- */}
-          {data.categories.length > 0 && (
-            <section className="mx-auto max-w-7xl px-4 pb-20">
-              <SectionHeading eyebrow="Browse by type" title="Property categories" />
-              <Reveal className="flex flex-wrap gap-3">
-                {data.categories.map((item) => (
+          <section className="mx-auto max-w-7xl px-4 pb-20">
+            <SectionHeading eyebrow="Browse by type" title="Property categories" text="Available listings in each category right now." />
+            <Reveal className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {categoryCounts(data.categories.map((item) => ({ category: item.category, count: item.count }))).map((item) =>
+                item.count ? (
                   <Link
-                    key={item.category}
-                    to={`/properties?category=${encodeURIComponent(item.category)}`}
-                    className="group flex items-center gap-3 rounded-2xl border border-ab-border bg-ab-card px-5 py-4 transition hover:-translate-y-0.5 hover:border-ab-accent"
+                    key={item.key}
+                    to={`/properties?category=${item.key}`}
+                    className="group flex items-center justify-between gap-3 rounded-2xl border border-ab-border bg-ab-card px-5 py-4 transition hover:-translate-y-0.5 hover:border-ab-accent"
                   >
-                    <span className="text-lg font-bold capitalize text-ab-text">{item.category}</span>
-                    <span className="rounded-full bg-ab-accent-soft px-2.5 py-0.5 text-sm font-bold text-ab-accent">{item.count}</span>
-                    <ArrowRight className="h-4 w-4 text-ab-faint transition group-hover:translate-x-1 group-hover:text-ab-accent" />
+                    <span>
+                      <span className="block font-bold text-ab-text">{item.label}</span>
+                      <span className="text-xs text-ab-muted">
+                        {item.count} available
+                      </span>
+                    </span>
+                    <ArrowRight className="h-4 w-4 shrink-0 text-ab-faint transition group-hover:translate-x-1 group-hover:text-ab-accent" />
                   </Link>
-                ))}
-              </Reveal>
-            </section>
-          )}
+                ) : (
+                  <div key={item.key} className="rounded-2xl border border-dashed border-ab-border px-5 py-4" aria-disabled="true">
+                    <span className="block font-bold text-ab-muted">{item.label}</span>
+                    <span className="text-xs text-ab-faint">No listings yet</span>
+                  </div>
+                ),
+              )}
+            </Reveal>
+          </section>
 
           {/* ---------------- AGENTS ---------------- */}
           <section className="bg-ab-sidebar py-20">
@@ -390,68 +436,6 @@ export function HomePage() {
               )}
             </div>
           </section>
-
-          {/* ---------------- REVIEWS ---------------- */}
-          <section className="mx-auto max-w-7xl px-4 py-20">
-            <SectionHeading
-              eyebrow="Client reviews"
-              title="What our clients say"
-              text={
-                reviewStats && reviewStats.count > 0 && reviewStats.average != null
-                  ? `Average ${reviewStats.average.toFixed(1)} out of 5 from ${reviewStats.count} verified client review${reviewStats.count === 1 ? "" : "s"}.`
-                  : undefined
-              }
-              action={
-                data.reviews.length > 1 ? (
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => scrollReviews(-1)} aria-label="Previous reviews" className="flex h-10 w-10 items-center justify-center rounded-full border border-ab-border bg-ab-card hover:bg-ab-hover">
-                      <ChevronLeft className="h-5 w-5" />
-                    </button>
-                    <button type="button" onClick={() => scrollReviews(1)} aria-label="Next reviews" className="flex h-10 w-10 items-center justify-center rounded-full border border-ab-border bg-ab-card hover:bg-ab-hover">
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
-                  </div>
-                ) : undefined
-              }
-            />
-            {data.reviews.length === 0 ? (
-              <EmptyState text="No client reviews yet." />
-            ) : (
-              <div ref={reviewTrack} className="-mx-4 flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth px-4 pb-4" aria-label="Client reviews">
-                {data.reviews.map((review, index) => (
-                  <Reveal key={review.id} delay={Math.min(index, 3) * 90} className="w-[85%] shrink-0 snap-start sm:w-[380px]">
-                    <ReviewCard review={review} />
-                  </Reveal>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* ---------------- MORE PROPERTIES SHOWCASE ---------------- */}
-          {data.featured_properties.some((property) => propertyImage(property)) && (
-            <section className="mx-auto max-w-7xl px-4 pb-20">
-              <Reveal className="grid auto-rows-[180px] grid-cols-2 gap-3 md:auto-rows-[220px] md:grid-cols-4">
-                {data.featured_properties
-                  .filter((property) => propertyImage(property))
-                  .slice(0, 5)
-                  .map((property, index) => (
-                    <button
-                      key={property.listing_id}
-                      type="button"
-                      onClick={() => viewer.open(property)}
-                      className={`group relative overflow-hidden rounded-2xl text-left ${index === 0 ? "col-span-2 row-span-2" : ""}`}
-                    >
-                      <img src={propertyImage(property, index === 0 ? 1000 : 500)!} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
-                      <span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
-                      <span className="absolute inset-x-0 bottom-0 p-4 text-white">
-                        <span className="block text-sm font-bold">{property.title}</span>
-                        <span className="block text-xs text-white/80">{property.village_name}</span>
-                      </span>
-                    </button>
-                  ))}
-              </Reveal>
-            </section>
-          )}
 
           {/* ---------------- CTA ---------------- */}
           <section className="px-4 pb-20">

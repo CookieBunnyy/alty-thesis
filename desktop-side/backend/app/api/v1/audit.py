@@ -7,7 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import require_management
+from app.core.security import require_admin
 from app.models.audit import AuditEvent
 from app.models.user import User
 
@@ -27,7 +27,7 @@ def get_audit_events(
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    _user: User = Depends(require_management),
+    _user: User = Depends(require_admin),
 ):
     filters = []
     if action:
@@ -64,5 +64,5 @@ def get_audit_events(
 
 
 @router.get("/actions")
-def get_audit_actions(db: Session = Depends(get_db), _user: User = Depends(require_management)):
+def get_audit_actions(db: Session = Depends(get_db), _user: User = Depends(require_admin)):
     return sorted(row[0] for row in db.execute(select(AuditEvent.action).distinct()))

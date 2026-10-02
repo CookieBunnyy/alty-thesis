@@ -9,6 +9,7 @@ import { SiteHeader } from "@/components/SiteHeader"
 import { SiteFooter } from "@/components/SiteFooter"
 import { PropertyCard } from "@/components/PropertyCard"
 import { PropertyGridSkeleton } from "@/components/Skeleton"
+import { categoryCounts, categoryOf } from "@/lib/categories"
 import type { Property } from "@/types"
 
 const SORTS = {
@@ -46,13 +47,13 @@ export function PropertiesPage() {
   }, [query, category])
 
   const categories = useMemo(
-    () => [...new Set((properties ?? []).map((p) => p.category).filter((c): c is string => Boolean(c)))].sort(),
+    () => categoryCounts(properties ?? []),
     [properties],
   )
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return (properties ?? [])
-      .filter((p) => !category || (p.category ?? "").toLowerCase() === category.toLowerCase())
+      .filter((p) => !category || categoryOf(p.category)?.key === category)
       .filter((p) => !needle || `${p.title} ${p.village_name ?? ""} ${p.category ?? ""}`.toLowerCase().includes(needle))
       .sort(SORTS[sort].fn)
   }, [properties, query, category, sort])
@@ -87,10 +88,12 @@ export function PropertiesPage() {
             />
           </label>
           <label className="sr-only" htmlFor="category">Category</label>
-          <select id="category" value={category} onChange={(event) => setCategory(event.target.value)} className="min-h-11 rounded-xl border border-ab-border bg-ab-input px-3 text-sm capitalize">
+          <select id="category" value={category} onChange={(event) => setCategory(event.target.value)} className="min-h-11 rounded-xl border border-ab-border bg-ab-input px-3 text-sm">
             <option value="">All categories</option>
             {categories.map((item) => (
-              <option key={item} value={item}>{item}</option>
+              <option key={item.key} value={item.key}>
+                {item.label} ({item.count})
+              </option>
             ))}
           </select>
           <label className="sr-only" htmlFor="sort">Sort</label>

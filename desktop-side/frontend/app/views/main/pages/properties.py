@@ -42,6 +42,36 @@ from app.api.client import ApiClient
 from app.theme import TOKENS
 from app.views.main.pages.property_cards import PropertyCardGrid
 
+# Standard property categories (same list as the website:
+# website-side/frontend/src/lib/categories.ts). Older free-text values are
+# mapped onto them when a listing is edited.
+PROPERTY_CATEGORIES = [
+    "Condominium", "House and Lot", "Townhouse", "Duplex",
+    "Apartment", "Lot Only", "Commercial", "Warehouse / Industrial",
+]
+_CATEGORY_ALIASES = {
+    "Condominium": ("condo", "condominium", "condo unit", "studio", "loft"),
+    "House and Lot": ("house", "house and lot", "house & lot", "single detached", "single-detached",
+                      "villa", "bungalow"),
+    "Townhouse": ("townhouse", "town house", "rowhouse", "row house"),
+    "Duplex": ("duplex", "semi-detached", "semi detached"),
+    "Apartment": ("apartment", "apartment unit", "flat"),
+    "Lot Only": ("lot", "lot only", "vacant lot", "residential lot", "land"),
+    "Commercial": ("commercial", "commercial space", "office", "office space", "retail", "shop"),
+    "Warehouse / Industrial": ("warehouse", "industrial", "storage", "warehouse / industrial"),
+}
+
+
+def standard_category(value: str | None) -> str:
+    """The standard category for a stored value, or the value itself."""
+    text = " ".join(str(value or "").split())
+    lowered = text.casefold()
+    for label, aliases in _CATEGORY_ALIASES.items():
+        if lowered == label.casefold() or lowered in aliases:
+            return label
+    return text
+
+
 PROPERTY_STATUSES = [
     ("Available", "AVAILABLE", "#e5efdc"),
     ("Reserved", "RESERVED", "#e4eff7"),
@@ -567,8 +597,12 @@ class PropertyEditDialog(QDialog):
         information = QGroupBox("Property Information")
         info_form = QFormLayout(information)
         self.title_input = QLineEdit()
-        self.category_input = QLineEdit()
-        self.category_input.setPlaceholderText("e.g. House and Lot")
+        # Standard categories; still editable for a special case.
+        self.category_input = QComboBox()
+        self.category_input.setEditable(True)
+        self.category_input.addItems(PROPERTY_CATEGORIES)
+        self.category_input.setCurrentIndex(-1)
+        self.category_input.lineEdit().setPlaceholderText("Choose a category")
         self.layout_input = QLineEdit()
         self.location_input = QLineEdit()
         info_form.addRow("Title *", self.title_input)
@@ -819,7 +853,7 @@ class PropertyEditDialog(QDialog):
         self.setWindowTitle("Edit Property")
         self.save_button.setText("Save Changes")
         self.title_input.setText(str(listing.get("title") or ""))
-        self.category_input.setText(str(listing.get("category") or ""))
+        self.category_input.setCurrentText(standard_category(listing.get("category")))
         self.layout_input.setText(str(listing.get("layout_type") or ""))
         self.location_input.setText(str(listing.get("village_name") or ""))
         self.total_price.setValue(float(listing.get("price_total") or 0))
@@ -971,7 +1005,7 @@ class PropertyEditDialog(QDialog):
 
     def payload(self) -> dict[str, Any]:
         title = self.title_input.text().strip()
-        category = self.category_input.text().strip()
+        category = standard_category(self.category_input.currentText())
         if not title:
             raise ValueError("Title is required.")
         if not category:
@@ -2096,44 +2130,12 @@ class PropertiesPage(QWidget):
         if listing is None:
             return
 
-        title = listing.get("title") or "Untitled Property"
-        category = listing.get("category") or "-"
-        location = listing.get("village_name") or "-"
-        price = self.format_currency(
-            listing.get("price_total")
-        )
-        initial_dp = self.format_currency(
-            listing.get("initial_dp")
-        )
-        monthly = self.format_currency(
-            listing.get("monthly_rate")
-        )
+        from app.views.main.pages.property_profile import PropertyProfileDialog
 
-        bedrooms = listing.get("num_bedrooms") or 0
-        bathrooms = listing.get("num_bathrooms") or 0
-
-        layout = listing.get("layout_type") or "-"
-        sync_status = listing.get("sync_status") or "-"
-        property_status = self._status_label(listing.get("status"))
-
-        details = listing.get("details") or "No description available."
-
-        message = (
-            f"<b>{title}</b><br><br>"
-            f"<b>Category:</b> {category.title()}<br>"
-            f"<b>Location:</b> {location}<br>"
-            f"<b>Layout:</b> {layout}<br>"
-            f"<b>Bedrooms:</b> {bedrooms}<br>"
-            f"<b>Bathrooms:</b> {bathrooms}<br><br>"
-            f"<b>Total Price:</b> {price}<br>"
-            f"<b>Initial DP:</b> {initial_dp}<br>"
-            f"<b>Monthly Rate:</b> {monthly}<br><br>"
-            f"<b>Property Status:</b> {property_status}<br>"
-            f"<b>Sync Status:</b> {sync_status}<br><br>"
-            f"<b>Details:</b><br>{details}"
-        )
-
-        self._show_message(
-            f"Property #{listing_id}",
-            message,
-        )
+        PropertyProfileDialog(
+            listing,
+            self,
+            category=standard_category(listing.get("category")) or None,
+            status_label=self._status_label(listing.get("status")),
+            on_edit=self.edit_selected_property,
+        ).exec()

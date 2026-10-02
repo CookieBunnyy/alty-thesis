@@ -16,6 +16,7 @@ from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.documents import router as documents_router
 from app.api.v1.maps import router as maps_router
 from app.api.v1.media import router as media_router
+from app.api.v1.notifications import router as notifications_router
 from app.api.v1.property_listings import router as property_listings_router
 from app.api.v1.public import router as public_router
 from app.api.v1.search import router as search_router
@@ -92,6 +93,7 @@ for router in (
     maps_router,
     client_portal_router,
     search_router,
+    notifications_router,
 ):
     app.include_router(router, prefix="/api/v1")
 

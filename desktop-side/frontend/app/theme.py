@@ -206,6 +206,7 @@ def translate_color(color: str) -> str:
 # ---------------------------------------------------------------------------
 
 def global_stylesheet() -> str:
+    _TABLE_RULES = _table_rules()  # noqa: N806 - interpolated below
     return f"""/*alty-raw*/
 * {{ font-family: "{FONT_FAMILY}", "Segoe UI Variable", "Segoe UI", Arial; }}
 QWidget {{ color: {T['text']}; }}
@@ -231,19 +232,17 @@ QPushButton:hover {{ background: {T['hover_2']}; border-color: {T['border_strong
 QPushButton:pressed {{ background: {T['border_strong']}; }}
 QPushButton:disabled {{ color: {T['text_faint']}; background: {T['card']}; }}
 QPushButton:focus {{ outline: none; border: 1px solid {T['accent']}; }}
-QTableView, QTableWidget, QTreeView, QTreeWidget, QListView, QListWidget {{
+QTreeView, QTreeWidget, QListView, QListWidget {{
     background: {T['card']}; alternate-background-color: {T['row_alt']}; color: {T['text']};
-    border: 1px solid {T['border']}; border-radius: 10px; gridline-color: {T['border']};
+    border: 1px solid {T['border']}; border-radius: 10px;
     selection-background-color: {T['accent_soft_2']}; selection-color: {T['text']}; outline: none;
 }}
-QTableView::item, QTreeView::item, QListView::item {{ padding: 6px; border-bottom: 1px solid {T['border']}; }}
-QTableView::item:hover, QTreeView::item:hover, QListView::item:hover {{ background: {T['hover']}; }}
-QTableView::item:selected, QTreeView::item:selected, QListView::item:selected {{
-    background: {T['accent_soft_2']}; color: {T['text']}; }}
+QTreeView::item, QListView::item {{ padding: 6px; border-bottom: 1px solid {T['border']}; }}
+QTreeView::item:hover, QListView::item:hover {{ background: {T['hover']}; }}
+QTreeView::item:selected, QListView::item:selected {{ background: {T['accent_soft_2']}; color: {T['text']}; }}
 QHeaderView::section {{ background: {T['card_2']}; color: {T['text_muted']}; border: none;
     border-bottom: 1px solid {T['border']}; padding: 9px 8px; font-weight: 600; }}
-QHeaderView::section:hover {{ color: {T['text']}; }}
-QTableCornerButton::section {{ background: {T['card_2']}; border: none; }}
+{_TABLE_RULES}
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
 QScrollBar:horizontal {{ background: transparent; height: 10px; margin: 2px; }}
 QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{
@@ -270,6 +269,29 @@ QSplitter::handle {{ background: {T['border']}; }}
 QProgressBar {{ background: {T['card_2']}; border: none; border-radius: 5px; height: 8px; text-align: center; }}
 QProgressBar::chunk {{ background: {T['accent']}; border-radius: 5px; }}
 """
+
+
+def _table_rules() -> str:
+    return f"""
+QTableView {{ background: {T['card']}; alternate-background-color: {T['card']}; color: {T['text']};
+    border: 1px solid {T['border']}; border-radius: 12px; gridline-color: transparent; outline: 0;
+    selection-background-color: {T['accent_soft']}; selection-color: {T['text']}; font-size: 13px; }}
+QTableView::item {{ padding: 0 12px; border: none; border-bottom: 1px solid {T['border']}; }}
+QTableView::item:hover {{ background: {T['hover']}; }}
+QTableView::item:selected {{ background: {T['accent_soft']}; color: {T['text']}; }}
+QTableView QHeaderView {{ background: transparent; border: none; }}
+QTableView QHeaderView::section {{ background: {T['card']}; color: {T['text_faint']}; border: none;
+    border-bottom: 1px solid {T['border']}; padding: 0 12px; min-height: 40px; }}
+QTableView QHeaderView::section:hover {{ color: {T['text']}; }}
+QTableView QHeaderView::section:first {{ border-top-left-radius: 12px; }}
+QTableView QHeaderView::section:last {{ border-top-right-radius: 12px; }}
+QTableCornerButton::section {{ background: {T['card']}; border: none; }}
+"""
+
+
+def table_stylesheet() -> str:
+    """Modern table look (applied to every table by ``ui_polish``)."""
+    return "/*alty-raw*/" + _table_rules()
 
 
 def message_box_stylesheet() -> str:
@@ -352,8 +374,19 @@ def set_mode(mode: str, persist: bool = True) -> None:
         QSettings("Alty", "Desktop").setValue(THEME_SETTING, mode)
 
 
+def load_fonts() -> None:
+    """Register the bundled Inter weights (app/assets/fonts, SIL OFL)."""
+    from pathlib import Path
+
+    from PyQt6.QtGui import QFontDatabase
+
+    for path in sorted((Path(__file__).parent / "assets" / "fonts").glob("Inter-*.ttf")):
+        QFontDatabase.addApplicationFont(str(path))
+
+
 def install(app: QApplication, mode: str | None = None) -> None:
     app.setStyle("Fusion")
+    load_fonts()
     font = QFont()
     font.setFamilies(FONT_FALLBACKS)
     font.setPointSizeF(9.5)

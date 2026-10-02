@@ -1,5 +1,6 @@
 import { Bath, BedDouble, Building, MapPin } from "lucide-react"
 import { peso, propertyImage } from "@/lib/media"
+import { categoryLabel } from "@/lib/categories"
 import type { Property } from "@/types"
 
 const STATUS_STYLES: Record<string, string> = {
@@ -48,7 +49,7 @@ export function PropertyCard({ property, onOpen, onMap, style, className = "", e
         </span>
         {property.category && (
           <span className="absolute right-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white backdrop-blur">
-            {property.category}
+            {categoryLabel(property.category)}
           </span>
         )}
       </button>

@@ -2,6 +2,7 @@ import { useEffect } from "react"
 import { FileText, Phone, X } from "lucide-react"
 import type { Property } from "../types"
 import { NearbyAgents } from "./NearbyAgents"
+import { categoryLabel } from "@/lib/categories"
 
 type Props = {
   property: Property
@@ -52,7 +53,7 @@ export function ContactAgentsModal({ property, onClose }: Props) {
             </p>
             <h3 className="mt-1 font-semibold text-ab-text">{property.title}</h3>
             <p className="mt-1 text-sm text-ab-muted">
-              {property.category ?? "Property"} · {property.village_name}
+              {categoryLabel(property.category)} · {property.village_name}
             </p>
             <p className="mt-2 text-lg font-bold text-ab-accent">{formattedPrice}</p>
           </section>

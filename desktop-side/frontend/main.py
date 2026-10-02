@@ -13,6 +13,9 @@ if __name__ == "__main__":
     from app.ui_polish import install as install_ui_polish
 
     install_ui_polish(app)  # themed message boxes, icons, screen-fitting dialogs
+    from app import i18n
+
+    i18n.set_language(i18n.saved_language(), persist=False)  # English / Filipino shell
     controller = AppController()
     controller.start()
     sys.exit(app.exec())

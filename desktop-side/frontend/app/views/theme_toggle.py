@@ -11,6 +11,7 @@ from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import QToolButton
 
 from app import theme
+from app.i18n import tr
 
 
 class ThemeToggleButton(QToolButton):
@@ -25,7 +26,7 @@ class ThemeToggleButton(QToolButton):
         dark = theme.current_mode() == "dark"
         # The icon shows the mode you switch *to*.
         self.setIcon(qta.icon("fa5s.sun" if dark else "fa5s.moon", color=theme.TOKENS["accent"]))
-        label = "Switch to light mode" if dark else "Switch to dark mode"
+        label = tr("Switch to light mode" if dark else "Switch to dark mode")
         self.setToolTip(label)
         self.setAccessibleName(label)
         self.clicked.connect(self._toggle)

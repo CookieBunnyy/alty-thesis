@@ -165,6 +165,9 @@ def make_table_scrollable(table: QTableView) -> None:
     if table.property("_altyScrollable"):
         return
     table.setProperty("_altyScrollable", True)
+    from app.views.tables import modernize_table
+
+    modernize_table(table)
     table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
     table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
     table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
@@ -182,8 +185,8 @@ def make_table_scrollable(table: QTableView) -> None:
 
     def fit_columns() -> None:
         model = table.model()
-        if model is None:
-            return
+        if model is None or table.property("altyFixedColumns"):
+            return  # the page sized its own columns
         table.resizeColumnsToContents()
         for column in range(model.columnCount()):
             width = table.columnWidth(column)

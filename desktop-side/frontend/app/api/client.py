@@ -151,6 +151,15 @@ class ApiClient:
     def get_document_audit(self, document_id: str, token: str | None = None) -> list[dict[str, Any]]:
         return self.get(f"/api/v1/documents/{quote(document_id, safe='')}/audit", token=token)
 
+    def get_notifications(self, token: str | None = None) -> dict[str, Any]:
+        return self.get("/api/v1/notifications", token=token)
+
+    def mark_notifications_read(self, keys: list[str], token: str | None = None) -> dict[str, Any]:
+        return self.post("/api/v1/notifications/read", {"keys": keys}, token=token)
+
+    def mark_all_notifications_read(self, token: str | None = None) -> dict[str, Any]:
+        return self.post("/api/v1/notifications/read-all", {}, token=token)
+
     def get_document_summary(self, token: str | None = None) -> dict[str, Any]:
         return self.get("/api/v1/documents/summary", token=token)
 

@@ -10,6 +10,7 @@ from app.models.transaction import PropertyTransaction
 from app.models.audit import AuditEvent
 from app.models.media import PropertyMedia
 from app.models.review import AgentReview
+from app.models.notification import NotificationRead
 
 __all__ = [
 	"Branch",
@@ -26,4 +27,5 @@ __all__ = [
 	"AuditEvent",
 	"PropertyMedia",
 	"AgentReview",
+	"NotificationRead",
 ]

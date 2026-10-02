@@ -1,16 +1,8 @@
 import { useState } from "react"
 import { PropertyDetailModal } from "@/components/PropertyDetailModal"
 import { navigate } from "@/lib/router"
-import type { LocationPoint, Property } from "@/types"
-
-const savedWorkplace = (): LocationPoint | null => {
-  try {
-    const saved = JSON.parse(window.localStorage.getItem("alty-workplace") ?? "null")
-    return saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lng) && saved.name ? saved : null
-  } catch {
-    return null
-  }
-}
+import { loadWorkplace } from "@/lib/workplace"
+import type { Property } from "@/types"
 
 const mapLink = (property: Property) => `/map?property=${encodeURIComponent(String(property.listing_id))}`
 
@@ -22,7 +14,7 @@ export function usePropertyViewer() {
   const element = (
     <PropertyDetailModal
       property={preview}
-      workplaceLocation={savedWorkplace()}
+      workplaceLocation={loadWorkplace()}
       onSetWorkplaceClick={() => preview && navigate(mapLink(preview))}
       onClose={() => setPreview(null)}
       onViewOnMap={(property) => property && navigate(mapLink(property))}

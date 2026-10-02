@@ -13,6 +13,7 @@ from app.models.client import Client
 from app.models.property_listing import PropertyListing
 from app.models.transaction import PropertyTransaction
 from tests import documents as build
+from tests.conftest import _make_user, login
 from tests.test_document_pipeline import assert_success, upload
 
 
@@ -43,6 +44,25 @@ def test_role_restrictions(api, admin, employee):
     assert api.get("/api/v1/audit", headers=employee).status_code == 403
     assert api.post("/api/v1/system/sync/push", headers=employee).status_code == 403
     assert api.get("/api/v1/users", headers=admin).status_code == 200
+
+
+def test_audit_and_system_settings_are_administrator_only(api, admin, employee):
+    _make_user("gm", "General Manager")
+    _make_user("pres", "President")
+    for username in ("gm", "pres"):
+        headers = login(api, username)
+        me = api.get("/api/v1/auth/me", headers=headers).json()
+        assert "audit" not in me["permissions"] and "settings" in me["permissions"]
+        assert api.get("/api/v1/audit", headers=headers).status_code == 403
+        assert api.get("/api/v1/system/settings", headers=headers).status_code == 403
+        assert api.post("/api/v1/system/sync/push", headers=headers).status_code == 403
+    assert api.get("/api/v1/system/settings", headers=employee).status_code == 403
+    # Everyone still sees the sync status shown in the header.
+    assert api.get("/api/v1/system/sync", headers=employee).status_code == 200
+    me = api.get("/api/v1/auth/me", headers=admin).json()
+    assert "audit" in me["permissions"]
+    assert api.get("/api/v1/audit", headers=admin).status_code == 200
+    assert api.get("/api/v1/system/settings", headers=admin).status_code == 200
 
 
 def test_failed_login_is_audited_and_register_is_least_privilege(api, admin):

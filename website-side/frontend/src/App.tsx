@@ -26,6 +26,8 @@ import { ContactAgentsModal } from "./components/ContactAgentsModal"
 import type { ChatMessage, Property, LocationPoint, PlaceResult, RouteSelection, TrafficStatus, TravelMode } from "./types"
 import { API_URL, CHAT_API_URL, publicUrl } from "./config"
 import { useTheme } from "./hooks/useTheme"
+import { loadWorkplace, saveWorkplace as saveWorkplaceSession } from "./lib/workplace"
+import { categoryCounts, categoryLabel, categoryOf } from "./lib/categories"
 import { navigate, useLocation } from "./lib/router"
 import { RowSkeleton } from "./components/Skeleton"
 import { useCommute } from "./hooks/useCommute"
@@ -33,7 +35,6 @@ import { formatKm, formatMinutes, getCapabilities, requestCurrentPosition, rever
 
 // Live, AVAILABLE properties from the main Alty API (documents + central data).
 const PROPERTIES_URL = `${API_URL}/api/v1/public/properties`
-const LISTING_FILTERS = ["All", "Apartment", "Villa", "Duplex", "Warehouse"] as const
 const QUICK_CHAT_SUGGESTIONS = [
   "Find a condo in BGC under 8k monthly",
   "Show me 3-bedroom houses in Alabang",
@@ -42,39 +43,8 @@ const QUICK_CHAT_SUGGESTIONS = [
   "Apartment in Taguig within 30 minutes commute",
   "Affordable studio in Pasig",
 ] as const
-const WORKPLACE_KEY = "alty-workplace"
 // Preferred default mode when a commute loads: the first one the provider answered.
 const MODE_PREFERENCE: TravelMode[] = ["driving", "motorcycle", "bicycle", "walking"]
-
-type ListingFilter = (typeof LISTING_FILTERS)[number]
-
-const matchesListingFilter = (property: Property, filter: ListingFilter) => {
-  if (filter === "All") return true
-
-  const haystack = `${property.category ?? ""} ${property.title ?? ""} ${property.village_name ?? ""}`.toLowerCase()
-
-  switch (filter) {
-    case "Apartment":
-      return haystack.includes("apartment") || haystack.includes("condo") || haystack.includes("studio")
-    case "Villa":
-      return haystack.includes("villa") || haystack.includes("house") || haystack.includes("subdivision")
-    case "Duplex":
-      return haystack.includes("duplex") || haystack.includes("townhouse") || haystack.includes("town house")
-    case "Warehouse":
-      return haystack.includes("warehouse") || haystack.includes("industrial")
-    default:
-      return true
-  }
-}
-
-const loadSavedWorkplace = (): LocationPoint | null => {
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(WORKPLACE_KEY) ?? "null")
-    return saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lng) && saved.name ? saved : null
-  } catch {
-    return null
-  }
-}
 
 export default function App() {
   const { theme } = useTheme()
@@ -95,14 +65,15 @@ export default function App() {
   const [propertiesStatus, setPropertiesStatus] = useState<"loading" | "ready" | "error">("loading")
   const [isShowingRecommendations, setIsShowingRecommendations] = useState(false)
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null)
-  const [workplaceLocation, setWorkplaceLocation] = useState<LocationPoint | null>(loadSavedWorkplace)
+  const [workplaceLocation, setWorkplaceLocation] = useState<LocationPoint | null>(loadWorkplace)
   const [activeTab, setActiveTab] = useState<"chat" | "map">("map")
   const [previewProperty, setPreviewProperty] = useState<Property | null>(null)
   const [isListingsOpen, setIsListingsOpen] = useState(() => (typeof window !== "undefined" ? window.innerWidth >= 768 : true))
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isWorkplaceModalOpen, setIsWorkplaceModalOpen] = useState(false)
   const [quickChats, setQuickChats] = useState<string[]>([...QUICK_CHAT_SUGGESTIONS])
-  const [activeFilter, setActiveFilter] = useState<ListingFilter>("All")
+  // Standard category key, or "all".
+  const [activeFilter, setActiveFilter] = useState<string>("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [isMobileView, setIsMobileView] = useState(() => (typeof window !== "undefined" ? window.innerWidth < 768 : false))
 
@@ -128,7 +99,7 @@ export default function App() {
   const filteredProperties = useMemo(
     () =>
       activeProperties.filter((property) => {
-        const matchesCategory = matchesListingFilter(property, activeFilter)
+        const matchesCategory = activeFilter === "all" || categoryOf(property.category)?.key === activeFilter
         const query = searchTerm.trim().toLowerCase()
 
         if (!query) return matchesCategory
@@ -168,15 +139,8 @@ export default function App() {
     return () => mediaQuery.removeEventListener("change", updateViewport)
   }, [])
 
-  // The workplace is remembered on this device (no account needed).
-  useEffect(() => {
-    try {
-      if (workplaceLocation) window.localStorage.setItem(WORKPLACE_KEY, JSON.stringify(workplaceLocation))
-      else window.localStorage.removeItem(WORKPLACE_KEY)
-    } catch {
-      /* storage blocked: kept for this visit only */
-    }
-  }, [workplaceLocation])
+  // The workplace lasts for this browsing session only (reset on leaving the site).
+  useEffect(() => saveWorkplaceSession(workplaceLocation), [workplaceLocation])
 
   useEffect(() => {
     getCapabilities()
@@ -253,11 +217,9 @@ export default function App() {
     }
   }
 
-  // `workplace` overrides the saved one for this request (used right after
-  // Set Workplace, before the new state has rendered).
-  const sendChatMessage = async (textMessage: string, workplaceOverride?: LocationPoint) => {
+  const sendChatMessage = async (textMessage: string) => {
     if (!textMessage.trim() || isLoading) return
-    const workplace = workplaceOverride ?? workplaceLocation
+    const workplace = workplaceLocation
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -353,11 +315,8 @@ export default function App() {
     setIsPickingLocation(false)
     setPlaceResults(null)
     if (!selectedProperty) setFocusPoint({ lat: place.lat, lng: place.lng, zoom: 14 })
-    // As before the redesign: ask the assistant for the listings with the best
-    // commute to the new workplace. The exact coordinates are sent, and the
-    // wording avoids "near / work at / office in", which the chat service
-    // would otherwise treat as a place name to look up again.
-    void sendChatMessage("Show properties with the shortest commute to my workplace.", place)
+    // Set directly: no chatbot round trip. (Telling the chatbot "I work at …"
+    // in the chat still sets the workplace from its reply.)
   }
 
   const handleClearWorkplace = () => {
@@ -708,18 +667,22 @@ export default function App() {
                   {isMobileView && mapSearchBar}
 
                   <div className="flex items-center gap-1.5 overflow-x-auto rounded-full border border-ab-border bg-ab-input p-1.5">
-                    {LISTING_FILTERS.map((filter) => (
+                    {[{ key: "all", label: "All", count: activeProperties.length }, ...categoryCounts(activeProperties)].map((filter) => (
                       <button
-                        key={filter}
+                        key={filter.key}
                         type="button"
-                        onClick={() => setActiveFilter(filter)}
+                        onClick={() => setActiveFilter(filter.key)}
+                        aria-pressed={activeFilter === filter.key}
+                        title={filter.count ? undefined : "No listings in this category right now"}
                         className={`min-h-8 shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-medium transition sm:text-xs ${
-                          activeFilter === filter
+                          activeFilter === filter.key
                             ? "bg-ab-accent text-ab-ink shadow-sm"
-                            : "bg-transparent text-ab-muted hover:bg-ab-hover hover:text-ab-text"
+                            : filter.count
+                              ? "bg-transparent text-ab-muted hover:bg-ab-hover hover:text-ab-text"
+                              : "bg-transparent text-ab-faint hover:bg-ab-hover"
                         }`}
                       >
-                        {filter}
+                        {filter.label} <span className="opacity-70">{filter.count}</span>
                       </button>
                     ))}
                   </div>
@@ -787,7 +750,7 @@ export default function App() {
                               <div className="mb-1 flex items-center justify-between gap-2">
                                 <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-ab-muted">
                                   <Building2 className="h-3.5 w-3.5 shrink-0 text-ab-text" />
-                                  <span className="truncate">{property.category ?? "Property"}</span>
+                                  <span className="truncate">{categoryLabel(property.category)}</span>
                                 </div>
                                 <button
                                   type="button"
