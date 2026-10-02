@@ -1,0 +1,56 @@
+# Render Blueprint for the main Alty API (desktop-side/backend).
+#
+# Secrets are NOT stored here. Entries with `sync: false` are prompted for in
+# the Render dashboard when the Blueprint is created, and stay only in
+# Render's encrypted environment settings. The local .env file is never
+# uploaded (it is gitignored); Render reads these values as environment
+# variables, which the backend's settings already use.
+services:
+  - type: web
+    name: alty-api
+    runtime: python
+    plan: free
+    region: singapore
+    rootDir: desktop-side/backend
+    buildCommand: pip install -r requirements.txt
+    # Apply database migrations, then serve. --proxy-headers makes the real
+    # visitor IP visible behind Render's proxy (used by the rate limits).
+    startCommand: >-
+      alembic upgrade head &&
+      uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+
+      # ---- Secrets: entered in the Render dashboard ----------------------
+      - key: DATABASE_URL          # Postgres the API owns (see DEPLOYMENT.md)
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TOMTOM_API_KEY        # leave empty to run without live traffic
+        sync: false
+      - key: INITIAL_ADMIN_PASSWORD # only used on an empty users table
+        sync: false
+      - key: CORS_ORIGINS          # e.g. https://your-site.vercel.app
+        sync: false
+      - key: SECRET_KEY            # signs login tokens; Render generates it
+        generateValue: true
+
+      # ---- Non-secret settings -------------------------------------------
+      - key: APP_NAME
+        value: Abellar Realty Management System
+      - key: CLOUD_SYNC_ENABLED
+        value: "true"
+      # Render's disk is wiped on every deploy: keep files in Supabase Storage.
+      - key: DOCUMENT_STORAGE_BACKEND
+        value: supabase
+      - key: ROUTING_PROVIDER
+        value: tomtom
+      - key: TRAFFIC_PROVIDER
+        value: tomtom
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "60"

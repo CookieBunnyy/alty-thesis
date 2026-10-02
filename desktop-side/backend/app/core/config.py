@@ -1,6 +1,8 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -74,6 +76,28 @@ class Settings(BaseSettings):
     INITIAL_ADMIN_PASSWORD: str = ""
 
     model_config = SettingsConfigDict(env_file=str(BACKEND_DIR / ".env"), extra="ignore")
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def use_psycopg_driver(cls, value: str) -> str:
+        """Hosts (Render, Supabase) hand out postgres:// or postgresql:// URLs;
+        SQLAlchemy needs the psycopg driver named explicitly."""
+        # A pasted URL often carries a trailing newline/space, which would
+        # become part of the database name ("postgres\n" does not exist).
+        value = value.strip()
+        for prefix in ("postgres://", "postgresql://"):
+            if value.startswith(prefix):
+                value = "postgresql+psycopg://" + value[len(prefix):]
+                break
+        # On a host (Render sets RENDER=true) there is no local Postgres: say
+        # so plainly instead of failing later with "connection refused".
+        if os.environ.get("RENDER") and any(local in value for local in ("@localhost", "//localhost", "127.0.0.1")):
+            raise ValueError(
+                "DATABASE_URL points at localhost, which doesn't exist on Render. Set DATABASE_URL in the "
+                "service's Environment tab to a cloud PostgreSQL URL (Render PostgreSQL 'Internal Database URL' "
+                "or a Supabase 'Session pooler' connection string)."
+            )
+        return value
 
     @property
     def cloud_configured(self) -> bool:
