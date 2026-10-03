@@ -87,6 +87,8 @@ _FILIPINO = {
     "Good morning": "Magandang umaga",
     "Good afternoon": "Magandang hapon",
     "Good evening": "Magandang gabi",
+    "Show all rows": "Ipakita lahat ng hilera",
+    "Show fewer rows": "Ipakita ang mas kaunti",
 }
 
 _TABLES = {"fil": _FILIPINO}

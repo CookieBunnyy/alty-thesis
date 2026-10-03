@@ -16,15 +16,19 @@ from __future__ import annotations
 
 import hashlib
 
-from PyQt6.QtCore import QRectF, QSize, Qt
+import qtawesome as qta
+from PyQt6.QtCore import QEvent, QObject, QRectF, QSize, Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
+    QScrollArea,
     QTableView,
     QTableWidget,
+    QToolButton,
+    QWidget,
 )
 
 from app.theme import BADGES, TOKENS as T, raw_set_stylesheet, table_stylesheet
@@ -197,3 +201,121 @@ def modernize_table(table: QTableView) -> None:
 
     if type(table.itemDelegate()) is QStyledItemDelegate:  # keep pages' own delegates
         table.setItemDelegate(ModernTableDelegate(table))
+
+
+class TableExpander(QObject):
+    """Round arrow button on a table's bottom edge (like Vercel's usage
+    card): ⌄ shows every row by growing the table — the page then scrolls —
+    and ⌃ returns it to its normal height. Only shown when rows are hidden.
+
+    The button is a child of ``host`` (the page), not of the table, so it is
+    not clipped by the table and never becomes a QSplitter pane.
+    """
+
+    SIZE = 30
+
+    def __init__(self, table: QTableView, host: QWidget) -> None:
+        super().__init__(table)
+        self.table, self.host = table, host
+        self.expanded = False
+        self._normal = (table.minimumHeight(), table.maximumHeight())
+        self.button = QToolButton(host)
+        self.button.setObjectName("tableExpander")
+        self.button.setFixedSize(self.SIZE, self.SIZE)
+        self.button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.button.setIconSize(QSize(13, 13))
+        self.button.clicked.connect(self.toggle)
+        self.button.hide()
+        self._style()
+
+        # Follow the table: its own moves/resizes and those of its containers.
+        widget: QWidget | None = table
+        while widget is not None and widget is not host:
+            widget.installEventFilter(self)
+            widget = widget.parentWidget()
+        host.installEventFilter(self)
+        table.verticalScrollBar().rangeChanged.connect(lambda *_: self._sync())
+        model = table.model()
+        if model is not None:
+            for signal in (model.rowsInserted, model.rowsRemoved, model.modelReset, model.layoutChanged):
+                signal.connect(lambda *_: QTimer.singleShot(0, self._sync))
+
+    def _style(self) -> None:
+        from app.i18n import tr
+
+        ring = T["accent"] if self.expanded else T["border_strong"]
+        raw_set_stylesheet(self.button, f"""/*alty-raw*/
+QToolButton#tableExpander {{ background: {T['card']}; border: 1px solid {ring}; border-radius: {self.SIZE // 2}px; }}
+QToolButton#tableExpander:hover {{ background: {T['hover']}; border-color: {T['accent']}; }}""")
+        self.button.setIcon(qta.icon("fa5s.chevron-up" if self.expanded else "fa5s.chevron-down",
+                                     color=T["accent"] if self.expanded else T["text"]))
+        label = tr("Show fewer rows") if self.expanded else tr("Show all rows")
+        self.button.setToolTip(label)
+        self.button.setAccessibleName(label)
+
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() in (QEvent.Type.Move, QEvent.Type.Resize, QEvent.Type.Show,
+                            QEvent.Type.Hide, QEvent.Type.LayoutRequest):
+            QTimer.singleShot(0, self._sync)
+        return False
+
+    def _full_height(self) -> int:
+        table = self.table
+        header = table.horizontalHeader()
+        scrollbar = table.horizontalScrollBar()
+        return (table.verticalHeader().length() + (header.height() if header.isVisible() else 0)
+                + 2 * table.frameWidth() + (scrollbar.height() if scrollbar.isVisible() else 0) + 2)
+
+    def _sync(self) -> None:
+        table = self.table
+        if self.expanded:
+            height = self._full_height()
+            if table.minimumHeight() != height:
+                table.setMinimumHeight(height)
+                self._relayout_page()
+        needed = self.expanded or table.verticalScrollBar().maximum() > 0
+        visible = needed and table.isVisibleTo(self.host) and table.model() is not None \
+            and table.model().rowCount() > 0
+        self.button.setVisible(visible)
+        if visible:
+            bottom = table.mapTo(self.host, table.rect().bottomLeft())
+            x = bottom.x() + (table.width() - self.SIZE) // 2
+            y = min(bottom.y() - self.SIZE // 2, self.host.height() - self.SIZE - 2)
+            self.button.move(x, y)
+            self.button.raise_()
+
+    def toggle(self) -> None:
+        self.expanded = not self.expanded
+        if self.expanded:
+            self.table.setMaximumHeight(16777215)
+            self.table.setMinimumHeight(self._full_height())
+        else:
+            self.table.setMinimumHeight(self._normal[0])
+            self.table.setMaximumHeight(self._normal[1])
+        self._style()
+        self._relayout_page()
+        QTimer.singleShot(0, self._sync)
+        if not self.expanded:
+            QTimer.singleShot(0, self._reveal_table)
+
+    def _relayout_page(self) -> None:
+        widget = self.host
+        while widget is not None and not hasattr(widget, "_resize_current_page"):
+            widget = widget.parentWidget()
+        if widget is not None:
+            QTimer.singleShot(0, widget._resize_current_page)
+
+    def _reveal_table(self) -> None:
+        widget = self.host.parentWidget()
+        while widget is not None and not isinstance(widget, QScrollArea):
+            widget = widget.parentWidget()
+        if widget is not None:
+            widget.ensureWidgetVisible(self.table, 0, 40)
+
+
+def add_table_expanders(host: QWidget) -> None:
+    """Attach an expander to every table on ``host`` (a page)."""
+    for table in host.findChildren(QTableView):
+        if not table.property("altyNoExpand") and not table.property("_altyExpander"):
+            table.setProperty("_altyExpander", True)
+            TableExpander(table, host)

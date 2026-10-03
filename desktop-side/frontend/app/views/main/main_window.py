@@ -39,6 +39,7 @@ from app.views.main.pages.workforce import WorkforcePage
 from app.busy import busy_tracker
 from app.i18n import tr
 from app.views.notifications import NotificationPanel
+from app.views.tables import add_table_expanders
 from app.views.loading import BusyBar, BusyIndicators, LoadingOverlay
 from app.views.theme_toggle import ThemeToggleButton
 from app.views.window_frame import is_drag_area, start_move, toggle_maximized
@@ -577,6 +578,7 @@ class MainWindow(QWidget):
         for key, page in self.pages.items():
             self.stack.addWidget(page)
             self.all_pages.append(page)
+            add_table_expanders(page)  # ⌄ / ⌃ under tables with hidden rows
             # Long captions must wrap, otherwise their single-line width
             # becomes the page's minimum width and the page overflows.
             for label in page.findChildren(QLabel):
