@@ -107,13 +107,6 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
           </button>
 
           <button
-            onClick={onClose}
-            className="px-4 py-2 bg-ab-card-2 border border-ab-border text-ab-muted rounded-xl text-sm font-medium hover:bg-ab-card-2 transition shadow-sm"
-          >
-            Close
-          </button>
-
-          <button
             onClick={() => setIsContactOpen(true)}
             title="Call or text an agent near this property"
             className="flex items-center gap-1.5 px-5 py-2 bg-ab-accent text-ab-ink rounded-xl text-sm font-medium hover:bg-ab-accent-hover transition shadow-sm"

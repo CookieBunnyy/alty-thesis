@@ -6,7 +6,6 @@ export function SiteFooter() {
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 md:grid-cols-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ab-accent text-base font-black text-ab-ink">A</span>
             <span className="text-base font-extrabold tracking-wide text-ab-text">ABELLAR REALTY</span>
           </div>
           <p className="mt-3 max-w-xs text-sm text-ab-muted">Real Estate Property Discovery and Services.</p>

@@ -239,19 +239,16 @@ class PropertyProfileDialog(QDialog):
         self._location_and_record()
         self.body.addStretch()
 
-        footer = QHBoxLayout()
-        footer.setContentsMargins(22, 10, 22, 16)
-        footer.addStretch()
+        # Closed with the window's own ✕ (or Esc); no separate Close button.
         if on_edit is not None:
-            edit = QPushButton(qta.icon("fa5s.pen", color=T["text"]), "Edit property")
+            footer = QHBoxLayout()
+            footer.setContentsMargins(22, 10, 22, 16)
+            footer.addStretch()
+            edit = QPushButton(qta.icon("fa5s.pen", color=T["accent_ink"]), "Edit property")
+            edit.setObjectName("primary")
             edit.clicked.connect(self._edit)
             footer.addWidget(edit)
-        close = QPushButton(qta.icon("fa5s.times", color=T["accent_ink"]), "Close")
-        close.setObjectName("primary")
-        close.setDefault(True)
-        close.clicked.connect(self.accept)
-        footer.addWidget(close)
-        outer.addLayout(footer)
+            outer.addLayout(footer)
 
     # ---- sections ------------------------------------------------------
     def _hero(self, category: str | None, status_label: str | None) -> None:

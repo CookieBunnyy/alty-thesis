@@ -58,8 +58,6 @@ QWidget#topBar {{ background: {t['sidebar']}; border: 1px solid {t['border']}; b
 QLabel {{ background: transparent; border: none; color: {t['text']}; }}
 QLabel#navBrand {{ color: {t['text']}; font-size: 18px; font-weight: 800; letter-spacing: 1px; }}
 QLabel#navSubtitle {{ color: {t['text_faint']}; font-size: 10px; font-weight: 700; letter-spacing: 1.4px; }}
-QLabel#brandMark {{ background: {t['accent']}; color: {t['accent_ink']}; border-radius: 9px;
-    font-size: 18px; font-weight: 900; }}
 QToolButton#sectionButton {{ background: transparent; color: {t['text_faint']}; border: none;
     text-align: left; padding: 12px 6px 4px 10px; font-size: 10px; font-weight: 700; letter-spacing: 1.6px; }}
 QToolButton#sectionButton:hover {{ color: {t['text_muted']}; }}
@@ -185,11 +183,6 @@ class MainWindow(QWidget):
 
         brand_row = QHBoxLayout()
 
-        self.brand_icon = QLabel("A")
-        self.brand_icon.setObjectName("brandMark")
-        self.brand_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.brand_icon.setFixedSize(36, 36)
-
         brand_col = QVBoxLayout()
         brand_col.setSpacing(1)
 
@@ -202,8 +195,7 @@ class MainWindow(QWidget):
         brand_col.addWidget(self.brand)
         brand_col.addWidget(self.brand_subtitle)
 
-        brand_row.addWidget(self.brand_icon)
-        brand_row.addSpacing(9)
+        brand_row.addSpacing(4)
         brand_row.addLayout(brand_col)
         brand_row.addStretch()
 

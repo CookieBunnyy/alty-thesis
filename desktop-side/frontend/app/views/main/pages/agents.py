@@ -238,14 +238,7 @@ class AgentProfileDialog(QDialog):
         self.reviews_layout.addWidget(self.reviews_status)
         layout.addWidget(reviews)
         layout.addStretch()
-
-        buttons = QHBoxLayout()
-        buttons.addStretch()
-        close = QPushButton("Close")
-        close.clicked.connect(self.accept)
-        buttons.addWidget(close)
-        buttons.setContentsMargins(22, 0, 22, 16)
-        outer.addLayout(buttons)
+        # Closed with the window's own ✕ (or Esc); no separate Close button.
 
         self.load_reviews()
 

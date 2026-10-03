@@ -55,7 +55,6 @@ export function SiteHeader({ overlay = false }: { overlay?: boolean }) {
     >
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 md:h-16">
         <Link to="/" className="flex shrink-0 items-center gap-2" aria-label="Abellar Realty home">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ab-accent text-base font-black text-ab-ink">A</span>
           <span className="leading-tight">
             <span className="block text-base font-extrabold tracking-wide">ABELLAR REALTY</span>
             <span className={`block text-[10px] font-semibold uppercase tracking-[0.18em] ${overlay ? "text-white/70" : "text-ab-faint"}`}>

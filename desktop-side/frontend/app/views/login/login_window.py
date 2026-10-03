@@ -407,14 +407,6 @@ class LoginWindow(QWidget):
         logo_row = QHBoxLayout()
         logo_row.setContentsMargins(0, 0, 0, 0)
        
-        # Same brand mark as the main window sidebar.
-        logo_mark = QLabel("A")
-        logo_mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo_mark.setFixedSize(36, 36)
-        logo_mark.setStyleSheet(
-            f"/*alty-raw*/ background: {T['accent']}; color: {T['accent_ink']}; border-radius: 9px;"
-            " font-size: 18px; font-weight: 900;"
-        )
         logo_text_col = QVBoxLayout()
         logo_text_col.setSpacing(0)
         logo_text = QLabel("ALTY")
@@ -429,8 +421,6 @@ class LoginWindow(QWidget):
         )
         logo_text_col.addWidget(logo_text)
         logo_text_col.addWidget(logo_subtitle)
-        logo_row.addWidget(logo_mark)
-        logo_row.addSpacing(10)
         logo_row.addLayout(logo_text_col)
         logo_row.addStretch()
         left_layout.addLayout(logo_row)

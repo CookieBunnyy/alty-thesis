@@ -120,14 +120,7 @@ class ClientProfileDialog(QDialog):
             self._history()
             self._documents()
         self.body.addStretch()
-
-        footer = QHBoxLayout()
-        footer.setContentsMargins(22, 8, 22, 16)
-        footer.addStretch()
-        close = QPushButton("Close")
-        close.clicked.connect(self.reject)
-        footer.addWidget(close)
-        outer.addLayout(footer)
+        # Closed with the window's own ✕ (or Esc); no separate Close button.
 
     # -- building blocks --------------------------------------------------
 
