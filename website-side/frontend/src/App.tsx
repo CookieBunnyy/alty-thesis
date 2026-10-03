@@ -10,6 +10,7 @@ import {
   CircleAlert,
   LoaderCircle,
   MapPin,
+  MapPinOff,
   MessageCircleMore,
   Search,
   Sparkles,
@@ -469,6 +470,8 @@ export default function App() {
       focusPoint={focusPoint}
       bottomInset={mapBottomInset}
       controlsTop={isMobileView ? 76 : 12}
+      showClearInControls={isMobileView}
+      legendInControls
     />
   )
 
@@ -956,9 +959,19 @@ export default function App() {
             <>
               <div className="absolute inset-0 flex flex-col">
                 {/* Desktop: search / location / Set Workplace over the map */}
-                <div className="absolute inset-x-3 top-3 z-[1050] flex items-start gap-2 p-4 pr-16">
+                <div className="pointer-events-none absolute inset-x-3 top-3 z-[1050] flex items-start gap-2 p-4 pr-16 [&>*]:pointer-events-auto">
                   {listingsButton}
                   <div className="w-full max-w-2xl">{mapSearchBar}</div>
+                  {selectedProperty && (
+                    <button
+                      type="button"
+                      onClick={clearSelection}
+                      title="Deselect the property: hides its nearby places and commute route"
+                      className="ml-auto flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-ab-border bg-ab-card px-3 text-xs font-semibold text-ab-text shadow-md transition hover:bg-ab-hover hover:text-ab-danger active:scale-95"
+                    >
+                      <MapPinOff className="h-4 w-4" /> Clear selection
+                    </button>
+                  )}
                 </div>
 
                 <div className="h-full w-full p-2 sm:p-3">

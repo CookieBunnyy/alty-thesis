@@ -192,6 +192,8 @@ export interface MapProps {
   focusPoint?: { lat: number; lng: number; zoom?: number } | null;
   bottomInset?: number;
   controlsTop?: number; // px from the top, to clear an overlaid search bar
+  showClearInControls?: boolean; // "Clear selection" in the control column (phones); desktop has it in the top bar
+  legendInControls?: boolean; // live-traffic key under the map controls instead of bottom-left
 }
 
 export interface PropertyDetailModalProps {

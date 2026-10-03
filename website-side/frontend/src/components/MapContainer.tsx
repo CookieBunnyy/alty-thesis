@@ -223,7 +223,14 @@ const PickHandler: React.FC<{ active: boolean; onPick?: (point: { lat: number; l
 };
 
 const controlButton =
-  'flex h-11 w-11 items-center justify-center rounded-xl border border-ab-border bg-ab-card text-ab-text shadow-md transition hover:bg-ab-hover focus-visible:outline-2 focus-visible:outline-ab-accent';
+  'flex h-11 w-11 items-center justify-center rounded-xl border shadow-md transition active:scale-95 focus-visible:outline-2 focus-visible:outline-ab-accent';
+// On: filled lime with dark ink (like the selected chips); off: plain card.
+const controlState = (active: boolean) =>
+  active
+    ? 'border-ab-accent bg-ab-accent text-ab-ink shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-ab-accent)_30%,transparent)] hover:bg-ab-accent-hover'
+    : 'border-ab-border bg-ab-card text-ab-text hover:bg-ab-hover';
+const zoomButton =
+  'flex h-11 w-11 items-center justify-center text-ab-text transition hover:bg-ab-hover active:bg-ab-accent active:text-ab-ink';
 
 /** Floating controls rendered inside the map (clicks don't reach the map). */
 const MapControls: React.FC<{
@@ -233,8 +240,10 @@ const MapControls: React.FC<{
   trafficAvailable: boolean;
   onClearNearby?: () => void;
   hasSelection: boolean;
+  located: boolean;
   top: number;
-}> = ({ onLocate, onToggleTraffic, showTraffic, trafficAvailable, onClearNearby, hasSelection, top }) => {
+  legend?: React.ReactNode;
+}> = ({ onLocate, onToggleTraffic, showTraffic, trafficAvailable, onClearNearby, hasSelection, located, top, legend }) => {
   const map = useMap();
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -245,16 +254,23 @@ const MapControls: React.FC<{
   return (
     <div ref={ref} style={{ top }} className="absolute right-3 z-[1000] flex flex-col items-end gap-2">
       <div className="flex flex-col overflow-hidden rounded-xl border border-ab-border bg-ab-card shadow-md">
-        <button type="button" onClick={() => map.zoomIn()} className="flex h-11 w-11 items-center justify-center text-ab-text transition hover:bg-ab-hover" aria-label="Zoom in">
+        <button type="button" onClick={() => map.zoomIn()} className={zoomButton} aria-label="Zoom in">
           <Plus className="h-5 w-5" />
         </button>
         <span className="h-px bg-ab-border" />
-        <button type="button" onClick={() => map.zoomOut()} className="flex h-11 w-11 items-center justify-center text-ab-text transition hover:bg-ab-hover" aria-label="Zoom out">
+        <button type="button" onClick={() => map.zoomOut()} className={zoomButton} aria-label="Zoom out">
           <Minus className="h-5 w-5" />
         </button>
       </div>
       {onLocate && (
-        <button type="button" onClick={onLocate} className={controlButton} aria-label="Show my location" title="Show my location">
+        <button
+          type="button"
+          onClick={onLocate}
+          aria-pressed={located}
+          className={`${controlButton} ${controlState(located)}`}
+          aria-label="Show my location"
+          title={located ? 'Showing your location — click to re-center' : 'Show my location'}
+        >
           <LocateFixed className="h-5 w-5" />
         </button>
       )}
@@ -265,7 +281,7 @@ const MapControls: React.FC<{
           aria-pressed={showTraffic}
           aria-label="Traffic layer"
           title={trafficAvailable ? 'Show live traffic' : 'Live traffic data is not available'}
-          className={`${controlButton} ${showTraffic ? 'border-ab-accent text-ab-accent' : ''}`}
+          className={`${controlButton} ${controlState(showTraffic)}`}
         >
           <Layers className="h-5 w-5" />
         </button>
@@ -274,13 +290,14 @@ const MapControls: React.FC<{
         <button
           type="button"
           onClick={onClearNearby}
-          aria-label="Hide Nearby Places"
-          title="Hide Nearby Places"
-          className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border border-ab-border bg-ab-card px-3 text-xs font-semibold text-ab-text shadow-md transition hover:bg-ab-hover hover:text-ab-danger"
+          aria-label="Clear selection"
+          title="Deselect the property: hides its nearby places and commute route"
+          className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border border-ab-border bg-ab-card px-3 text-xs font-semibold text-ab-text shadow-md transition hover:bg-ab-hover hover:text-ab-danger active:scale-95"
         >
-          <MapPinOff className="h-4 w-4" /> <span className="hidden sm:inline">Hide Nearby Places</span>
+          <MapPinOff className="h-4 w-4" /> <span className="hidden sm:inline">Clear selection</span>
         </button>
       )}
+      {legend}
     </div>
   );
 };
@@ -306,6 +323,8 @@ export const PropertyMap: React.FC<MapProps> = ({
   focusPoint,
   bottomInset = 0,
   controlsTop = 12,
+  showClearInControls = true,
+  legendInControls = false,
 }) => {
   const validProperties = properties.filter((p) => p.lat !== null && p.lng !== null);
   const [initialCenter] = useState<[number, number]>(() =>
@@ -351,19 +370,24 @@ export const PropertyMap: React.FC<MapProps> = ({
       ? { lat: selectedProperty.lat, lng: selectedProperty.lng, zoom: 15 }
       : null);
 
+  // Live-traffic key: beside the map controls on desktop, bottom-left on phones.
+  const trafficLegendCard =
+    showTraffic && trafficAvailable && trafficLegend.length ? (
+      <div className="rounded-xl border border-ab-border bg-ab-card px-3 py-2 text-[11px] text-ab-muted shadow-md">
+        <p className="mb-1 font-semibold text-ab-text">Live traffic</p>
+        {trafficLegend.map((item) => (
+          <p key={item.level} className="flex items-center gap-1.5">
+            <span className="h-1.5 w-5 rounded-full" style={{ background: item.color }} /> {item.label}
+          </p>
+        ))}
+      </div>
+    ) : null;
+
   return (
     <div className="relative h-full min-h-[300px] w-full">
-      {showTraffic && trafficAvailable && trafficLegend.length ? (
-        <div className="absolute bottom-9 left-3 z-[1000] rounded-xl border border-ab-border bg-ab-card px-3 py-2 text-[11px] text-ab-muted shadow-md">
-          <p className="mb-1 font-semibold text-ab-text">Live traffic</p>
-          {trafficLegend.map((item) => (
-            <p key={item.level} className="flex items-center gap-1.5">
-              <span className="h-1.5 w-5 rounded-full" style={{ background: item.color }} /> {item.label}
-            </p>
-          ))}
-        </div>
+      {!legendInControls && trafficLegendCard ? (
+        <div className="absolute bottom-9 left-3 z-[1000]">{trafficLegendCard}</div>
       ) : null}
-
       {isPickingLocation && (
         <div className="pointer-events-none absolute inset-x-0 top-20 z-[1000] flex justify-center px-4">
           <p className="rounded-full bg-ab-text px-4 py-2 text-sm font-semibold text-ab-bg shadow-lg">
@@ -398,7 +422,9 @@ export const PropertyMap: React.FC<MapProps> = ({
           showTraffic={showTraffic}
           trafficAvailable={trafficAvailable}
           onClearNearby={onClearNearby}
-          hasSelection={Boolean(selectedProperty)}
+          hasSelection={showClearInControls && Boolean(selectedProperty)}
+          legend={legendInControls ? trafficLegendCard : null}
+          located={Boolean(currentPosition)}
           top={controlsTop}
         />
         <CameraController route={activeRoute} target={focusTarget} bottomInset={bottomInset} />
