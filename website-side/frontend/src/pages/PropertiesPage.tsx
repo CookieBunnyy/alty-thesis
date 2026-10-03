@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { MapPinned, RefreshCw, Search } from "lucide-react"
-import { API_URL } from "@/config"
+import { PUBLIC_PROPERTIES_URL, availabilityRank, sortByAvailability } from "@/lib/properties"
 import { requestJson } from "@/lib/auth"
 import { Link } from "@/components/Link"
 import { navigate, useLocation } from "@/lib/router"
@@ -18,7 +18,7 @@ const SORTS = {
   price_desc: { label: "Price: high to low", fn: (a: Property, b: Property) => b.price_total - a.price_total },
 } as const
 
-/** All available properties (live data), searchable and filterable. */
+/** All public listings (live data): available first, reserved and sold labelled. */
 export function PropertiesPage() {
   const { search } = useLocation()
   const [properties, setProperties] = useState<Property[] | null>(null)
@@ -28,9 +28,9 @@ export function PropertiesPage() {
   const [sort, setSort] = useState<keyof typeof SORTS>("newest")
 
   const load = useCallback(() => {
-    requestJson<Property[]>(`${API_URL}/api/v1/public/properties`)
+    requestJson<Property[]>(PUBLIC_PROPERTIES_URL)
       .then((data) => {
-        setProperties(data)
+        setProperties(sortByAvailability(data))
         setError("")
       })
       .catch((loadError: Error) => setError(loadError.message))
@@ -55,8 +55,10 @@ export function PropertiesPage() {
     return (properties ?? [])
       .filter((p) => !category || categoryOf(p.category)?.key === category)
       .filter((p) => !needle || `${p.title} ${p.village_name ?? ""} ${p.category ?? ""}`.toLowerCase().includes(needle))
-      .sort(SORTS[sort].fn)
+      // Available listings first, then reserved, then sold; the chosen sort within each.
+      .sort((a, b) => availabilityRank(a) - availabilityRank(b) || SORTS[sort].fn(a, b))
   }, [properties, query, category, sort])
+  const availableCount = (properties ?? []).filter((p) => availabilityRank(p) === 0).length
 
   return (
     <div className="flex min-h-dvh flex-col bg-ab-bg text-ab-text">
@@ -65,9 +67,11 @@ export function PropertiesPage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-ab-accent">Properties</p>
-            <h1 className="mt-1 text-3xl font-extrabold tracking-tight md:text-4xl">Available properties</h1>
+            <h1 className="mt-1 text-3xl font-extrabold tracking-tight md:text-4xl">All properties</h1>
             <p className="mt-1 text-ab-muted">
-              {properties ? `${shown.length} of ${properties.length} available listing${properties.length === 1 ? "" : "s"}` : "Loading listings…"}
+              {properties
+                ? `Showing ${shown.length} of ${properties.length} listing${properties.length === 1 ? "" : "s"} · ${availableCount} available, others labelled reserved or sold`
+                : "Loading listings…"}
             </p>
           </div>
           <Link to="/map" className="inline-flex items-center gap-2 self-start rounded-xl border border-ab-border-strong px-4 py-2.5 text-sm font-semibold hover:bg-ab-hover md:self-auto">

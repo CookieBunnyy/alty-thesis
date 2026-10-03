@@ -20,18 +20,20 @@ from PyQt6.QtGui import QColor, QFont, QPalette
 from PyQt6.QtWidgets import QApplication, QWidget
 
 DARK_TOKENS = {
-    "bg": "#080B0D", "sidebar": "#0C1012", "card": "#111719", "card_2": "#151B1D",
-    "input": "#0F1416", "hover": "#1A2224", "hover_2": "#222C2E", "row_alt": "#131A1C",
-    "border": "#232B2E", "border_strong": "#2F393C",
-    "text": "#F2F5F0", "text_muted": "#A3ADA6", "text_faint": "#6E7872",
+    # Neutral grays (no black): page #242424, components #3B3B3B. The website uses the
+    # same values (website-side/frontend/src/index.css), with #2E2E2E for its header/panels.
+    "bg": "#242424", "sidebar": "#3B3B3B", "card": "#3B3B3B", "card_2": "#444444",
+    "input": "#303030", "hover": "#474747", "hover_2": "#525252", "row_alt": "#3F3F3F",
+    "border": "#4A4A4A", "border_strong": "#5E5E5E",
+    "text": "#F2F2F2", "text_muted": "#BDBDBD", "text_faint": "#949494",
     "accent": "#C7F000", "accent_hover": "#D6FF33", "accent_ink": "#0B0F10",
-    "accent_soft": "#1F2A08", "accent_soft_2": "#2A3A0B",
-    "success": "#3DD68C", "success_soft": "#0F2A1E", "warning": "#F5B83D", "warning_soft": "#2E2410",
-    "danger": "#F0616D", "danger_soft": "#2E1316", "info": "#5AB4F0", "info_soft": "#0F2230",
-    "disabled": "#2A3235", "chart_bar": "#E8ECE6", "login_glow": "#141C0A",
-    # Login backdrop: deep charcoal-green gradient with soft lime light.
-    "backdrop_top": "#0E1512", "backdrop_bottom": "#06090A", "backdrop_shape": "#C7F000",
-    "backdrop_line": "#16201B", "shadow": "#000000",
+    "accent_soft": "#4A5223", "accent_soft_2": "#58632A",
+    "success": "#4ADE94", "success_soft": "#2F4A3C", "warning": "#F5B83D", "warning_soft": "#544631",
+    "danger": "#FF7A85", "danger_soft": "#573538", "info": "#6CC0F5", "info_soft": "#2E4553",
+    "disabled": "#4F4F4F", "chart_bar": "#E8E8E8", "login_glow": "#3A4220",
+    # Login backdrop: soft gray gradient with lime light.
+    "backdrop_top": "#2E2E2E", "backdrop_bottom": "#242424", "backdrop_shape": "#C7F000",
+    "backdrop_line": "#383838", "shadow": "#000000",
 }
 # Light mode: white surfaces, dark text; the lime is deepened so it stays
 # readable as text on white while buttons keep dark ink on lime.

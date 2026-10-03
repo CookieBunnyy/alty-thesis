@@ -118,7 +118,7 @@ export function HomePage() {
   return (
     <div className="min-h-dvh bg-ab-bg text-ab-text">
       {/* ---------------- HERO ---------------- */}
-      <section className="relative isolate flex min-h-[92dvh] flex-col overflow-hidden bg-[#0b120e]">
+      <section className="relative isolate flex min-h-[92dvh] flex-col overflow-hidden bg-[#242424]">
         <div className="absolute inset-0 -z-10" aria-hidden="true">
           {heroImages.length > 0 ? (
             heroImages.map((url, index) => (
@@ -133,9 +133,9 @@ export function HomePage() {
               />
             ))
           ) : (
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,#3d5a0a_0%,#0b120e_60%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,#3d5a0a_0%,#242424_60%)]" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/45 to-[#0b120e]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/45 to-[#242424]" />
         </div>
 
         <div className="absolute inset-x-0 top-0">
@@ -439,7 +439,7 @@ export function HomePage() {
 
           {/* ---------------- CTA ---------------- */}
           <section className="px-4 pb-20">
-            <Reveal className="mx-auto max-w-7xl overflow-hidden rounded-3xl bg-[#0E1512] p-8 text-white shadow-2xl md:p-14">
+            <Reveal className="mx-auto max-w-7xl overflow-hidden rounded-3xl bg-[#3B3B3B] p-8 text-white shadow-2xl md:p-14">
               <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-3xl font-extrabold tracking-tight md:text-4xl">Ready to find your next home?</h2>

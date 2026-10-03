@@ -348,8 +348,8 @@ class DashboardPage(QWidget):
             legend_row = QHBoxLayout()
             color_swatch = QLabel()
             color_swatch.setFixedSize(10, 10)
-            color_swatch.setStyleSheet(
-                f"background-color: {status_colors()[key]}; border-radius: 5px;"
+            color_swatch.setStyleSheet(  # raw: already a theme colour, no legacy mapping
+                f"/*alty-raw*/ background-color: {status_colors()[key]}; border-radius: 5px;"
             )
             legend_row.addWidget(color_swatch)
             legend_row.addWidget(label)

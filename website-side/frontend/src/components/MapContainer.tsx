@@ -77,14 +77,18 @@ const shortPrice = (value: number | null | undefined) => {
 };
 
 // Property pin: a price chip, highlighted when selected (styles in index.css).
-const propertyPin = (price: number, selected: boolean) =>
-  L.divIcon({
+// Reserved / sold listings stay on the map, muted and labelled with their status.
+const propertyPin = (price: number, selected: boolean, status?: string) => {
+  const state = String(status ?? 'AVAILABLE').toUpperCase();
+  const tag = state === 'AVAILABLE' ? '' : `<em class="ab-pin-status">${state === 'SOLD' ? 'Sold' : 'Reserved'}</em>`;
+  return L.divIcon({
     className: 'ab-pin ab-pin-wrap',
-    html: `<div class="ab-price-pin${selected ? ' is-selected' : ''}">${HOUSE_SVG}<span>${shortPrice(price)}</span></div>`,
+    html: `<div class="ab-price-pin${selected ? ' is-selected' : ''}${tag ? ' is-unavailable' : ''}">${HOUSE_SVG}<span>${shortPrice(price)}</span>${tag}</div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
     popupAnchor: [0, -30],
   });
+};
 
 const placePin = (emoji: string) =>
   L.divIcon({
@@ -478,7 +482,7 @@ export const PropertyMap: React.FC<MapProps> = ({
             <Marker
               key={`${prop.listing_id}-${isSelected}`}
               position={[prop.lat!, prop.lng!]}
-              icon={propertyPin(prop.price_total, isSelected)}
+              icon={propertyPin(prop.price_total, isSelected, prop.status)}
               zIndexOffset={isSelected ? 1000 : 0}
               title={prop.title}
               eventHandlers={{ click: () => onSelectProperty(prop) }}

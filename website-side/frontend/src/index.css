@@ -7,34 +7,36 @@
 
 /* Abellar / Alty design tokens — same values as the desktop app
    (desktop-side/frontend/app/theme.py: DARK_TOKENS / LIGHT_TOKENS).
+   Dark: page #242424, cards/components #3B3B3B; header, footer, panels and
+   section bands #2E2E2E (between the two, so cards on them stay distinct).
    Dark is the default; <html data-theme="light"> switches every ab-* utility
    (and the shadcn variables below) to the light palette. */
 @theme {
-    --color-ab-bg: #080B0D;
-    --color-ab-sidebar: #0C1012;
-    --color-ab-card: #111719;
-    --color-ab-card-2: #151B1D;
-    --color-ab-input: #0F1416;
-    --color-ab-hover: #1A2224;
-    --color-ab-border: #232B2E;
-    --color-ab-border-strong: #2F393C;
-    --color-ab-text: #F2F5F0;
-    --color-ab-muted: #A3ADA6;
-    --color-ab-faint: #6E7872;
+    --color-ab-bg: #242424;
+    --color-ab-sidebar: #2E2E2E;
+    --color-ab-card: #3B3B3B;
+    --color-ab-card-2: #444444;
+    --color-ab-input: #303030;
+    --color-ab-hover: #474747;
+    --color-ab-border: #4A4A4A;
+    --color-ab-border-strong: #5E5E5E;
+    --color-ab-text: #F2F2F2;
+    --color-ab-muted: #BDBDBD;
+    --color-ab-faint: #949494;
     --color-ab-accent: #C7F000;
     --color-ab-accent-hover: #D6FF33;
     --color-ab-ink: #0B0F10;
-    --color-ab-accent-soft: #1F2A08;
-    --color-ab-success: #3DD68C;
+    --color-ab-accent-soft: #4A5223;
+    --color-ab-success: #4ADE94;
     --color-ab-warning: #F5B83D;
-    --color-ab-danger: #F0616D;
-    --color-ab-info: #5AB4F0;
+    --color-ab-danger: #FF7A85;
+    --color-ab-info: #6CC0F5;
     /* map chrome */
-    --color-ab-overlay: rgba(12, 16, 18, 0.88);
+    --color-ab-overlay: rgba(46, 46, 46, 0.9);
     --color-ab-route: #C7F000;
-    --color-ab-route-casing: #0B0F10;
-    --color-ab-route-alt: #6E7872;
-    --color-ab-scrollbar: #2F393C;
+    --color-ab-route-casing: #242424;
+    --color-ab-route-alt: #949494;
+    --color-ab-scrollbar: #5E5E5E;
 }
 
 /* Light palette (desktop LIGHT_TOKENS). The lime is deepened to an olive
@@ -139,72 +141,74 @@
 }
 
 :root {
-    --background: #080B0D;
-    --foreground: #F2F5F0;
-    --card: #111719;
-    --card-foreground: #F2F5F0;
-    --popover: #151B1D;
-    --popover-foreground: #F2F5F0;
+    --background: #242424;
+    --foreground: #F2F2F2;
+    --card: #3B3B3B;
+    --card-foreground: #F2F2F2;
+    --popover: #444444;
+    --popover-foreground: #F2F2F2;
     --primary: #C7F000;
     --primary-foreground: #0B0F10;
-    --secondary: #151B1D;
-    --secondary-foreground: #F2F5F0;
-    --muted: #151B1D;
-    --muted-foreground: #A3ADA6;
-    --accent: #1A2224;
-    --accent-foreground: #F2F5F0;
-    --destructive: #F0616D;
-    --border: #232B2E;
-    --input: #232B2E;
+    --secondary: #444444;
+    --secondary-foreground: #F2F2F2;
+    --muted: #444444;
+    --muted-foreground: #BDBDBD;
+    --accent: #474747;
+    --accent-foreground: #F2F2F2;
+    --destructive: #FF7A85;
+    --border: #4A4A4A;
+    --input: #4A4A4A;
     --ring: #C7F000;
     --chart-1: #C7F000;
-    --chart-2: #E8ECE6;
-    --chart-3: #5AB4F0;
+    --chart-2: #E8E8E8;
+    --chart-3: #6CC0F5;
     --chart-4: #F5B83D;
-    --chart-5: #F0616D;
+    --chart-5: #FF7A85;
     --radius: 0.75rem;
-    --sidebar: #0C1012;
-    --sidebar-foreground: #F2F5F0;
+    --sidebar: #2E2E2E;
+    --sidebar-foreground: #F2F2F2;
     --sidebar-primary: #C7F000;
     --sidebar-primary-foreground: #0B0F10;
-    --sidebar-accent: #1A2224;
-    --sidebar-accent-foreground: #F2F5F0;
-    --sidebar-border: #232B2E;
+    --sidebar-accent: #474747;
+    --sidebar-accent-foreground: #F2F2F2;
+    --sidebar-border: #4A4A4A;
     --sidebar-ring: #C7F000;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.424 0.199 265.638);
-    --primary-foreground: oklch(0.97 0.014 254.604);
-    --secondary: oklch(0.274 0.006 286.033);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.809 0.105 251.813);
-    --chart-2: oklch(0.623 0.214 259.815);
-    --chart-3: oklch(0.546 0.245 262.881);
-    --chart-4: oklch(0.488 0.243 264.376);
-    --chart-5: oklch(0.424 0.199 265.638);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.623 0.214 259.815);
-    --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    /* Same as :root (dark is the default palette). */
+    --background: #242424;
+    --foreground: #F2F2F2;
+    --card: #3B3B3B;
+    --card-foreground: #F2F2F2;
+    --popover: #444444;
+    --popover-foreground: #F2F2F2;
+    --primary: #C7F000;
+    --primary-foreground: #0B0F10;
+    --secondary: #444444;
+    --secondary-foreground: #F2F2F2;
+    --muted: #444444;
+    --muted-foreground: #BDBDBD;
+    --accent: #474747;
+    --accent-foreground: #F2F2F2;
+    --destructive: #FF7A85;
+    --border: #4A4A4A;
+    --input: #4A4A4A;
+    --ring: #C7F000;
+    --chart-1: #C7F000;
+    --chart-2: #E8E8E8;
+    --chart-3: #6CC0F5;
+    --chart-4: #F5B83D;
+    --chart-5: #FF7A85;
+    --radius: 0.75rem;
+    --sidebar: #2E2E2E;
+    --sidebar-foreground: #F2F2F2;
+    --sidebar-primary: #C7F000;
+    --sidebar-primary-foreground: #0B0F10;
+    --sidebar-accent: #474747;
+    --sidebar-accent-foreground: #F2F2F2;
+    --sidebar-border: #4A4A4A;
+    --sidebar-ring: #C7F000;
 }
 
 @layer base {
@@ -322,6 +326,19 @@
   transform: translate(-50%, -100%) scale(1.12);
 }
 .ab-price-pin svg { width: 12px; height: 12px; }
+.ab-price-pin.is-unavailable:not(.is-selected) { color: var(--color-ab-muted); border-style: dashed; opacity: 0.9; }
+.ab-pin-status {
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 9999px;
+  padding: 2px 5px;
+  margin-left: 2px;
+  background: var(--color-ab-hover);
+  color: var(--color-ab-text);
+}
 .ab-pin-wrap:hover .ab-price-pin { border-color: var(--color-ab-accent); }
 
 /* Workplace / start marker and "you are here" dot */

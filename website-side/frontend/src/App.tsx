@@ -24,9 +24,11 @@ import { WorkplaceDialog } from "./components/WorkplaceDialog"
 import { SelectedPropertyPanel } from "./components/SelectedPropertyPanel"
 import { ContactAgentsModal } from "./components/ContactAgentsModal"
 import type { ChatMessage, Property, LocationPoint, PlaceResult, RouteSelection, TrafficStatus, TravelMode } from "./types"
-import { API_URL, CHAT_API_URL, publicUrl } from "./config"
+import { CHAT_API_URL, publicUrl } from "./config"
 import { useTheme } from "./hooks/useTheme"
 import { loadWorkplace, saveWorkplace as saveWorkplaceSession } from "./lib/workplace"
+import { loadChatSession, saveChatSession } from "./lib/chatSession"
+import { PUBLIC_PROPERTIES_URL, isAvailable, sortByAvailability } from "./lib/properties"
 import { categoryCounts, categoryLabel, categoryOf } from "./lib/categories"
 import { navigate, useLocation } from "./lib/router"
 import { RowSkeleton } from "./components/Skeleton"
@@ -34,7 +36,7 @@ import { useCommute } from "./hooks/useCommute"
 import { formatKm, formatMinutes, getCapabilities, requestCurrentPosition, reversePlace, searchPlaces } from "./lib/mapApi"
 
 // Live, AVAILABLE properties from the main Alty API (documents + central data).
-const PROPERTIES_URL = `${API_URL}/api/v1/public/properties`
+const PROPERTIES_URL = PUBLIC_PROPERTIES_URL
 const QUICK_CHAT_SUGGESTIONS = [
   "Find a condo in BGC under 8k monthly",
   "Show me 3-bedroom houses in Alabang",
@@ -49,14 +51,19 @@ const MODE_PREFERENCE: TravelMode[] = ["driving", "motorcycle", "bicycle", "walk
 export default function App() {
   const { theme } = useTheme()
   const { search } = useLocation()
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "1",
-      sender: "assistant",
-      text: "Hello! I am your real estate assistant. What is your budget and location preference?",
-      timestamp: new Date().toISOString(),
-    },
-  ])
+  // Restored from this browsing session (cleared when the site is closed).
+  const [savedChat] = useState(loadChatSession)
+  const [messages, setMessages] = useState<ChatMessage[]>(
+    () =>
+      savedChat?.messages ?? [
+        {
+          id: "1",
+          sender: "assistant",
+          text: "Hello! I am your real estate assistant. What is your budget and location preference?",
+          timestamp: new Date().toISOString(),
+        },
+      ],
+  )
   const [input, setInput] = useState<string>("")
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [activeProperties, setActiveProperties] = useState<Property[]>([])
@@ -96,9 +103,18 @@ export default function App() {
   const chatEndRef = useRef<HTMLDivElement | null>(null)
   const commute = useCommute(workplaceLocation, selectedProperty)
 
+  // With a workplace set, the map recommends: only AVAILABLE listings (the
+  // visitor can still choose "Show all"). Choosing a new workplace resets it.
+  const [showAllForWorkplace, setShowAllForWorkplace] = useState(false)
+  const availableOnly = Boolean(workplaceLocation) && !isShowingRecommendations && !showAllForWorkplace
+  const scopedProperties = useMemo(
+    () => (availableOnly ? activeProperties.filter(isAvailable) : activeProperties),
+    [activeProperties, availableOnly],
+  )
+
   const filteredProperties = useMemo(
     () =>
-      activeProperties.filter((property) => {
+      scopedProperties.filter((property) => {
         const matchesCategory = activeFilter === "all" || categoryOf(property.category)?.key === activeFilter
         const query = searchTerm.trim().toLowerCase()
 
@@ -107,7 +123,7 @@ export default function App() {
         const haystack = `${property.title ?? ""} ${property.village_name ?? ""} ${property.category ?? ""}`.toLowerCase()
         return matchesCategory && haystack.includes(query)
       }),
-    [activeProperties, activeFilter, searchTerm]
+    [scopedProperties, activeFilter, searchTerm]
   )
 
   const hasActiveProperties = activeProperties.length > 0
@@ -170,7 +186,7 @@ export default function App() {
     return () => window.clearTimeout(timer)
   }, [notice])
 
-  const loadAvailableProperties = React.useCallback(() => {
+  const loadAvailableProperties = React.useCallback((keepRecommendations = false) => {
     fetch(PROPERTIES_URL)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -178,8 +194,14 @@ export default function App() {
       })
       .then((data) => {
         if (Array.isArray(data)) {
-          setActiveProperties(data)
-          setIsShowingRecommendations(false)
+          const restored = keepRecommendations ? loadChatSession()?.recommendations : null
+          if (restored?.length) {
+            setActiveProperties(restored) // the assistant's picks from before leaving the map
+            setIsShowingRecommendations(true)
+          } else {
+            setActiveProperties(sortByAvailability(data))
+            setIsShowingRecommendations(false)
+          }
         }
         setPropertiesStatus("ready")
       })
@@ -195,8 +217,13 @@ export default function App() {
   }
 
   useEffect(() => {
-    loadAvailableProperties()
+    loadAvailableProperties(true)
   }, [loadAvailableProperties])
+
+  useEffect(() => {
+    if (propertiesStatus !== "ready") return // don't overwrite saved picks before they are restored
+    saveChatSession({ messages, recommendations: isShowingRecommendations ? activeProperties : null })
+  }, [messages, isShowingRecommendations, activeProperties, propertiesStatus])
 
   // Property names filter the list as you type; on submit the same query is
   // also looked up as a place (location or workplace).
@@ -244,7 +271,10 @@ export default function App() {
       })
 
       const data = await response.json()
-      if (data.detected_workplace) setWorkplaceLocation(data.detected_workplace)
+      if (data.detected_workplace) {
+        setWorkplaceLocation(data.detected_workplace)
+        setShowAllForWorkplace(false)
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -254,12 +284,14 @@ export default function App() {
           text: data.reply,
           timestamp: new Date().toISOString(),
           status: data.status,
-          recommendations: data.recommendations || [],
+          recommendations: (data.recommendations || []).filter(isAvailable),
         },
       ])
 
-      if (data.recommendations?.length > 0) {
-        setActiveProperties(data.recommendations)
+      // The assistant only recommends properties that can still be bought.
+      const picks: Property[] = (data.recommendations || []).filter(isAvailable)
+      if (picks.length > 0) {
+        setActiveProperties(picks)
         setIsShowingRecommendations(true)
       }
     } catch {
@@ -311,6 +343,7 @@ export default function App() {
 
   const saveWorkplace = (place: LocationPoint) => {
     setWorkplaceLocation(place)
+    setShowAllForWorkplace(false) // a new workplace starts with available properties only
     setIsWorkplaceModalOpen(false)
     setIsPickingLocation(false)
     setPlaceResults(null)
@@ -667,7 +700,7 @@ export default function App() {
                   {isMobileView && mapSearchBar}
 
                   <div className="flex items-center gap-1.5 overflow-x-auto rounded-full border border-ab-border bg-ab-input p-1.5">
-                    {[{ key: "all", label: "All", count: activeProperties.length }, ...categoryCounts(activeProperties)].map((filter) => (
+                    {[{ key: "all", label: "All", count: scopedProperties.length }, ...categoryCounts(scopedProperties)].map((filter) => (
                       <button
                         key={filter.key}
                         type="button"
@@ -687,12 +720,26 @@ export default function App() {
                     ))}
                   </div>
 
+                  {workplaceLocation && !isShowingRecommendations && (
+                    <div className="flex items-center justify-between gap-2 rounded-xl bg-ab-accent-soft px-3 py-2 text-xs text-ab-text">
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <Briefcase className="h-3.5 w-3.5 shrink-0 text-ab-accent" />
+                        <span className="truncate">
+                          {availableOnly ? "Available properties for your workplace" : "All properties, including reserved and sold"}
+                        </span>
+                      </span>
+                      <button type="button" onClick={() => setShowAllForWorkplace((value) => !value)} className="shrink-0 font-semibold text-ab-accent hover:underline">
+                        {availableOnly ? "Show all" : "Available only"}
+                      </button>
+                    </div>
+                  )}
+
                   {isShowingRecommendations && (
                     <div className="flex items-center justify-between gap-2 rounded-xl bg-ab-accent-soft px-3 py-2 text-xs text-ab-text">
                       <span className="flex items-center gap-1.5">
                         <Sparkles className="h-3.5 w-3.5 text-ab-accent" /> Showing assistant recommendations
                       </span>
-                      <button type="button" onClick={loadAvailableProperties} className="font-semibold text-ab-accent hover:underline">
+                      <button type="button" onClick={() => loadAvailableProperties()} className="font-semibold text-ab-accent hover:underline">
                         Show all
                       </button>
                     </div>
