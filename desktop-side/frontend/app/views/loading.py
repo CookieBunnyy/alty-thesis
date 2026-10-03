@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QEvent, QObject, QRectF, Qt, QTimer
 from PyQt6.QtGui import QColor, QPainter, QPen
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QGraphicsBlurEffect, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from app.busy import busy_tracker
 from app.theme import TOKENS as T
@@ -89,16 +89,20 @@ class BusyBar(QWidget):
 
 
 class LoadingOverlay(QWidget):
-    """Covers ``target`` with a dim layer and a centered "Loading…" card."""
+    """Covers ``target`` with a dim layer and a centered "Loading…" card.
+    While shown, ``blur`` (the page content under it) is blurred."""
 
-    def __init__(self, target: QWidget) -> None:
+    BLUR_RADIUS = 9
+
+    def __init__(self, target: QWidget, blur: QWidget | None = None) -> None:
         super().__init__(target)
         self.target = target
+        self.blur = blur
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("loadingOverlay")
         dim = QColor(T["bg"])
         self.setStyleSheet(
-            f"/*alty-raw*/ QWidget#loadingOverlay {{ background: rgba({dim.red()},{dim.green()},{dim.blue()},150); }}"
+            f"/*alty-raw*/ QWidget#loadingOverlay {{ background: rgba({dim.red()},{dim.green()},{dim.blue()},90); }}"
             f" QFrame#loadingCard {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 14px; }}"
             f" QLabel#loadingText {{ color: {T['text']}; font-size: 13px; font-weight: 600; background: transparent; }}"
             f" QLabel#loadingHint {{ color: {T['text_faint']}; font-size: 11px; background: transparent; }}"
@@ -133,8 +137,18 @@ class LoadingOverlay(QWidget):
     def show_with(self, label: str) -> None:
         self.text.setText(label)
         self.setGeometry(self.target.rect())
+        if self.blur is not None and self.blur.graphicsEffect() is None:
+            effect = QGraphicsBlurEffect(self.blur)
+            effect.setBlurRadius(self.BLUR_RADIUS)
+            effect.setBlurHints(QGraphicsBlurEffect.BlurHint.PerformanceHint)
+            self.blur.setGraphicsEffect(effect)
         self.raise_()
         self.show()
+
+    def hideEvent(self, event) -> None:
+        if self.blur is not None and isinstance(self.blur.graphicsEffect(), QGraphicsBlurEffect):
+            self.blur.setGraphicsEffect(None)  # deletes the effect: content is sharp again
+        super().hideEvent(event)
 
 
 class BusyIndicators(QObject):

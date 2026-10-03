@@ -83,6 +83,10 @@ _FILIPINO = {
     "Generated from system records": "Galing sa mga rekord ng sistema",
     "Refresh": "I-refresh",
     "just now": "ngayon lang",
+    # Dashboard greeting
+    "Good morning": "Magandang umaga",
+    "Good afternoon": "Magandang hapon",
+    "Good evening": "Magandang gabi",
 }
 
 _TABLES = {"fil": _FILIPINO}

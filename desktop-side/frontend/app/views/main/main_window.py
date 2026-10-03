@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import qtawesome as qta
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QAction, QFont
@@ -92,6 +94,7 @@ QLineEdit#searchField {{ background: {t['card']}; color: {t['text']}; border: 1p
     border-radius: 10px; padding: 9px 14px; font-size: 13px; }}
 QLineEdit#searchField:focus {{ border: 1px solid {t['accent']}; }}
 QLabel#pageTitle {{ color: {t['text']}; font-size: 20px; font-weight: 800; }}
+QLabel#pageGreeting {{ color: {t['text_muted']}; font-size: 13px; }}
 """
 
 
@@ -509,8 +512,18 @@ class MainWindow(QWidget):
         self.page_title.setObjectName("pageTitle")  # styled by shell_stylesheet()
         self.page_title.setContentsMargins(0, 2, 0, 0)
 
+        # Dashboard only: "Good afternoon, <full name>" under the title.
+        self.greeting = QLabel()
+        self.greeting.setObjectName("pageGreeting")
+        self.greeting.setContentsMargins(0, 0, 0, 2)
+        self.greeting.hide()
+        title_text = QVBoxLayout()
+        title_text.setSpacing(2)
+        title_text.addWidget(self.page_title)
+        title_text.addWidget(self.greeting)
+
         title_row = QHBoxLayout()
-        title_row.addWidget(self.page_title)
+        title_row.addLayout(title_text)
         title_row.addStretch()
 
         content_layout.addWidget(self.header)
@@ -573,7 +586,7 @@ class MainWindow(QWidget):
         self.page_scroll.setWidget(self.stack)
         content_layout.addWidget(self.page_scroll, 1)
         # "Loading Agents…" over the page when a load takes a moment.
-        self.loading_overlay = LoadingOverlay(self.page_scroll)
+        self.loading_overlay = LoadingOverlay(self.page_scroll, blur=self.stack)
         self.busy_indicators = BusyIndicators(self.busy_bar, self.loading_overlay, self)
 
         shell_layout.addWidget(self.sidebar)
@@ -837,6 +850,7 @@ class MainWindow(QWidget):
             label.setText(state.role)
         for avatar in (self.header_avatar,):
             avatar.setText(initials)
+        self._update_greeting()
         self.refresh_status_chips()
         if not hasattr(self, "status_timer"):
             from PyQt6.QtCore import QTimer
@@ -857,6 +871,35 @@ class MainWindow(QWidget):
             ) if layout is not None else True
             if group_name in self.group_buttons:
                 self.group_buttons[group_name].setVisible(visible)
+
+    def _update_greeting(self) -> None:
+        on_dashboard = getattr(self, "current_page", "dashboard") == "dashboard"
+        self.greeting.setVisible(on_dashboard)
+        if on_dashboard:
+            hour = datetime.now().hour
+            hello = tr("Good morning") if hour < 12 else tr("Good afternoon") if hour < 18 else tr("Good evening")
+            today = datetime.now().strftime("%A, %B %d, %Y").replace(" 0", " ")
+            self.greeting.setText(f"{hello}, {self.controller.session.user_name} · {today}")
+
+    def refresh_account(self) -> None:
+        """Re-read the signed-in account (name, role, permissions) from the
+        server and update the header card, greeting and navigation — used
+        after the account is edited in Users & Access."""
+        state = self.controller.session.state
+        if not state.token:
+            return
+        try:
+            me = self.search_api.me(state.token)
+        except Exception:
+            return
+        self.controller.session.set_session(
+            token=state.token, user=me, role=me.get("role", state.role),
+            permissions=me.get("permissions", state.permissions), branch_id=me.get("branch_id"),
+        )
+        self.apply_session()
+        current = getattr(self, "current_page", "dashboard")
+        if state.permissions and current not in state.permissions:
+            self.show_page("dashboard")  # the new role can no longer open this page
 
     def show_page(self, key: str) -> None:
         if key not in self.pages:
@@ -881,6 +924,7 @@ class MainWindow(QWidget):
                 QSizePolicy.Policy.Preferred if other is self.pages[key] else QSizePolicy.Policy.Ignored,
             )
         self.page_title.setText(self.page_title_for_key(key))
+        self._update_greeting()
         page = self.pages[key]
         self._page_loading = True
         try:

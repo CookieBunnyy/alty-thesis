@@ -107,6 +107,9 @@ class UsersPage(DataPage):
         try:
             self.api.update_user(user["id"], dialog.payload(creating=False), token=self.token)
             self.refresh()
+            current = (self.controller.session.state.user or {}) if self.controller else {}
+            if self.controller is not None and user["id"] == current.get("id"):
+                self.controller.main_window.refresh_account()  # header card follows the edit
         except Exception as exc:
             QMessageBox.warning(self, "User not updated", error_message(exc))
 
