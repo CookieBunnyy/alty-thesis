@@ -18,10 +18,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import get_optional_client
 from app.models.agent import Agent
 from app.services import reviews as review_service
 from app.models.media import PropertyMedia
 from app.models.property_listing import PropertyListing
+from app.models.user import User
 from app.services.document_storage import StorageError, read_file
 
 router = APIRouter(prefix="/public", tags=["Public website"])
@@ -121,13 +123,18 @@ def _active_agents(db: Session) -> list[Agent]:
     ).scalars())
 
 
-def _public_agent(agent: Agent, stats: dict) -> dict:
-    """Client-facing agent card. Ratings come from client reviews only."""
+def _public_agent(agent: Agent, stats: dict, viewer: User | None = None) -> dict:
+    """Client-facing agent card. Ratings come from client reviews only.
+
+    The phone number (Call / Text) is only given to signed-in website clients;
+    everyone else gets ``contact_requires_sign_in`` instead."""
     return {
         "agent_id": agent.agent_id,
         "full_name": agent.full_name,
         "agent_location": agent.agent_location,
-        "phone_number": agent.phone_number,
+        "phone_number": agent.phone_number if viewer is not None else None,
+        "has_phone": bool(agent.phone_number),
+        "contact_requires_sign_in": viewer is None,
         "status": agent.status,
         **review_service.stats_for(stats, agent.agent_id),
         # Legacy/system rating synced from Supabase (not client reviews).
@@ -136,14 +143,15 @@ def _public_agent(agent: Agent, stats: dict) -> dict:
 
 
 @router.get("/agents")
-def list_public_agents(db: Session = Depends(get_db)):
+def list_public_agents(db: Session = Depends(get_db), viewer: User | None = Depends(get_optional_client)):
     agents = _active_agents(db)
     stats = review_service.review_stats(db, [a.agent_id for a in agents])
-    return [_public_agent(agent, stats) for agent in agents]
+    return [_public_agent(agent, stats, viewer) for agent in agents]
 
 
 @router.get("/agents/{agent_id}")
-def get_public_agent(agent_id: str, limit: int = 10, offset: int = 0, db: Session = Depends(get_db)):
+def get_public_agent(agent_id: str, limit: int = 10, offset: int = 0, db: Session = Depends(get_db),
+                     viewer: User | None = Depends(get_optional_client)):
     """Public agent profile with real client reviews (newest first)."""
     agent = db.get(Agent, agent_id)
     if agent is None or str(agent.status or "").upper() != "ACTIVE":
@@ -151,7 +159,7 @@ def get_public_agent(agent_id: str, limit: int = 10, offset: int = 0, db: Sessio
     stats = review_service.review_stats(db, [agent_id])
     limit, offset = max(1, min(limit, 50)), max(0, offset)
     return {
-        **_public_agent(agent, stats),
+        **_public_agent(agent, stats, viewer),
         "completed_sales": agent.completed_sales,
         "reviews": [review_service.public_review(r)
                     for r in review_service.recent_reviews(db, agent_id, limit, offset)],
@@ -197,7 +205,7 @@ def public_home(db: Session = Depends(get_db)):
 
 @router.get("/properties/{listing_id}/nearby-agents")
 def list_nearby_agents(listing_id: int, request: Request, limit: int = 5,
-                       db: Session = Depends(get_db)):
+                       db: Session = Depends(get_db), viewer: User | None = Depends(get_optional_client)):
     """Active agents nearest to a property.
 
     Ranking uses *geographic* proximity (straight-line distance between the
@@ -220,7 +228,7 @@ def list_nearby_agents(listing_id: int, request: Request, limit: int = 5,
     stats = review_service.review_stats(db, [a.agent_id for a in agents])
 
     def card(agent: Agent) -> dict:
-        return {**_public_agent(agent, stats), "completed_sales": agent.completed_sales,
+        return {**_public_agent(agent, stats, viewer), "completed_sales": agent.completed_sales,
                 "straight_line_km": None, "road_distance_km": None, "travel_time_min": None}
 
     property_point = None

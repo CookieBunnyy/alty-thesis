@@ -12,6 +12,9 @@ from app.models.user import User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+# Same scheme, but a missing token is allowed (public pages that show more to
+# signed-in clients).
+optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 # Canonical role names (users.role). Comparisons are case-insensitive.
 ADMINISTRATOR = "Administrator"
@@ -140,6 +143,20 @@ def get_current_client(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail="Sign in with a client account to continue.")
     return user
+
+
+def get_optional_client(
+    token: str | None = Depends(optional_oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """The signed-in website client, or None (no, expired or staff token)."""
+    if not token:
+        return None
+    try:
+        user = _user_from_token(token, db)
+    except HTTPException:
+        return None
+    return user if is_client(user) and user.client_id else None
 
 
 def require_roles(*roles: str):

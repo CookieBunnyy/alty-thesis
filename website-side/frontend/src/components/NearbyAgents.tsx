@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react"
-import { CheckCircle2, ExternalLink, LoaderCircle, MapPin, MessageSquareText, Phone, UserRound } from "lucide-react"
+import { CheckCircle2, ExternalLink, LoaderCircle, LogIn, MapPin, MessageSquareText, Phone, UserRound } from "lucide-react"
 import { getNearbyAgents } from "@/lib/mapApi"
+import { useAuth } from "@/lib/auth"
+import { useLocation } from "@/lib/router"
+import { SignInToContact } from "./SignInToContact"
 import { RatingSummary } from "./Stars"
 import type { NearbyAgentsResult } from "@/types"
 
@@ -17,10 +20,15 @@ type Props = {
 export function NearbyAgents({ listingId, selectedAgentId, onSelect, onLoaded }: Props) {
   const [data, setData] = useState<NearbyAgentsResult | null>(null)
   const [error, setError] = useState("")
+  const { token, isReady } = useAuth()
+  // On the map, come back to this property after signing in.
+  const { pathname } = useLocation()
+  const returnTo = pathname === "/map" ? `/map?property=${encodeURIComponent(String(listingId))}` : undefined
 
   useEffect(() => {
+    if (!isReady) return // wait until a saved sign-in has been restored
     let current = true
-    getNearbyAgents(listingId)
+    getNearbyAgents(listingId, token)
       .then((result) => {
         if (!current) return
         setData(result)
@@ -31,7 +39,7 @@ export function NearbyAgents({ listingId, selectedAgentId, onSelect, onLoaded }:
       current = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listingId])
+  }, [listingId, token, isReady])
 
   return (
     <section aria-labelledby="nearby-agents-title" className="space-y-2">
@@ -49,6 +57,7 @@ export function NearbyAgents({ listingId, selectedAgentId, onSelect, onLoaded }:
       )}
       {error && <p className="rounded-lg border border-ab-warning/40 bg-ab-warning/10 px-3 py-2 text-xs text-ab-warning">{error}</p>}
       {data && data.agents.length === 0 && <p className="text-sm text-ab-muted">No active agents are available right now.</p>}
+      {data && data.agents.some((agent) => agent.contact_requires_sign_in) && <SignInToContact returnTo={returnTo} />}
 
       {data && data.agents.length > 0 && (
         <ul className="space-y-2">
@@ -96,6 +105,11 @@ export function NearbyAgents({ listingId, selectedAgentId, onSelect, onLoaded }:
                   </div>
                 </div>
                 <div className="mt-2.5 flex flex-wrap gap-2">
+                  {agent.contact_requires_sign_in && agent.has_phone && (
+                    <SignInToContact compact returnTo={returnTo}>
+                      <LogIn className="h-3.5 w-3.5 text-ab-accent" /> Sign in to call or text
+                    </SignInToContact>
+                  )}
                   {agent.phone_number && (
                     <>
                       <a

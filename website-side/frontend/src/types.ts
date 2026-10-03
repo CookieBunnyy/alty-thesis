@@ -148,7 +148,9 @@ export interface NearbyAgent {
   agent_id: string;
   full_name: string;
   agent_location: string | null;
-  phone_number: string | null;
+  phone_number: string | null; // only sent to signed-in clients
+  has_phone?: boolean;
+  contact_requires_sign_in?: boolean;
   client_rating: number | null; // average of client reviews
   review_count: number;
   star_rating: number | null; // legacy/system rating (not client reviews)
@@ -234,7 +236,9 @@ export interface PublicAgent {
   agent_id: string;
   full_name: string;
   agent_location: string | null;
-  phone_number: string | null;
+  phone_number: string | null; // only sent to signed-in clients
+  has_phone?: boolean;
+  contact_requires_sign_in?: boolean;
   status: string | null;
   client_rating: number | null;
   review_count: number;

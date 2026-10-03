@@ -166,7 +166,31 @@ def test_nearby_agents_use_database_agents_and_separate_distances(api, fake, db)
     assert body["agents"][2]["straight_line_km"] is None
     assert body["routing"]["available"] is True
     assert "total_commission" not in near and "performance_score" not in near
-    assert near["phone_number"] == "0917 000 0000"
+    # Call / Text numbers are for signed-in clients only.
+    assert near["phone_number"] is None and near["has_phone"] and near["contact_requires_sign_in"]
+
+
+def test_agent_phone_numbers_require_a_signed_in_client(api, fake, db, admin):
+    from tests.test_client_portal import _register
+
+    listing_id = _seed_property_and_agents(db)
+    paths = [f"/api/v1/public/properties/{listing_id}/nearby-agents", "/api/v1/public/agents/AGT-2",
+             "/api/v1/public/agents"]
+
+    def phones(headers=None):
+        out = []
+        for path in paths:
+            body = api.get(path, headers=headers or {}).json()
+            agents = body["agents"] if isinstance(body, dict) and "agents" in body else body
+            for agent in agents if isinstance(agents, list) else [agents]:
+                out.append(agent["phone_number"])
+        return out
+
+    assert set(phones()) == {None}                                   # anonymous
+    assert set(phones({"Authorization": "Bearer not-a-token"})) == {None}  # bad token: still public
+    assert set(phones(admin)) == {None}                              # staff token is not a client
+    client = _register(api)
+    assert set(phones(client)) == {"0917 000 0000"}                  # signed-in client
 
 
 def test_nearby_agents_without_routing_keep_road_fields_empty(api, fake, db):

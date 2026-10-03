@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react"
-import { ArrowLeft, MapPin, MessageSquareText, Phone } from "lucide-react"
+import { ArrowLeft, LogIn, MapPin, MessageSquareText, Phone } from "lucide-react"
 import { API_URL } from "@/config"
-import { requestJson } from "@/lib/auth"
+import { requestJson, useAuth } from "@/lib/auth"
 import { Link } from "@/components/Link"
 import { SiteHeader } from "@/components/SiteHeader"
 import { SiteFooter } from "@/components/SiteFooter"
+import { SignInToContact } from "@/components/SignInToContact"
 import { ReviewCard } from "@/components/ReviewCard"
 import { RatingSummary } from "@/components/Stars"
 import { Skeleton } from "@/components/Skeleton"
@@ -18,11 +19,13 @@ export function AgentPage({ agentId }: { agentId: string }) {
   const [reviews, setReviews] = useState<PublicReview[]>([])
   const [error, setError] = useState("")
   const [loadingMore, setLoadingMore] = useState(false)
+  const { token, isReady } = useAuth()
   const url = `${API_URL}/api/v1/public/agents/${encodeURIComponent(agentId)}`
 
   useEffect(() => {
     let current = true
-    requestJson<AgentProfile>(`${url}?limit=${PAGE}`)
+    if (!isReady) return // wait until a saved sign-in has been restored
+    requestJson<AgentProfile>(`${url}?limit=${PAGE}`, {}, token)
       .then((data) => {
         if (!current) return
         setAgent(data)
@@ -32,12 +35,12 @@ export function AgentPage({ agentId }: { agentId: string }) {
     return () => {
       current = false
     }
-  }, [url])
+  }, [url, token, isReady])
 
   const loadMore = async () => {
     setLoadingMore(true)
     try {
-      const data = await requestJson<AgentProfile>(`${url}?limit=${PAGE}&offset=${reviews.length}`)
+      const data = await requestJson<AgentProfile>(`${url}?limit=${PAGE}&offset=${reviews.length}`, {}, token)
       setReviews((current) => [...current, ...data.reviews])
     } finally {
       setLoadingMore(false)
@@ -90,6 +93,11 @@ export function AgentPage({ agentId }: { agentId: string }) {
                 )}
                 <div className="mt-2"><RatingSummary rating={agent.client_rating} count={agent.review_count} /></div>
               </div>
+              {!phone && agent.contact_requires_sign_in && agent.has_phone && (
+                <SignInToContact>
+                  <LogIn className="h-4 w-4" /> Sign in to call or text
+                </SignInToContact>
+              )}
               {phone && (
                 <div className="flex gap-2">
                   <a href={`tel:${phone}`} className="inline-flex items-center gap-2 rounded-xl bg-ab-accent px-4 py-2.5 text-sm font-semibold text-ab-ink"><Phone className="h-4 w-4" /> Call</a>

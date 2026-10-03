@@ -20,10 +20,10 @@ const FRIENDLY: Record<number, string> = {
   503: "Route information is currently unavailable.",
 }
 
-async function getJson<T>(url: string): Promise<T> {
+async function getJson<T>(url: string, token?: string | null): Promise<T> {
   let response: Response
   try {
-    response = await fetch(url)
+    response = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
   } catch {
     throw new MapApiError("Can't reach the ALTY server. Check your connection and try again.")
   }
@@ -83,9 +83,11 @@ export const reversePlace = (lat: number, lng: number) =>
     getJson<{ result: PlaceResult | null }>(`${MAP_URL}/reverse-geocode?lat=${coord(lat)}&lng=${coord(lng)}`),
   ).then((data) => data.result)
 
-export const getNearbyAgents = (listingId: number | string) =>
-  cached(`agents:${listingId}`, () =>
-    getJson<NearbyAgentsResult>(`${API_URL}/api/v1/public/properties/${listingId}/nearby-agents`),
+// Agents' phone numbers are only returned to a signed-in client, so the
+// cache keeps signed-in and signed-out answers apart.
+export const getNearbyAgents = (listingId: number | string, token?: string | null) =>
+  cached(`agents:${listingId}:${token ? token.slice(-16) : "public"}`, () =>
+    getJson<NearbyAgentsResult>(`${API_URL}/api/v1/public/properties/${listingId}/nearby-agents`, token),
   )
 
 export const trafficTileUrl = (theme: "dark" | "light") => `${MAP_URL}/traffic/tiles/{z}/{x}/{y}.png?theme=${theme}`
