@@ -7,15 +7,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import supabase
 from keywords import (
+    AREA_REGEX,
     WORKPLACE_REGEX,
     extract_preferences,
+    is_valid_area_candidate,
     is_valid_location_candidate,
     normalize_input,
     parse_max_commute_time,
 )
 from ml.recommender import PropertyRecommender
 from schemas import UserPrompt
-from services.geocoding import calculate_osrm_commute, geocode_location
+from services.geocoding import calculate_osrm_commute, distance_km, geocode_location
 from services.property_service import format_listing_row
 
 # Minimum TF-IDF similarity for a message to count as a property request.
@@ -128,8 +130,12 @@ async def chat_assistant(prompt: UserPrompt):
         prompt.workplace_name,
     )
     detected_workplace = None
-    geocode_failed = False
+    unlocated_workplace = None  # named, but the map lookup failed
 
+    # "I work at X" sets the workplace; "near / in / close to X" is only where
+    # the property should be. A failed lookup never stops the search: the
+    # scikit-learn ranking still matches the place name against listing text.
+    area_name = area_point = None
     workplace_match = WORKPLACE_REGEX.search(normalized_message)
     if workplace_match:
         candidate = workplace_match.group(1).strip()
@@ -139,20 +145,19 @@ async def chat_assistant(prompt: UserPrompt):
                 work_lat, work_lng, work_name = geo["lat"], geo["lng"], geo["name"]
                 detected_workplace = geo
             else:
-                geocode_failed = True
+                unlocated_workplace = candidate
+    else:
+        area_match = AREA_REGEX.search(normalized_message)
+        candidate = area_match.group(1).strip() if area_match else ""
+        if candidate and is_valid_area_candidate(candidate):
+            area_name = candidate
+            area_point = geocode_location(candidate)
 
     max_commute_mins = parse_max_commute_time(normalized_message)
 
-    if geocode_failed and not has_money:
-        return {
-            "status": "rejected",
-            "reply": "I couldn't locate that workplace address. Could you try a more specific name (e.g., 'BGC Taguig' or 'Makati CBD')?",
-            "recommendations": [],
-        }
-
     # ---- is this a property request? (replaces the gibberish + no-criteria rules) ----
     in_domain = recommender.is_in_domain(normalized_message, DOMAIN_THRESHOLD)
-    if not (in_domain or has_money or work_name):
+    if not (in_domain or has_money or work_name or area_name or unlocated_workplace):
         return {
             "status": "casual_chat",
             "reply": "Hello! I am your real estate assistant. Tell me your budget, the kind of property you want, or your workplace (e.g., 'I work at BGC Taguig').",
@@ -189,6 +194,11 @@ async def chat_assistant(prompt: UserPrompt):
             c["commute_score"] *= 0.1  # soft penalty instead of a hard drop
 
         c["final"] = 0.7 * c["score"] + 0.3 * c["commute_score"]
+
+        # "near Makati": listings closer to the named area rank higher.
+        if area_point and item.get("lat") and item.get("lng"):
+            km = distance_km(float(item["lat"]), float(item["lng"]), area_point["lat"], area_point["lng"])
+            c["final"] = 0.6 * c["final"] + 0.4 * float(np.exp(-km / 5))
 
     candidates.sort(key=lambda c: -c["final"])
     results = [c["item"] for c in candidates[:3]]
@@ -227,10 +237,22 @@ async def chat_assistant(prompt: UserPrompt):
             if criteria_text
             else f"I calculated travel routes to {work_name} — "
         ) + f"here's '{results[0]['title']}', ranked by best match and commute."
+    elif area_name:
+        reply_msg = (
+            f"Here are available properties near {area_name.title()}"
+            + (f" for {criteria_text}" if criteria_text else "")
+            + f" — the best match is '{results[0]['title']}'."
+        )
     elif criteria_text:
         reply_msg = f"You mentioned wanting {criteria_text} — here's '{results[0]['title']}'."
     else:
         reply_msg = f"Here are the top {len(results)} listings matching your search."
+
+    if unlocated_workplace:
+        reply_msg += (
+            f" (I couldn't find '{unlocated_workplace}' on the map, so commute times aren't included — "
+            "you can set your workplace with the Set Workplace button.)"
+        )
 
     return {
         "status": "recommendation_found",

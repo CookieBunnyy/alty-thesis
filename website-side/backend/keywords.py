@@ -6,6 +6,7 @@ import re
 GENERIC_LOCATION_WORDS = {
     "location", "area", "place", "site", "office", "work",
     "workplace", "job", "here", "there", "commute", "property",
+    "me", "my", "it", "budget", "total", "month", "mins", "minutes",
 }
 
 _STOP = r"(?:,|\.|$|\b(?:and|but|find|with|under)\b)"
@@ -22,9 +23,15 @@ WORKPLACE_REGEX = re.compile(
     r"|office\s+(?:at|in)\b"
     r"|based\s+(?:at|in)\b"
     r"|job\s+at\b"
-    r"|near\b"
-    r"|close\s+to\b"
     r")\s+([a-zA-Z0-9\s]+?)" + _STOP,
+    re.IGNORECASE,
+)
+
+# Where the visitor wants the PROPERTY ("near Makati", "close to BGC", "in
+# Pasig"): a location preference used for ranking, never a workplace. Checked
+# only when WORKPLACE_REGEX did not match, so "I work in Makati" stays a workplace.
+AREA_REGEX = re.compile(
+    r"\b(?:near|nearby|close\s+to|around|in|at)\s+(?:the\s+)?([a-zA-Z][a-zA-Z0-9\s]*?)" + _STOP,
     re.IGNORECASE,
 )
 
@@ -124,3 +131,15 @@ def extract_preferences(text: str) -> dict:
         "monthly_budget": monthly_budget,
         "is_downpayment": is_downpayment_mention(text),
     }
+
+_AREA_SKIP_FIRST = {"a", "an", "my", "your", "our", "this", "that", "the", "least", "most", "front", "terms"}
+
+
+def is_valid_area_candidate(candidate: str) -> bool:
+    """A short place name ("Makati", "BGC Taguig"), not a phrase like "a gated village"."""
+    words = candidate.lower().split()
+    return (
+        is_valid_location_candidate(candidate)
+        and len(words) <= 3
+        and words[0] not in _AREA_SKIP_FIRST
+    )
