@@ -30,7 +30,7 @@ from app.views.main.pages.documents import DocumentsPage
 from app.views.main.pages.dss import DssPage
 from app.views.main.pages.forecasting import ForecastingPage
 from app.views.main.pages.media import MediaPage
-from app.views.main.pages.partners import PARTNERS, PartnersPage
+from app.views.main.pages.partners import PartnersPage
 from app.views.main.pages.properties import PropertiesPage
 from app.views.main.pages.settings import SettingsPage
 from app.views.main.pages.transactions import TransactionsPage
@@ -552,7 +552,7 @@ class MainWindow(QWidget):
         self.pages = {
             "dashboard": DashboardPage(self.controller),
             "properties": PropertiesPage(self.controller),
-            "partners": PartnersPage(),
+            "partners": PartnersPage(self.controller),
             "clients": ClientsPage(self.controller),
             "transactions": TransactionsPage(self.controller),
             "documents": DocumentsPage(self.controller),
@@ -814,13 +814,7 @@ class MainWindow(QWidget):
 
             QMessageBox.warning(self, "Search failed", error_message(exc))
             return
-        partners_page = self.pages.get("partners")
-        partner_names = PARTNERS
-        if partners_page is not None and (not permissions or "partners" in permissions):
-            results["partners"] = [
-                {"title": name, "subtitle": "Developer / partner", "page": "partners", "filter": name}
-                for name in partner_names if query.casefold() in name.casefold()
-            ]
+        # Partners now come from the server's search (the partners table).
         GlobalSearchDialog(query, results, self.open_search_result, self).exec()
 
     def open_search_result(self, page_key: str, filter_text: str) -> None:

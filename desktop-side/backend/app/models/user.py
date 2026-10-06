@@ -22,6 +22,10 @@ class User(Base):
         Uuid(as_uuid=False), ForeignKey("clients.client_id", ondelete="SET NULL"),
         nullable=True, unique=True,
     )
+    # Staff accounts of agents: the agent record they are (for "My Work").
+    agent_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("agents.agent_id", ondelete="SET NULL"), nullable=True, unique=True,
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

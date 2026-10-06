@@ -1,4 +1,5 @@
-import { useEffect } from "react"
+import { lazy, Suspense, useEffect } from "react"
+import { LoaderCircle } from "lucide-react"
 import App from "./App.tsx"
 import { Link } from "@/components/Link"
 import { matchPath, useLocation } from "@/lib/router"
@@ -8,6 +9,9 @@ import { AuthPage } from "./pages/AuthPage"
 import { AccountPage } from "./pages/AccountPage"
 import { AgentPage } from "./pages/AgentPage"
 import { SiteHeader } from "./components/SiteHeader"
+
+// Management System: its own bundle, downloaded only by staff who open /manage.
+const ManageApp = lazy(() => import("./manage/ManageApp"))
 
 const TITLES: Record<string, string> = {
   "/": "Abellar Realty — Real Estate Property Discovery and Services",
@@ -33,6 +37,19 @@ function NotFound() {
 
 export function AppRoutes() {
   const { pathname } = useLocation()
+  if (pathname === "/manage" || pathname.startsWith("/manage/")) {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex min-h-dvh items-center justify-center bg-ab-bg text-ab-muted" role="status">
+            <LoaderCircle className="mr-2 h-5 w-5 animate-spin text-ab-accent" /> Loading…
+          </div>
+        }
+      >
+        <ManageApp />
+      </Suspense>
+    )
+  }
   // Keyed wrapper: each page fades in when you switch pages.
   return (
     <div key={pathname} className="ab-page-in">

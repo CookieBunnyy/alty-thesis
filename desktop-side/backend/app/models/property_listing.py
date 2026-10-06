@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -164,4 +164,8 @@ class PropertyListing(Base):
     status_changed_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         nullable=True,
+    )
+    # Developer / partner of this listing (kept in ALTY; not a Supabase column).
+    partner_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("partners.id", ondelete="SET NULL"), nullable=True, index=True,
     )

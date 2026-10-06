@@ -14,6 +14,7 @@ from app.core.security import (
     require_admin,
     require_management,
 )
+from app.models.agent import Agent
 from app.models.role import Role
 from app.models.user import User
 from app.schemas.user import PasswordReset, UserCreate, UserResponse, UserUpdate
@@ -29,10 +30,24 @@ def _valid_role(role: str) -> str:
     return canonical
 
 
-def _serialize(user: User) -> dict:
+def _serialize(user: User, db: Session | None = None) -> dict:
     data = UserResponse.model_validate(user).model_dump()
     data["role"] = canonical_role(user.role)
+    agent = db.get(Agent, user.agent_id) if db is not None and user.agent_id else None
+    data["agent_name"] = agent.full_name if agent else None
     return data
+
+
+def _valid_agent_link(db: Session, agent_id: str | None, user_id: int | None = None) -> str | None:
+    """An agent record may be linked to one staff account only."""
+    if not agent_id:
+        return None
+    if db.get(Agent, agent_id) is None:
+        raise HTTPException(status_code=422, detail=f"Agent {agent_id} not found")
+    other = db.execute(select(User).where(User.agent_id == agent_id)).scalar_one_or_none()
+    if other is not None and other.id != user_id:
+        raise HTTPException(status_code=409, detail=f"Agent {agent_id} is already linked to @{other.username}")
+    return agent_id
 
 
 def _active_admins(db: Session) -> int:
@@ -52,7 +67,7 @@ def get_roles(db: Session = Depends(get_db), _user: User = Depends(require_manag
 def get_users(db: Session = Depends(get_db), _user: User = Depends(require_management)):
     # Website client accounts are managed through the website, not here.
     staff = select(User).where(func.lower(User.role) != "client").order_by(User.username)
-    return [_serialize(user) for user in db.execute(staff).scalars()]
+    return [_serialize(user, db) for user in db.execute(staff).scalars()]
 
 
 @router.post("", response_model=UserResponse, status_code=201)
@@ -60,14 +75,16 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), actor: User 
     if db.execute(select(User).where(User.username == payload.username)).scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Username already exists")
     user = User(username=payload.username, full_name=payload.full_name, role=_valid_role(payload.role),
-                password_hash=get_password_hash(payload.password), is_active=payload.is_active)
+                password_hash=get_password_hash(payload.password), is_active=payload.is_active,
+                agent_id=_valid_agent_link(db, payload.agent_id))
     db.add(user)
     db.flush()
     record_audit(db, "USER_CREATED", actor=actor, entity_type="users", entity_id=user.id,
-                 details={"username": user.username, "role": user.role, "is_active": user.is_active})
+                 details={"username": user.username, "role": user.role, "is_active": user.is_active,
+                          "agent_id": user.agent_id})
     db.commit()
     db.refresh(user)
-    return _serialize(user)
+    return _serialize(user, db)
 
 
 @router.put("/{user_id}", response_model=UserResponse)
@@ -79,6 +96,8 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     changes = payload.model_dump(exclude_unset=True)
     if "role" in changes:
         changes["role"] = _valid_role(changes["role"])
+    if "agent_id" in changes:
+        changes["agent_id"] = _valid_agent_link(db, changes["agent_id"], user.id)
     was_admin = canonical_role(user.role) == ADMINISTRATOR and user.is_active
     stays_admin = (
         changes.get("role", canonical_role(user.role)) == ADMINISTRATOR
@@ -100,7 +119,7 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
                      details={"username": user.username, "changes": audit_changes})
     db.commit()
     db.refresh(user)
-    return _serialize(user)
+    return _serialize(user, db)
 
 
 @router.post("/{user_id}/reset-password", status_code=204)

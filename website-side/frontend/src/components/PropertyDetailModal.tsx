@@ -108,11 +108,11 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
 
           <button
             onClick={() => setIsContactOpen(true)}
-            title="Call or text an agent near this property"
+            title="Reserve or buy through an agent near this property"
             className="flex items-center gap-1.5 px-5 py-2 bg-ab-accent text-ab-ink rounded-xl text-sm font-medium hover:bg-ab-accent-hover transition shadow-sm"
           >
             <PhoneCall className="h-4 w-4" />
-            <span>Contact Agent</span>
+            <span>Reserve / Purchase</span>
           </button>
         </div>
       </div>

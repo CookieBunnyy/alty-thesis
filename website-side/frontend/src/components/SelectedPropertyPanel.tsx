@@ -110,7 +110,7 @@ export function SelectedPropertyPanel({
           onClick={onContactAgent}
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-ab-accent px-3 text-sm font-semibold text-ab-ink transition hover:bg-ab-accent-hover"
         >
-          <PhoneCall className="h-4 w-4" /> Contact Agent
+          <PhoneCall className="h-4 w-4" /> Reserve / Purchase
         </button>
         <button
           type="button"

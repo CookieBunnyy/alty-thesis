@@ -421,6 +421,8 @@ export default function App() {
     const property = activeProperties.find((item) => String(item.listing_id) === linkedPropertyId)
     if (property) {
       selectOnMap(property)
+      // Back from signing in for "Reserve / Purchase": reopen the agents.
+      if (search.get("reserve") === "1") setContactProperty(property)
     } else {
       setNotice("That property is no longer available.")
     }

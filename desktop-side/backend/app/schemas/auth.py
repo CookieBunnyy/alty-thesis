@@ -30,3 +30,4 @@ class CurrentUser(BaseModel):
     branch_id: int | None = None
     is_active: bool
     last_login_at: datetime | None = None
+    agent_id: str | None = None

@@ -1,18 +1,25 @@
 import { useEffect } from "react"
-import { FileText, Phone, X } from "lucide-react"
+import { FileText, LoaderCircle, LockKeyhole, Phone, X } from "lucide-react"
 import type { Property } from "../types"
 import { NearbyAgents } from "./NearbyAgents"
 import { categoryLabel } from "@/lib/categories"
+import { useAuth } from "@/lib/auth"
+import { Link } from "./Link"
 
 type Props = {
   property: Property
   onClose: () => void
 }
 
-/** Contact an agent near the property. Reservations and purchases are not
- *  made on the website: the agent records them from the client's documents,
- *  which the filing manager uploads to the Document Repository. */
+/** "Reserve / Purchase": signed-in clients see the agents near the property
+ *  and call or text one of them. Nothing is booked on the website: the agent
+ *  records the reservation or sale from the client's documents, which the
+ *  filing manager uploads to the Document Repository. Visitors who aren't
+ *  signed in are asked to sign in first and come back to this property. */
 export function ContactAgentsModal({ property, onClose }: Props) {
+  const { client, isReady } = useAuth()
+  // After signing in: the map, this property selected, this window open again.
+  const next = encodeURIComponent(`/map?property=${property.listing_id}&reserve=1`)
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose()
     window.addEventListener("keydown", onKey)
@@ -38,7 +45,7 @@ export function ContactAgentsModal({ property, onClose }: Props) {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ab-muted">Interested in this property?</p>
             <h2 className="mt-1 text-xl font-semibold text-ab-text" id="contact-agent-title">
-              Contact an agent
+              {client ? "Reserve or purchase" : "Sign in to continue"}
             </h2>
           </div>
           <button aria-label="Close" className="rounded-lg p-2 text-ab-muted hover:bg-ab-hover" onClick={onClose} type="button">
@@ -58,14 +65,36 @@ export function ContactAgentsModal({ property, onClose }: Props) {
             <p className="mt-2 text-lg font-bold text-ab-accent">{formattedPrice}</p>
           </section>
 
-          <NearbyAgents listingId={property.listing_id} />
+          {!isReady ? (
+            <p className="flex items-center gap-2 text-sm text-ab-muted" role="status">
+              <LoaderCircle className="h-4 w-4 animate-spin text-ab-accent" /> Checking your account…
+            </p>
+          ) : !client ? (
+            <section className="rounded-xl border border-ab-accent/40 bg-ab-accent-soft p-5 text-center" aria-label="Sign in required">
+              <LockKeyhole className="mx-auto h-7 w-7 text-ab-accent" />
+              <p className="mt-2 font-semibold text-ab-text">Sign in to continue</p>
+              <p className="mt-1 text-sm text-ab-muted">
+                Please sign in or create an account to proceed with your property reservation.
+              </p>
+              <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
+                <Link to={`/signin?next=${next}`} className="rounded-xl bg-ab-accent px-5 py-2.5 text-sm font-semibold text-ab-ink transition hover:bg-ab-accent-hover">
+                  Sign In
+                </Link>
+                <Link to={`/signup?next=${next}`} className="rounded-xl border border-ab-border-strong px-5 py-2.5 text-sm font-semibold text-ab-text transition hover:bg-ab-hover">
+                  Create account
+                </Link>
+              </div>
+            </section>
+          ) : (
+            <NearbyAgents listingId={property.listing_id} />
+          )}
 
           <section className="rounded-xl border border-ab-border p-4 text-sm text-ab-muted" aria-label="How reservations work">
             <p className="mb-2 font-semibold text-ab-text">How reserving or buying works</p>
             <ol className="space-y-2">
               <li className="flex gap-2">
                 <Phone className="mt-0.5 h-4 w-4 shrink-0 text-ab-accent" />
-                Call or text an agent above. Mention the property code so they know which one you mean.
+                Call or text an agent near the property. Mention the property code so they know which one you mean.
               </li>
               <li className="flex gap-2">
                 <FileText className="mt-0.5 h-4 w-4 shrink-0 text-ab-accent" />

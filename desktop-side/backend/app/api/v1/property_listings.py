@@ -14,6 +14,7 @@ from app.core.database import get_db
 from app.core.security import FILING_ROLES, get_current_user, require_management, require_roles
 from app.core.supabase import supabase
 from app.models.document import Document
+from app.models.partner import Partner
 from app.models.property_listing import PropertyListing
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
@@ -127,6 +128,8 @@ def update_property_listing(listing_id: int, payload: PropertyListingUpdate,
                             db: Session = Depends(get_db), user: User = Depends(require_editor)):
     listing = _listing_or_404(db, listing_id)
     values = payload.model_dump(exclude_unset=True)
+    if values.get("partner_id") is not None and db.get(Partner, values["partner_id"]) is None:
+        raise HTTPException(status_code=422, detail="Unknown partner / developer")
     for field in ("layout_type", "village_name", "details"):
         if isinstance(values.get(field), str):
             values[field] = values[field].strip() or None

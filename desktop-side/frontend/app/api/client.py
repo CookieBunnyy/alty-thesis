@@ -300,6 +300,9 @@ class ApiClient:
     def get_agent_activity(self, agent_id: str, token: str | None = None) -> dict[str, Any]:
         return self.get(f"/api/v1/agents/{quote(agent_id, safe='')}/activity", token=token)
 
+    def get_partners(self, token: str | None = None) -> list[dict[str, Any]]:
+        return self.get("/api/v1/partners", token=token)
+
     def get_agent_reviews(self, agent_id: str, token: str | None = None, limit: int = 20) -> dict[str, Any]:
         """Client rating summary, star distribution and recent reviews."""
         return self.get(f"/api/v1/agents/{quote(agent_id, safe='')}/reviews", token=token, params={"limit": limit})

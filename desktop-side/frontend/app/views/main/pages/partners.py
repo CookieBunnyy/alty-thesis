@@ -14,36 +14,17 @@ from PyQt6.QtWidgets import (
 )
 
 
-PARTNERS = [
-    "NORTHACRE",
-    "MY CITYHOMES",
-    "GREENWOOD",
-    "VANDERBILT",
-    "PHINMA",
-    "MASAITO",
-    "JEIKA",
-    "LUMINA",
-    "HESTIA",
-    "SUNTRUST",
-    "SMDC",
-    "OVALAND",
-    "PARADISIMO",
-    "ECOVERDE",
-    "NEXTASIA",
-    "DURAVILLE",
-    "AMAIA",
-    "WEECOMM",
-    "AXELA",
-    "LANDNET",
-    "LYNNVILLE",
-    "GOLDEN HORIZON",
-    "RED OAK",
-    "IDESIA",
-]
+TYPE_LABELS = {
+    "DEVELOPER": "Developer",
+    "BROKERAGE": "Brokerage",
+    "BANK": "Bank / Financing",
+    "CONTRACTOR": "Contractor",
+    "OTHER": "Partner",
+}
 
 
 class PartnerCard(QFrame):
-    def __init__(self, name: str, parent: QWidget | None = None) -> None:
+    def __init__(self, partner: dict, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
         self.setObjectName("partnerCard")
@@ -76,7 +57,7 @@ class PartnerCard(QFrame):
         information = QVBoxLayout()
         information.setSpacing(3)
 
-        name_label = QLabel(name)
+        name_label = QLabel(partner.get("name") or "—")
         name_label.setStyleSheet(
             """
             QLabel {
@@ -87,7 +68,16 @@ class PartnerCard(QFrame):
             """
         )
 
-        type_label = QLabel("Developer / Partner")
+        details = [TYPE_LABELS.get(partner.get("partner_type") or "", "Type not set")]
+        if partner.get("contact_person"):
+            details.append(partner["contact_person"])
+        if partner.get("phone_number") or partner.get("email"):
+            details.append(partner.get("phone_number") or partner.get("email"))
+        listings = int(partner.get("listings") or 0)
+        details.append(f"{listings} listing{'' if listings == 1 else 's'}"
+                       + (f" · {partner.get('available_listings', 0)} available" if listings else ""))
+        type_label = QLabel("  ·  ".join(details))
+        type_label.setWordWrap(True)
         type_label.setStyleSheet(
             """
             QLabel {
@@ -104,19 +94,20 @@ class PartnerCard(QFrame):
         layout.addStretch()
 
         # Status
-        status = QLabel("ACTIVE")
+        active = str(partner.get("status") or "").upper() == "ACTIVE"
+        status = QLabel("ACTIVE" if active else "INACTIVE")
         status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         status.setStyleSheet(
             """
             QLabel {
-                background-color: #e5efdc;
-                color: #486b2a;
+                background-color: %s;
+                color: %s;
                 border-radius: 10px;
                 padding: 4px 9px;
                 font-size: 10px;
                 font-weight: 700;
             }
-            """
+            """ % (("#e5efdc", "#486b2a") if active else ("#e5e7e3", "#65745b"))
         )
 
         layout.addWidget(status)
@@ -138,13 +129,31 @@ class PartnerCard(QFrame):
 
 
 class PartnersPage(QWidget):
-    def __init__(self) -> None:
+    """Partners / developers from the database (GET /api/v1/partners).
+    Added and edited by management on the web Management System."""
+
+    def __init__(self, controller=None) -> None:
         super().__init__()
 
-        self.partners = PARTNERS.copy()
+        self.controller = controller
+        self.partners: list[dict] = []
 
         self._build_ui()
         self._populate_partners()
+
+    def refresh(self) -> None:
+        """Called by the main window each time the page is opened."""
+        from app.api.client import ApiClient, error_message
+
+        token = self.controller.session.state.token if self.controller else None
+        try:
+            self.partners = ApiClient().get_partners(token=token)
+        except Exception as exc:
+            self.partners = []
+            self._populate_partners()
+            self.count_label.setText(f"Couldn't load partners: {error_message(exc)}")
+            return
+        self._filter_partners(self.search_input.text())
 
     # ---------------------------------------------------------
     # UI
@@ -168,7 +177,8 @@ class PartnersPage(QWidget):
        
 
         subtitle = QLabel(
-            "Abellar Realty's property developers and business partners."
+            "Abellar Realty's property developers and business partners. "
+            "Management adds and edits them in the web Management System."
         )
         subtitle.setStyleSheet(
             """
@@ -282,7 +292,7 @@ class PartnersPage(QWidget):
 
     def _populate_partners(
         self,
-        partners: list[str] | None = None,
+        partners: list[dict] | None = None,
     ) -> None:
 
         if partners is None:
@@ -338,7 +348,10 @@ class PartnersPage(QWidget):
             filtered = [
                 partner
                 for partner in self.partners
-                if search in partner.lower()
+                if search in " ".join(
+                    str(partner.get(key) or "")
+                    for key in ("name", "partner_type", "contact_person", "email", "phone_number")
+                ).lower()
             ]
 
         self._populate_partners(filtered)

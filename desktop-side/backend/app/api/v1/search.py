@@ -9,6 +9,7 @@ from app.core.security import get_current_user
 from app.models.agent import Agent
 from app.models.client import Client
 from app.models.document import Document
+from app.models.partner import Partner
 from app.models.property_listing import PropertyListing
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
@@ -99,5 +100,17 @@ def global_search(
         "page": "documents",
         "filter": item.document_name,
     } for item in documents]
+
+    partners = db.execute(select(Partner).where(or_(
+        Partner.name.ilike(pattern), Partner.contact_person.ilike(pattern), Partner.email.ilike(pattern),
+    )).order_by(Partner.name).limit(limit)).scalars().all()
+    results["partners"] = [{
+        "id": str(item.id),
+        "title": item.name,
+        "subtitle": " · ".join(filter(None, [(item.partner_type or "Partner").replace("_", " ").title(), item.status,
+                                             item.contact_person])),
+        "page": "partners",
+        "filter": item.name,
+    } for item in partners]
 
     return {"query": q, "total": sum(len(group) for group in results.values()), "results": results}

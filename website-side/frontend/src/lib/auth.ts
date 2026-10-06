@@ -10,15 +10,20 @@ export const CLIENT_URL = `${API_URL}/api/v1/client`
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  /** The response's ``detail`` (e.g. {message, existing_document} for a duplicate upload). */
+  detail: unknown
+  constructor(message: string, status: number, detail?: unknown) {
     super(message)
     this.status = status
+    this.detail = detail
   }
 }
 
 const detailText = (payload: unknown, fallback: string) => {
   const detail = (payload as { detail?: unknown })?.detail
   if (typeof detail === "string") return detail
+  if (detail && typeof detail === "object" && typeof (detail as { message?: unknown }).message === "string")
+    return (detail as { message: string }).message
   if (Array.isArray(detail)) return detail.map((item) => String(item?.msg ?? item).replace(/^Value error, /, "")).join("; ")
   return fallback
 }
@@ -30,7 +35,8 @@ export async function requestJson<T>(url: string, init: RequestInit = {}, token?
       ...init,
       headers: {
         Accept: "application/json",
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        // JSON bodies only; FormData (file uploads) sets its own multipart type.
+        ...(typeof init.body === "string" ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...init.headers,
       },
@@ -39,7 +45,8 @@ export async function requestJson<T>(url: string, init: RequestInit = {}, token?
     throw new ApiError("Can't reach Abellar Realty right now. Check your connection and try again.", 0)
   }
   const payload = await response.json().catch(() => ({}))
-  if (!response.ok) throw new ApiError(detailText(payload, "Something went wrong. Please try again."), response.status)
+  if (!response.ok)
+    throw new ApiError(detailText(payload, "Something went wrong. Please try again."), response.status, (payload as { detail?: unknown })?.detail)
   return payload as T
 }
 

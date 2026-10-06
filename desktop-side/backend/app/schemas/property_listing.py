@@ -97,6 +97,7 @@ class PropertyListingResponse(BaseModel):
     last_synced_at: datetime | None = None
     created_at: datetime | None = None
     status_changed_at: datetime | None = None
+    partner_id: int | None = None  # developer / partner (ALTY only)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -127,6 +128,7 @@ class PropertyListingUpdate(BaseModel):
     has_garage: bool | None = None
     garage_spaces: int | None = Field(default=None, ge=0)
     status: str | None = None
+    partner_id: int | None = None
 
     model_config = ConfigDict(extra="forbid")
 

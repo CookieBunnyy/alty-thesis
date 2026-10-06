@@ -11,6 +11,7 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     role: str
     is_active: bool = True
+    agent_id: str | None = None  # link to the agent record (agent accounts)
 
     @field_validator("username", "full_name", mode="before")
     @classmethod
@@ -24,6 +25,7 @@ class UserUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=200)
     role: str | None = None
     is_active: bool | None = None
+    agent_id: str | None = None
 
 
 class PasswordReset(BaseModel):
@@ -40,6 +42,8 @@ class UserResponse(BaseModel):
     is_active: bool
     branch_id: int | None = None
     last_login_at: datetime | None = None
+    agent_id: str | None = None
+    agent_name: str | None = None
     created_at: datetime
     updated_at: datetime
 

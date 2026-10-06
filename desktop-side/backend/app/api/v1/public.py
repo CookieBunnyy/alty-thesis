@@ -48,6 +48,19 @@ class _RateLimiter:
                 raise HTTPException(status_code=429, detail=detail)
             hits.append(now)
 
+    def recent(self, key: str, window: float) -> int:
+        """How many hits ``key`` has inside ``window`` seconds (no new hit)."""
+        now = time.monotonic()
+        with self._lock:
+            hits = self._hits[key]
+            while hits and now - hits[0] > window:
+                hits.popleft()
+            return len(hits)
+
+    def hit(self, key: str) -> None:
+        with self._lock:
+            self._hits[key].append(time.monotonic())
+
 
 
 def _media_urls(db: Session, listing_ids: list[int]) -> dict[int, list[str]]:

@@ -231,3 +231,15 @@ def test_global_search_spans_entities(api, admin, agents):
     assert azure["properties"][0]["title"].startswith("Test Property - Azure")
     assert api.get("/api/v1/search", params={"q": "santos"}).status_code == 401
     assert api.get("/api/v1/search", headers=admin, params={"q": "x"}).status_code == 422
+
+
+def test_staff_login_failures_are_throttled(api):
+    _make_user("throttled", "Employee")
+    for _ in range(10):
+        bad = api.post("/api/v1/auth/login", data={"username": "throttled", "password": "wrong"})
+        assert bad.status_code == 401
+    # Locked for this username, even with the right password; other accounts still work.
+    locked = api.post("/api/v1/auth/login", data={"username": "throttled", "password": "password123"})
+    assert locked.status_code == 429
+    _make_user("other", "Employee")
+    assert login(api, "other")

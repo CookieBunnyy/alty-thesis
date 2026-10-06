@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.api.v1.public import _RateLimiter
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import (
@@ -35,13 +36,31 @@ def current_user_payload(user: User) -> dict:
         "branch_id": user.branch_id,
         "is_active": user.is_active,
         "last_login_at": user.last_login_at,
+        "agent_id": user.agent_id,
     }
 
 
+# Staff sign-in is reachable from the public website (Management sign-in), so
+# repeated failures are throttled: 10 failed attempts per username, and 60
+# attempts per address, in 15 minutes. Successful sign-ins are not counted.
+LOGIN_WINDOW = 900.0
+MAX_FAILURES_PER_USER = 10
+MAX_ATTEMPTS_PER_ADDRESS = 60
+login_limiter = _RateLimiter()
+
+
 @router.post("/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    host = request.client.host if request.client else "unknown"
+    failure_key = f"fail:{form_data.username.strip().casefold()}"
+    login_limiter.check(f"addr:{host}", MAX_ATTEMPTS_PER_ADDRESS, window=LOGIN_WINDOW,
+                        detail="Too many sign-in attempts; please wait a few minutes and try again.")
+    if login_limiter.recent(failure_key, LOGIN_WINDOW) >= MAX_FAILURES_PER_USER:
+        raise HTTPException(status_code=429,
+                            detail="Too many failed sign-in attempts for this account; try again in 15 minutes.")
     user = db.query(User).filter(User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.password_hash):
+        login_limiter.hit(failure_key)
         record_audit_now(db, "LOGIN_FAILED", actor=form_data.username[:120] or "UNKNOWN",
                          entity_type="users", result="FAILED",
                          details={"reason": "invalid credentials"})

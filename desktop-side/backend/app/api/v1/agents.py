@@ -69,6 +69,22 @@ def get_agent_count(
 # GET SINGLE AGENT
 # =========================================================
 
+@router.get("/me/work")
+def get_my_work(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """The signed-in staff member's own agent work (accounts linked to an agent)."""
+    if not user.agent_id:
+        raise HTTPException(status_code=404, detail="This account isn't linked to an agent record. "
+                                                    "Ask the Administrator to link it in Users & Access.")
+    agent = db.get(Agent, user.agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {
+        "agent": _with_reviews(agent, review_service.review_stats(db, [agent.agent_id])).model_dump(mode="json"),
+        "activity": get_agent_activity(agent.agent_id, db, user),
+        "reviews": get_agent_reviews(agent.agent_id, 10, 0, db, user),
+    }
+
+
 @router.get(
     "/{agent_id}",
     response_model=AgentResponse,

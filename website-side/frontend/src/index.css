@@ -37,6 +37,9 @@
     --color-ab-route-casing: #242424;
     --color-ab-route-alt: #949494;
     --color-ab-scrollbar: #5E5E5E;
+    /* chart series (validated: lightness band, CVD separation, contrast on cards) */
+    --color-ab-chart-1: #86A300;
+    --color-ab-chart-2: #3E9BD9;
 }
 
 /* Light palette (desktop LIGHT_TOKENS). The lime is deepened to an olive
@@ -66,6 +69,8 @@
     --color-ab-route-casing: #FFFFFF;
     --color-ab-route-alt: #9AA39A;
     --color-ab-scrollbar: #CBD2C4;
+    --color-ab-chart-1: #5E7E00;
+    --color-ab-chart-2: #1F6FAE;
 
     --background: #F4F6F2;
     --foreground: #111719;
@@ -448,3 +453,8 @@
   .ab-page-in { animation: none; }
   .ab-spinner { animation-duration: 2.4s; }
 }
+
+/* Management side panel */
+@keyframes ab-drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.ab-drawer { animation: ab-drawer-in 0.22s ease-out; }
+@media (prefers-reduced-motion: reduce) { .ab-drawer { animation: none; } }

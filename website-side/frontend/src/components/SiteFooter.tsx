@@ -15,6 +15,7 @@ export function SiteFooter() {
           <Link to="/properties" className="text-ab-muted hover:text-ab-text">Properties</Link>
           <Link to="/map" className="text-ab-muted hover:text-ab-text">Property Map</Link>
           <Link to="/account" className="text-ab-muted hover:text-ab-text">My Account</Link>
+          <Link to="/manage" className="text-ab-muted hover:text-ab-text">Staff sign in</Link>
         </nav>
         <p className="text-sm text-ab-muted md:text-right">
           Questions about a property? Choose it on the map or in Properties to contact an agent near it.
