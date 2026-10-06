@@ -23,6 +23,7 @@ from app.schemas.document import (
     DocumentResponse,
     DocumentUpdate,
 )
+from app.services.document_filing import DEFAULT_FOLDERS, FINANCIAL_SUBFOLDERS, file_document, folder_path
 from app.services.audit import record_audit
 from app.services.cloud_sync import try_push_pending
 from app.services.document_classification import AUTO, canonical_type, type_catalog
@@ -46,9 +47,7 @@ logger = logging.getLogger(__name__)
 
 PROCESSING_STATUSES = {"PROCESSING", "SUCCESS", "FAILED"}
 DOCUMENT_STATUSES = PROCESSING_STATUSES | {"ARCHIVED", "SUPERSEDED"}
-DEFAULT_FOLDERS = ("Properties", "Buyers", "Sellers", "Agents", "Transactions",
-                   "Financial", "Contracts", "Archived")
-FINANCIAL_SUBFOLDERS = ("Receipts", "Vouchers", "Proof of Payment", "Invoices")
+# Category folders and automatic filing: services/document_filing.py
 
 
 def _document_or_404(db: Session, document_id: str) -> Document:
@@ -86,6 +85,7 @@ def _serialize_document(db: Session, document: Document, processing: dict | None
     details.pop("entity_events", None)
     result.update(
         folder_name=folder.name if folder else None,
+        folder_path=folder_path(db, document.folder_id),
         property_name=listing.title if listing else document.property_listing_title,
         property_listing_title=listing.title if listing else document.property_listing_title,
         extracted_fields=details.get("extracted_fields") or {},
@@ -104,6 +104,20 @@ def _record_event(db: Session, event_type: str, actor: User, document: Document 
         event_type=event_type,
         details=details or {},
     ))
+
+
+def _descendant_folder_ids(db: Session, folder_id: int) -> set[int]:
+    """A folder and everything under it (auto-filed name folders included)."""
+    children: dict[int | None, list[int]] = {}
+    for fid, parent in db.execute(select(DocumentFolder.id, DocumentFolder.parent_id)).all():
+        children.setdefault(parent, []).append(fid)
+    found, stack = {folder_id}, [folder_id]
+    while stack:
+        for child in children.get(stack.pop(), []):
+            if child not in found:
+                found.add(child)
+                stack.append(child)
+    return found
 
 
 def _validate_folder(db: Session, folder_id: int | None) -> DocumentFolder | None:
@@ -158,6 +172,14 @@ def _run_processing(db: Session, actor: User, document: Document, filename: str,
     )
     events = processing.pop("entity_events", [])
     _record_event(db, "DOCUMENT_PROCESSING", actor, document, details=processing)
+    filed = file_document(db, document, processing, actor.id)
+    if filed:
+        processing["filed_to"] = filed["path"]
+        for name in filed["created"]:
+            _record_event(db, "FOLDER_CREATED", actor, document, details={"name": name, "automatic": True})
+        _record_event(db, "DOCUMENT_FILED", actor, document, details={"folder": filed["path"], "automatic": True})
+        record_audit(db, "DOCUMENT_FILED", actor=actor, entity_type="documents", entity_id=document.document_id,
+                     details={"folder": filed["path"], "created_folders": filed["created"]})
     record_audit(
         db,
         "DOCUMENT_PROCESSED" if processing["status"] == "SUCCESS" else "DOCUMENT_PROCESSING_FAILED",
@@ -390,6 +412,7 @@ def get_documents(
     document_type: str | None = None,
     status_filter: str | None = Query(default=None, alias="status"),
     folder_id: int | None = None,
+    include_subfolders: bool = True,
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -408,7 +431,8 @@ def get_documents(
     if status_filter:
         statement = statement.where(Document.status == status_filter.upper())
     if folder_id is not None:
-        statement = statement.where(Document.folder_id == folder_id)
+        ids = _descendant_folder_ids(db, folder_id) if include_subfolders else {folder_id}
+        statement = statement.where(Document.folder_id.in_(ids))
     if search and search.strip():
         pattern = f"%{search.strip()}%"
         statement = statement.where(or_(

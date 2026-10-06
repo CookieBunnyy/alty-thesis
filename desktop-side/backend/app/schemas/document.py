@@ -11,6 +11,7 @@ class DocumentResponse(BaseModel):
     document_type: str
     folder_id: int | None = None
     folder_name: str | None = None
+    folder_path: str | None = None
     property_id: int | None = None
     property_name: str | None = None
     property_listing_id: int | None = None

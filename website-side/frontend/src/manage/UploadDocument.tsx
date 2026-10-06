@@ -4,12 +4,13 @@ import { ApiError } from "@/lib/auth"
 import { fileSize } from "./format"
 import { Button } from "./ui"
 import { useStaffAuth } from "./staffContext"
+import { indexFolders } from "./folders"
 
 export type DocType = { code: string; label: string; processing: string }
 export type Folder = { id: number; name: string; parent_id: number | null; is_archived: boolean }
 export type DocumentRecord = {
   document_id: string; document_name: string; document_type: string; status: string; version: number
-  folder_id: number | null; folder_name: string | null; processing_error: string | null; processing_stage: string | null
+  folder_id: number | null; folder_name: string | null; folder_path?: string | null; processing_error: string | null; processing_stage: string | null
   [key: string]: unknown
 }
 
@@ -119,9 +120,14 @@ export function UploadDocument({ types, folders, defaultFolder, versionOf, onClo
           </label>
           <label className="block text-sm font-medium">Folder
             <select className={field} value={folder} onChange={(e) => setFolder(e.target.value)}>
-              <option value="">No folder</option>
-              {folders.filter((f) => !f.is_archived).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              <option value="">{versionOf ? "No folder" : "Automatic (by person / property)"}</option>
+              {indexFolders(folders).options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+            {!versionOf && (
+              <span className="mt-1 block text-xs font-normal text-ab-faint">
+                Processed documents are filed by who they are about: a buyer document for John Doe goes to Buyers / John Doe. A custom folder you pick is kept.
+              </span>
+            )}
           </label>
           <label className="block text-sm font-medium">Description (optional)
             <textarea className={`${field} min-h-16`} value={description} onChange={(e) => setDescription(e.target.value)} />

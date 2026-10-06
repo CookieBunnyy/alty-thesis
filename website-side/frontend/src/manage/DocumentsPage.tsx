@@ -1,8 +1,10 @@
 import { useCallback, useMemo, useState, type FormEvent } from "react"
-import { Archive, ArchiveRestore, Download, Eye, FilePlus2, Folder as FolderIcon, FolderPlus, LoaderCircle, RefreshCw, Trash2, UploadCloud, X } from "lucide-react"
+import { Archive, ArchiveRestore, Download, Eye, FilePlus2, FolderPlus, LoaderCircle, RefreshCw, Trash2, UploadCloud, X } from "lucide-react"
 import { Link } from "@/components/Link"
 import { canFile, contains, date, dateTime, fileSize, statusLabel, text } from "./format"
 import { UploadDocument, type DocType, type DocumentRecord, type Folder } from "./UploadDocument"
+import { FolderTree } from "./FolderTree"
+import { indexFolders } from "./folders"
 import { Badge, Button, Confirm, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
@@ -19,7 +21,7 @@ type Doc = DocumentRecord & {
     status?: string; error_reason?: string | null; validation_result?: { valid?: boolean; errors?: string[]; warnings?: string[] }
     // Older results store plain IDs; newer ones {id, matched_by}.
     matched_entities?: Record<string, Matched | string | number | null>
-    created_records?: string[]; updated_records?: string[]; processed_at?: string
+    created_records?: string[]; updated_records?: string[]; processed_at?: string; filed_to?: string
   }
 }
 type Matched = { id: string | number; matched_by?: string }
@@ -50,12 +52,26 @@ export function DocumentsPage() {
   const typeLabel = useMemo(() => Object.fromEntries(types.map((t) => [t.code, t.label])), [types])
   const label = (code: string) => typeLabel[code] ?? statusLabel(code)
 
+  const index = useMemo(() => indexFolders(folders), [folders])
+  const inFolder = useMemo(() => (folder === null ? null : index.within(folder)), [index, folder])
   const shown = useMemo(() => docs.filter((d) =>
-    (folder === null || d.folder_id === folder) && (!status || d.status === status) && (!type || d.document_type === type) &&
-    contains([d.document_name, d.document_type, d.document_id, d.related_party_name, d.property_listing_title, d.transaction_reference, d.folder_name, d.processing_error], search)),
-  [docs, folder, status, type, search])
+    (inFolder === null || (d.folder_id != null && inFolder.has(d.folder_id))) && (!status || d.status === status) && (!type || d.document_type === type) &&
+    contains([d.document_name, d.document_type, d.document_id, d.related_party_name, d.property_listing_title, d.transaction_reference, d.folder_path, d.processing_error], search)),
+  [docs, inFolder, status, type, search])
   const selected = id ? docs.find((d) => d.document_id === id) ?? null : null
-  const counts = useMemo(() => docs.reduce<Record<number, number>>((acc, d) => (d.folder_id ? { ...acc, [d.folder_id]: (acc[d.folder_id] ?? 0) + 1 } : acc), {}), [docs])
+  // Per folder, including everything filed in its sub-folders.
+  const counts = useMemo(() => {
+    const parentOf = new Map(folders.map((f) => [f.id, f.parent_id]))
+    const out = new Map<number, number>()
+    for (const d of docs) {
+      const seen = new Set<number>()
+      for (let fid = d.folder_id; fid != null && !seen.has(fid); fid = parentOf.get(fid) ?? null) {
+        seen.add(fid)
+        out.set(fid, (out.get(fid) ?? 0) + 1)
+      }
+    }
+    return out
+  }, [docs, folders])
 
   const columns: Column<Doc>[] = [
     {
@@ -68,7 +84,7 @@ export function DocumentsPage() {
       ),
     },
     { key: "related", label: "Related to", sort: (d) => d.related_party_name ?? d.property_listing_title ?? "", render: (d) => <span className="line-clamp-2">{[d.related_party_name, d.property_listing_title].filter(Boolean).join(" · ") || "—"}</span> },
-    { key: "folder", label: "Folder", sort: (d) => d.folder_name ?? "", render: (d) => text(d.folder_name), hideOnPhone: true },
+    { key: "folder", label: "Folder", sort: (d) => d.folder_path ?? "", render: (d) => <span className="line-clamp-2">{text(d.folder_path ?? d.folder_name)}</span>, hideOnPhone: true },
     { key: "uploaded", label: "Uploaded", sort: (d) => d.created_at, render: (d) => date(d.created_at) },
     {
       key: "status", label: "Status", sort: (d) => d.status,
@@ -104,32 +120,17 @@ export function DocumentsPage() {
       )}
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
-        <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
+        <div className="grid gap-5 lg:grid-cols-[250px_1fr]">
           <nav aria-label="Folders" className="hidden lg:block">
             <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-ab-faint">Folders</p>
-            <ul className="space-y-0.5 text-sm">
-              {[{ id: null as number | null, name: "All documents", count: docs.length }, ...folders.filter((f) => !f.is_archived).map((f) => ({ id: f.id as number | null, name: f.name, count: counts[f.id] ?? 0 }))].map((f) => (
-                <li key={f.id ?? "all"}>
-                  <button
-                    type="button"
-                    onClick={() => setFolder(f.id)}
-                    aria-pressed={folder === f.id}
-                    className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left ${folder === f.id ? "bg-ab-hover font-semibold text-ab-text" : "text-ab-muted hover:bg-ab-hover hover:text-ab-text"}`}
-                  >
-                    <FolderIcon className={`h-4 w-4 shrink-0 ${folder === f.id ? "text-ab-accent" : ""}`} />
-                    <span className="flex-1 truncate">{f.name}</span>
-                    <span className="text-xs tabular-nums text-ab-faint">{f.count}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <FolderTree index={index} counts={counts} total={docs.length} selected={folder} onSelect={setFolder} />
           </nav>
           <div className="min-w-0 space-y-3">
             <div className="flex flex-wrap gap-2 sm:flex-nowrap">
               <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, client, property, reference or error" /></div>
               <div className="lg:hidden">
                 <Select label="Folder" value={folder === null ? "" : String(folder)} onChange={(v) => setFolder(v ? Number(v) : null)}
-                  options={[{ value: "", label: "All folders" }, ...folders.filter((f) => !f.is_archived).map((f) => ({ value: String(f.id), label: f.name }))]} />
+                  options={[{ value: "", label: "All folders" }, ...index.options]} />
               </div>
               <Select label="Type" value={type} onChange={setType} options={[{ value: "", label: "All types" }, ...types.filter((t) => t.code !== "AUTO").map((t) => ({ value: t.code, label: t.label }))]} />
               <Select label="Status" value={status} onChange={setStatus} options={[{ value: "", label: "All statuses" }, ...STATUSES.map((s) => ({ value: s, label: statusLabel(s) }))]} />
@@ -150,7 +151,8 @@ export function DocumentsPage() {
           onClose={() => setUploading(false)}
           onUploaded={(doc) => {
             setUploading(false)
-            toast(doc.status === "FAILED" ? `Uploaded, but processing failed: ${doc.processing_error ?? "see details"}` : `“${doc.document_name}” uploaded and processed.`, doc.status === "FAILED" ? "error" : "success")
+            toast(doc.status === "FAILED" ? `Uploaded, but processing failed: ${doc.processing_error ?? "see details"}`
+              : `“${doc.document_name}” processed${doc.folder_path ? ` and filed to ${doc.folder_path}` : ""}.`, doc.status === "FAILED" ? "error" : "success")
             void reload().then(() => open(doc.document_id))
           }}
         />
@@ -191,7 +193,7 @@ function NewFolder({ folders, onClose, onCreated }: { folders: Folder[]; onClose
         <label className="mt-3 block text-sm font-medium">Inside
           <select className="mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm" value={parent} onChange={(e) => setParent(e.target.value)}>
             <option value="">Top level</option>
-            {folders.filter((f) => !f.is_archived).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+            {indexFolders(folders).options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </label>
         {error && <p role="alert" className="mt-3 text-sm text-ab-danger">{error}</p>}
@@ -323,7 +325,7 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
               <label className="text-sm font-medium">Folder
                 <select className="mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm" value={meta.folder_id} onChange={(e) => setMeta({ ...meta, folder_id: e.target.value })}>
                   <option value="">No folder</option>
-                  {folders.filter((f) => !f.is_archived).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  {indexFolders(folders).options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </label>
               <label className="text-sm font-medium">Description
@@ -368,7 +370,7 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
 
       <Section title="File">
         <Facts items={[
-          ["Folder", doc.folder_name],
+          ["Folder", doc.folder_path ?? doc.folder_name],
           ["Description", doc.description],
           ["Uploaded by", doc.uploaded_by_name],
           ["Uploaded", dateTime(doc.created_at)],

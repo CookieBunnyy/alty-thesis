@@ -50,6 +50,20 @@ def _type_label(code: str | None) -> str:
     return str(code or "—").replace("_", " ").title()
 
 
+def folder_options(folders: list[dict[str, Any]]) -> list[tuple[str, int]]:
+    """(path, id) for every active folder, e.g. "Buyers / Michael Santos"."""
+    by_id = {folder["id"]: folder for folder in folders}
+
+    def path(folder: dict[str, Any], seen: frozenset = frozenset()) -> str:
+        parent = by_id.get(folder.get("parent_id"))
+        if parent is None or parent["id"] in seen:
+            return folder["name"]
+        return f"{path(parent, seen | {folder['id']})} / {folder['name']}"
+
+    return sorted(((path(f), f["id"]) for f in folders if not f.get("is_archived")),
+                  key=lambda item: item[0].lower())
+
+
 def processing_report(document: dict[str, Any]) -> str:
     """Plain-text account of what processing did (or why it failed)."""
     processing = document.get("processing") or {}
@@ -83,6 +97,8 @@ def processing_report(document: dict[str, Any]) -> str:
     for label, key in (("Created", "created_records"), ("Updated", "updated_records")):
         if processing.get(key):
             lines.append(f"{label}: " + ", ".join(processing[key]))
+    if processing.get("filed_to"):
+        lines.append(f"Filed to folder: {processing['filed_to']}")
     if processing.get("idempotent") and status == "SUCCESS":
         lines.append("No changes were needed — every record already existed.")
     for warning in processing.get("warnings") or []:
@@ -175,15 +191,16 @@ class UploadDocumentDialog(QDialog):
                     self.type_input.count() - 1, item["processing"], Qt.ItemDataRole.ToolTipRole
                 )
         self.folder_input = QComboBox()
-        self.folder_input.addItem("Unfiled", None)
+        self.folder_input.addItem("Automatic (by person / property)", None)
         self.folder_names: dict[int, str] = {}
-        for folder in folders:
-            self.folder_input.addItem(folder["name"], folder["id"])
-            self.folder_names[int(folder["id"])] = folder["name"]
+        for name, folder_id in folder_options(folders):
+            self.folder_input.addItem(name, folder_id)
+            self.folder_names[int(folder_id)] = name
         hint = QLabel(
             "The document is stored, then processed automatically: fields are extracted "
             "(OCR for scanned files), matched to existing records, and properties, clients, "
-            "transactions or agents are created or updated."
+            "transactions or agents are created or updated. It is then filed automatically, "
+            "e.g. a buyer document for John Doe goes to Buyers / John Doe (a custom folder you pick is kept)."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #65745b; font-size: 12px;")
@@ -584,9 +601,8 @@ class DocumentDetailsDialog(QDialog):
         name_input = QLineEdit(self.document.get("document_name") or "")
         folder_input = QComboBox()
         folder_input.addItem("Unfiled", None)
-        for folder in self.folders:
-            if not folder.get("is_archived"):
-                folder_input.addItem(folder["name"], folder["id"])
+        for name, folder_id in folder_options(self.folders):
+            folder_input.addItem(name, folder_id)
         folder_input.setCurrentIndex(max(folder_input.findData(self.document.get("folder_id")), 0))
         description_input = QTextEdit()
         description_input.setPlainText(self.document.get("description") or "")
@@ -850,18 +866,19 @@ class DocumentsPage(QWidget):
         self.folder_filter.blockSignals(True)
         self.folder_filter.clear()
         self.folder_filter.addItem("All Folders", None)
-        for folder in self.folders:
-            if not folder.get("is_archived"):
-                self.folder_filter.addItem(folder["name"], folder["id"])
+        for name, folder_id in folder_options(self.folders):
+            self.folder_filter.addItem(name, folder_id)
         index = self.folder_filter.findData(current)
         self.folder_filter.setCurrentIndex(max(index, 0))
         self.folder_filter.blockSignals(False)
         self.folder_tree.clear()
         items: dict[int, QTreeWidgetItem] = {}
+        paths = dict((folder_id, name) for name, folder_id in folder_options(self.folders))
         for folder in self.folders:
             if folder.get("is_archived"):
                 continue
             item = QTreeWidgetItem([folder["name"]])
+            item.setToolTip(0, paths.get(folder["id"], folder["name"]))
             item.setData(0, Qt.ItemDataRole.UserRole, folder["id"])
             item.setIcon(0, qta.icon("fa5s.folder", color="#17310a"))
             items[int(folder["id"])] = item
@@ -871,7 +888,8 @@ class DocumentsPage(QWidget):
             item = items[int(folder["id"])]
             parent = items.get(folder.get("parent_id"))
             (parent.addChild(item) if parent else self.folder_tree.addTopLevelItem(item))
-        self.folder_tree.expandAll()
+        # Categories open; per-person folders (auto-filed) stay folded below them.
+        self.folder_tree.expandToDepth(0)
 
     def _folder_selected(self) -> None:
         selected = self.folder_tree.selectedItems()
@@ -917,7 +935,7 @@ class DocumentsPage(QWidget):
                 document.get("document_id"),
                 document.get("document_name"),
                 _type_label(document.get("document_type")),
-                document.get("folder_name"),
+                document.get("folder_path") or document.get("folder_name"),
                 document.get("property_listing_title")
                 or document.get("property_name")
                 or document.get("property_listing_external_id")
