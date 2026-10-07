@@ -20,6 +20,8 @@ import { DocumentsPage } from "./DocumentsPage"
 import { MediaPage } from "./MediaPage"
 import { PropertiesPage } from "./PropertiesPage"
 import { ToastProvider } from "./Toasts"
+import { t } from "./i18n"
+import { LanguageProvider } from "./LanguageProvider"
 import { TransactionsPage } from "./TransactionsPage"
 import { ManageLayout } from "./ManageLayout"
 import { ManageSignIn } from "./ManageSignIn"
@@ -38,7 +40,7 @@ const PAGES: Record<string, [string, string, () => React.ReactNode]> = {
   "/manage/media": ["media", "Digital Preview", () => <MediaPage />],
   "/manage/analytics": ["analytics", "Analytics", () => <AnalyticsPage />],
   "/manage/forecasting": ["forecasting", "Forecasting", () => <ForecastingPage />],
-  "/manage/insights": ["dss", "Insights", () => <InsightsPage />],
+  "/manage/insights": ["dss", "Recommendations", () => <InsightsPage />],
   "/manage/workforce": ["workforce", "Workforce", () => <WorkforcePage />],
   "/manage/users": ["users", "Users & Access", () => <UsersPage />],
   "/manage/audit": ["audit", "Audit Logs", () => <AuditPage />],
@@ -48,9 +50,11 @@ const PAGES: Record<string, [string, string, () => React.ReactNode]> = {
 export default function ManageApp() {
   return (
     <StaffAuthProvider>
-      <ToastProvider>
-        <ManageRoutes />
-      </ToastProvider>
+      <LanguageProvider>
+        <ToastProvider>
+          <ManageRoutes />
+        </ToastProvider>
+      </LanguageProvider>
     </StaffAuthProvider>
   )
 }
@@ -61,7 +65,7 @@ function ManageRoutes() {
   const path = pathname.replace(/\/+$/, "") || "/manage"
 
   useEffect(() => {
-    document.title = `${path === "/manage/signin" ? "Management sign in" : PAGES[path]?.[1] ?? "Management"} · ALTY`
+    document.title = `${t(path === "/manage/signin" ? "Management sign in" : PAGES[path]?.[1] ?? "Management")} · ALTY`
   }, [path])
 
   // Every page except sign-in needs a staff session.
@@ -74,25 +78,25 @@ function ManageRoutes() {
   if (!isReady || !user) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-ab-bg text-ab-muted" role="status">
-        <LoaderCircle className="mr-2 h-5 w-5 animate-spin text-ab-accent" /> Checking your session…
+        <LoaderCircle className="mr-2 h-5 w-5 animate-spin text-ab-accent" /> {t("Checking your session…")}
       </div>
     )
   }
 
   // "My Work": any account linked to an agent record.
   if (path === "/manage/my-work" && user.agent_id) {
-    return <ManageLayout title="My Work"><MyWorkPage /></ManageLayout>
+    return <ManageLayout title={t("My Work")}><MyWorkPage /></ManageLayout>
   }
   const page = PAGES[path]
   if (page && can(page[0])) {
-    return <ManageLayout title={page[1]}>{page[2]()}</ManageLayout>
+    return <ManageLayout title={t(page[1])}>{page[2]()}</ManageLayout>
   }
   return (
-    <ManageLayout title="Not available">
+    <ManageLayout title={t("Not available")}>
       <div className="mx-auto max-w-lg rounded-2xl border border-ab-border bg-ab-card p-8 text-center">
-        <p className="text-lg font-bold">This page isn't available</p>
+        <p className="text-lg font-bold">{t("This page isn't available")}</p>
         <p className="mt-1 text-sm text-ab-muted">
-          It either doesn't exist yet on the web, or your role ({user.role}) can't open it.
+          {t("It either doesn't exist yet on the web, or your role ({role}) can't open it.", { role: t(user.role) })}
         </p>
       </div>
     </ManageLayout>

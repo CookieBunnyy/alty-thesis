@@ -7,6 +7,7 @@ import { Badge, Button, Confirm, DataTable, Drawer, Facts, LoadState, PageHeader
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
+import { t } from "./i18n"
 
 type Client = {
   client_id: string; external_client_id: string | null; full_name: string; location: string | null
@@ -77,7 +78,7 @@ export function ClientsPage() {
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
-          <p className="text-xs text-ab-faint">{shown.length} of {clients.length} clients</p>
+          <p className="text-xs text-ab-faint">{t("{n} of {total} clients", { n: shown.length, total: clients.length })}</p>
           <DataTable rows={shown} columns={columns} rowKey={(c) => c.client_id} onOpen={(c) => open(c.client_id)} empty="No clients match these filters." initialSort={{ key: "date", dir: "desc" }} />
         </>
       )}
@@ -93,13 +94,13 @@ function ClientDrawer({ client, onClose, onDeleted }: { client: Client; onClose:
   const [busy, setBusy] = useState(false)
   const loadProfile = useCallback(() => api<Profile>(`/clients/${encodeURIComponent(client.client_id)}/profile`), [api, client.client_id])
   const profile = useApiData(loadProfile)
-  const hasCompletedSale = (profile.data?.transactions ?? []).some((t) => t.transaction_type === "SOLD" && t.status === "COMPLETED")
+  const hasCompletedSale = (profile.data?.transactions ?? []).some((tx) => tx.transaction_type === "SOLD" && tx.status === "COMPLETED")
 
   const remove = async () => {
     setBusy(true)
     try {
       await api(`/clients/${encodeURIComponent(client.client_id)}`, { method: "DELETE" })
-      toast(`Deleted client ${client.full_name}.`)
+      toast(t("Deleted client {name}.", { name: client.full_name }))
       onDeleted()
     } catch (error) {
       toast((error as Error).message, "error")
@@ -111,12 +112,12 @@ function ClientDrawer({ client, onClose, onDeleted }: { client: Client; onClose:
   return (
     <Drawer
       title={client.full_name}
-      subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={client.status} /> Source: {statusLabel(client.source)}</span>}
+      subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={client.status} /> {t("Source:")} {statusLabel(client.source)}</span>}
       onClose={onClose}
       footer={isManagement(user?.role) && (
         <Button variant="danger" onClick={() => setConfirm(true)} disabled={hasCompletedSale}
-          title={hasCompletedSale ? "Clients with a completed sale keep their history and can't be deleted" : "Remove a client created in error"}>
-          <Trash2 className="h-4 w-4" /> Delete client
+          title={hasCompletedSale ? t("Clients with a completed sale keep their history and can't be deleted") : t("Remove a client created in error")}>
+          <Trash2 className="h-4 w-4" /> {t("Delete client")}
         </Button>
       )}
     >
@@ -150,20 +151,20 @@ function ClientDrawer({ client, onClose, onDeleted }: { client: Client; onClose:
         ]} />
       </Section>
 
-      <Section title={`Transaction history${profile.data ? ` (${profile.data.transactions.length})` : ""}`}>
+      <Section title={`${t("Transaction history")}${profile.data ? ` (${profile.data.transactions.length})` : ""}`}>
         <LoadState loading={profile.loading} error={profile.error} onRetry={profile.reload} />
-        {profile.data && (profile.data.transactions.length === 0 ? <p className="text-sm italic text-ab-faint">No transactions recorded.</p> : (
+        {profile.data && (profile.data.transactions.length === 0 ? <p className="text-sm italic text-ab-faint">{t("No transactions recorded.")}</p> : (
           <ol className="relative space-y-3 border-l border-ab-border pl-4">
-            {profile.data.transactions.map((t) => (
-              <li key={t.transaction_id} className="text-sm">
+            {profile.data.transactions.map((tx) => (
+              <li key={tx.transaction_id} className="text-sm">
                 <span className="absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full bg-ab-accent" aria-hidden />
                 <div className="flex items-center justify-between gap-2">
-                  <Link to={`/manage/transactions?id=${t.transaction_id}`} className="font-semibold hover:underline">{statusLabel(t.transaction_type)} · {peso(t.amount)}</Link>
-                  <Badge value={t.status} />
+                  <Link to={`/manage/transactions?id=${tx.transaction_id}`} className="font-semibold hover:underline">{statusLabel(tx.transaction_type)} · {peso(tx.amount)}</Link>
+                  <Badge value={tx.status} />
                 </div>
                 <p className="text-xs text-ab-muted">
-                  {date(t.transaction_date)} · <Link to={`/manage/properties?id=${t.property_id}`} className="hover:underline">{text(t.property_title)}</Link> ·{" "}
-                  <Link to={`/manage/agents?id=${t.agent_id}`} className="hover:underline">{text(t.agent_name)}</Link> · {statusLabel(t.source)}
+                  {date(tx.transaction_date)} · <Link to={`/manage/properties?id=${tx.property_id}`} className="hover:underline">{text(tx.property_title)}</Link> ·{" "}
+                  <Link to={`/manage/agents?id=${tx.agent_id}`} className="hover:underline">{text(tx.agent_name)}</Link> · {statusLabel(tx.source)}
                 </p>
               </li>
             ))}
@@ -172,11 +173,11 @@ function ClientDrawer({ client, onClose, onDeleted }: { client: Client; onClose:
       </Section>
 
       <Section title="Related documents">
-        {profile.data && (profile.data.documents.length === 0 ? <p className="text-sm italic text-ab-faint">No documents linked to this client.</p> : (
+        {profile.data && (profile.data.documents.length === 0 ? <p className="text-sm italic text-ab-faint">{t("No documents linked to this client.")}</p> : (
           <ul className="space-y-1.5 text-sm">
             {profile.data.documents.map((d) => (
               <li key={`${d.document_id}-${d.version}`} className="flex items-center justify-between gap-2">
-                <span className="min-w-0 truncate">{d.document_name} <span className="text-xs text-ab-faint">{d.document_type} · v{d.version} · {date(d.created_at)}</span></span>
+                <span className="min-w-0 truncate">{d.document_name} <span className="text-xs text-ab-faint">{statusLabel(d.document_type)} · v{d.version} · {date(d.created_at)}</span></span>
                 <Badge value={d.status} />
               </li>
             ))}
@@ -188,11 +189,7 @@ function ClientDrawer({ client, onClose, onDeleted }: { client: Client; onClose:
         <Confirm
           title="Delete client?"
           message={
-            <>
-              Remove {client.full_name}, created in error? This also deletes their
-              {profile.data ? ` ${profile.data.transactions.length}` : ""} recorded transaction(s), and any property they had
-              reserved goes back to <strong>Available</strong>. This can't be undone.
-            </>
+            t("Remove {name}, created in error? This also deletes their {n} recorded transaction(s), and any property they had reserved goes back to Available. This can't be undone.", { name: client.full_name, n: profile.data ? profile.data.transactions.length : "" })
           }
           confirmLabel="Delete"
           busy={busy}

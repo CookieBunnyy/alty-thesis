@@ -18,6 +18,7 @@ from keywords import (
 from ml.recommender import PropertyRecommender
 from schemas import UserPrompt
 from services.geocoding import calculate_osrm_commute, distance_km, geocode_location
+from services.place_names import place_entities, warm_up as warm_up_place_names
 from services.property_service import format_listing_row
 
 # Minimum TF-IDF similarity for a message to count as a property request.
@@ -41,6 +42,7 @@ def load_recommender():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    warm_up_place_names()  # spaCy loads in the background; startup does not wait
     load_recommender()
     yield
 
@@ -136,9 +138,20 @@ async def chat_assistant(prompt: UserPrompt):
     # the property should be. A failed lookup never stops the search: the
     # scikit-learn ranking still matches the place name against listing text.
     area_name = area_point = None
+    # Place names found by spaCy's English model (empty until it has loaded).
+    places = place_entities(normalized_message)
     workplace_match = WORKPLACE_REGEX.search(normalized_message)
     if workplace_match:
         candidate = workplace_match.group(1).strip()
+        if not is_valid_location_candidate(candidate):
+            # "I work at the Accenture office in Makati": keep the place name
+            # spaCy found inside the phrase ("Makati").
+            inside = [
+                p["text"] for p in places
+                if p["start"] >= workplace_match.start(1) and p["end"] <= workplace_match.end(1)
+                and is_valid_location_candidate(p["text"])
+            ]
+            candidate = inside[-1] if inside else candidate
         if is_valid_location_candidate(candidate):
             geo = geocode_location(candidate)
             if geo:
@@ -149,6 +162,11 @@ async def chat_assistant(prompt: UserPrompt):
     else:
         area_match = AREA_REGEX.search(normalized_message)
         candidate = area_match.group(1).strip() if area_match else ""
+        if not (candidate and is_valid_area_candidate(candidate)):
+            # No "near / in X" cue: use a place name spaCy recognised,
+            # e.g. "condo Ayala Alabang under 5M".
+            named = [p["text"] for p in places if is_valid_area_candidate(p["text"])]
+            candidate = named[0] if named else ""
         if candidate and is_valid_area_candidate(candidate):
             area_name = candidate
             area_point = geocode_location(candidate)

@@ -13,7 +13,8 @@ import {
   MapPinOff,
   MessageCircleMore,
   Search,
-  Sparkles,
+  House,
+  ListFilter,
   X,
 } from "lucide-react"
 import { PropertyMap } from "./components/MapContainer"
@@ -742,7 +743,7 @@ export default function App() {
                   {isShowingRecommendations && (
                     <div className="flex items-center justify-between gap-2 rounded-xl bg-ab-accent-soft px-3 py-2 text-xs text-ab-text">
                       <span className="flex items-center gap-1.5">
-                        <Sparkles className="h-3.5 w-3.5 text-ab-accent" /> Showing assistant recommendations
+                        <ListFilter className="h-3.5 w-3.5 text-ab-accent" /> Showing assistant recommendations
                       </span>
                       <button type="button" onClick={() => loadAvailableProperties()} className="font-semibold text-ab-accent hover:underline">
                         Show all
@@ -868,7 +869,7 @@ export default function App() {
                 <div className="flex items-center justify-between border-b bg-ab-sidebar px-4 py-3 text-ab-text">
                   <div className="flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ab-accent-soft text-ab-muted">
-                      <Sparkles className="h-4 w-4" />
+                      <House className="h-4 w-4" />
                     </div>
                     <div>
                       <p className="text-sm font-semibold">Property Assistant</p>
@@ -999,7 +1000,7 @@ export default function App() {
                   <div className="flex items-center justify-between border-b bg-ab-sidebar px-4 py-3 text-ab-text">
                     <div className="flex items-center gap-2">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ab-accent-soft text-ab-muted">
-                        <Sparkles className="h-4 w-4" />
+                        <House className="h-4 w-4" />
                       </div>
                       <div>
                         <p className="text-sm font-semibold">Property Assistant</p>

@@ -1,16 +1,18 @@
 // Building blocks for the management pages: page header, summary tiles,
 // search/filter bar, a sortable data table that becomes cards on phones, a
-// detail drawer, confirm dialog and status badges.
+// detail drawer, confirm dialog and status badges. Labels passed to these
+// components (titles, column names, filter options…) are translated here.
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Inbox, LoaderCircle, Search, X } from "lucide-react"
 import { statusLabel } from "./format"
+import { t } from "./i18n"
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="text-2xl font-extrabold">{title}</h2>
-        {subtitle && <p className="mt-0.5 max-w-3xl text-sm text-ab-muted">{subtitle}</p>}
+        <h2 className="text-2xl font-extrabold">{t(title)}</h2>
+        {subtitle && <p className="mt-0.5 max-w-3xl text-sm text-ab-muted">{t(subtitle)}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
@@ -47,9 +49,9 @@ export function Tiles({ items }: { items: { label: string; value: ReactNode; det
       {items.map((item) => {
         const body = (
           <>
-            <p className="text-xs font-semibold text-ab-muted">{item.label}</p>
+            <p className="text-xs font-semibold text-ab-muted">{t(item.label)}</p>
             <p className="mt-1.5 text-2xl font-extrabold tabular-nums text-ab-text">{item.value}</p>
-            {item.detail && <p className="mt-0.5 text-xs text-ab-faint">{item.detail}</p>}
+            {item.detail && <p className="mt-0.5 text-xs text-ab-faint">{typeof item.detail === "string" ? t(item.detail) : item.detail}</p>}
           </>
         )
         const cls = `rounded-2xl border bg-ab-card p-4 text-left ${item.active ? "border-ab-accent" : "border-ab-border"}`
@@ -68,13 +70,13 @@ export function Tiles({ items }: { items: { label: string; value: ReactNode; det
 export function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
     <label className="relative block min-w-0 flex-1">
-      <span className="sr-only">{placeholder}</span>
+      <span className="sr-only">{t(placeholder)}</span>
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ab-faint" />
       <input
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
+        placeholder={t(placeholder)}
         className="min-h-10 w-full rounded-xl border border-ab-border bg-ab-input pl-9 pr-3 text-sm placeholder:text-ab-faint focus:border-ab-accent focus:outline-none"
       />
     </label>
@@ -84,13 +86,13 @@ export function SearchBox({ value, onChange, placeholder }: { value: string; onC
 export function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
   return (
     <label className="block">
-      <span className="sr-only">{label}</span>
+      <span className="sr-only">{t(label)}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="min-h-10 rounded-xl border border-ab-border bg-ab-input px-3 text-sm focus:border-ab-accent focus:outline-none"
       >
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {options.map((o) => <option key={o.value} value={o.value}>{t(o.label)}</option>)}
       </select>
     </label>
   )
@@ -156,7 +158,7 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
   if (!rows.length) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-ab-border px-4 py-14 text-center text-sm text-ab-muted">
-        <Inbox className="h-6 w-6 text-ab-faint" /> {empty}
+        <Inbox className="h-6 w-6 text-ab-faint" /> {t(empty)}
       </div>
     )
   }
@@ -166,7 +168,8 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
       <ul className="space-y-2 md:hidden">
         {sorted.map((row) => (
           <li key={rowKey(row)}>
-            <button type="button" onClick={() => onOpen?.(row)} className="w-full rounded-2xl border border-ab-border bg-ab-card p-4 text-left transition hover:border-ab-border-strong">
+            {/* A card is a button only when it opens something (it may hold its own buttons otherwise). */}
+            <PhoneCard onOpen={onOpen ? () => onOpen(row) : undefined}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">{first.render(row)}</div>
                 {onOpen && <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-ab-faint" />}
@@ -174,16 +177,16 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
               <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
                 {rest.filter((c) => !c.hideOnPhone).map((c) => (
                   <div key={c.key} className="min-w-0">
-                    <dt className="text-ab-faint">{c.label}</dt>
+                    <dt className="text-ab-faint">{t(c.label)}</dt>
                     <dd className="truncate text-ab-text">{c.render(row)}</dd>
                   </div>
                 ))}
               </dl>
-            </button>
+            </PhoneCard>
           </li>
         ))}
       </ul>
-      <div className="hidden overflow-x-auto rounded-2xl border border-ab-border bg-ab-card md:block">
+      <div className="ab-table-scroll hidden rounded-2xl border border-ab-border bg-ab-card md:block">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-ab-border text-[11px] uppercase tracking-wide text-ab-faint">
@@ -199,10 +202,10 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
                         onClick={() => setSort(active && sort!.dir === "asc" ? { key: c.key, dir: "desc" } : { key: c.key, dir: "asc" })}
                         className={`inline-flex items-center gap-1 uppercase hover:text-ab-text ${active ? "text-ab-text" : ""}`}
                       >
-                        {c.label}
+                        {t(c.label)}
                         {active && (sort!.dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
                       </button>
-                    ) : c.label}
+                    ) : t(c.label)}
                   </th>
                 )
               })}
@@ -229,18 +232,25 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
   )
 }
 
+function PhoneCard({ onOpen, children }: { onOpen?: () => void; children: ReactNode }) {
+  const cls = "w-full rounded-2xl border border-ab-border bg-ab-card p-4 text-left"
+  return onOpen
+    ? <button type="button" onClick={onOpen} className={`${cls} transition hover:border-ab-border-strong`}>{children}</button>
+    : <div className={cls}>{children}</div>
+}
+
 export function LoadState({ loading, error, onRetry }: { loading: boolean; error: string; onRetry: () => void }) {
   if (error) {
     return (
       <p role="alert" className="flex items-center gap-2 rounded-xl border border-ab-danger/40 bg-ab-danger/10 px-4 py-3 text-sm text-ab-danger">
         <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
-        <button type="button" onClick={onRetry} className="ml-auto font-semibold underline">Try again</button>
+        <button type="button" onClick={onRetry} className="ml-auto font-semibold underline">{t("Try again")}</button>
       </p>
     )
   }
   if (loading) {
     return (
-      <div className="space-y-2" aria-busy="true" aria-label="Loading">
+      <div className="space-y-2" aria-busy="true" aria-label={t("Loading")}>
         {Array.from({ length: 6 }, (_, i) => <div key={i} className="ab-skeleton h-14 rounded-xl" />)}
       </div>
     )
@@ -262,14 +272,14 @@ export function Drawer({ title, subtitle, onClose, children, footer }: { title: 
   }, [onClose])
   return (
     <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true">
-      <button type="button" aria-label="Close" className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
+      <button type="button" aria-label={t("Close")} className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
       <section className="ab-drawer absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l border-ab-border bg-ab-bg shadow-2xl">
         <header className="flex items-start justify-between gap-3 border-b border-ab-border bg-ab-sidebar px-5 py-4">
           <div className="min-w-0">
             <h2 className="truncate text-lg font-bold">{title}</h2>
             {subtitle && <div className="mt-0.5 text-sm text-ab-muted">{subtitle}</div>}
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-2 text-ab-muted hover:bg-ab-hover">
+          <button type="button" onClick={onClose} aria-label={t("Close")} className="rounded-lg p-2 text-ab-muted hover:bg-ab-hover">
             <X className="h-4 w-4" />
           </button>
         </header>
@@ -284,7 +294,7 @@ export function Section({ title, children, action }: { title: string; children: 
   return (
     <section className="rounded-2xl border border-ab-border bg-ab-card p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-ab-faint">{title}</h3>
+        <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-ab-faint">{t(title)}</h3>
         {action}
       </div>
       {children}
@@ -298,9 +308,9 @@ export function Facts({ items }: { items: [string, ReactNode][] }) {
     <dl className="grid grid-cols-1 gap-x-4 gap-y-2.5 text-sm sm:grid-cols-2">
       {items.map(([label, value]) => (
         <div key={label} className="min-w-0">
-          <dt className="text-xs text-ab-faint">{label}</dt>
+          <dt className="text-xs text-ab-faint">{t(label)}</dt>
           <dd className={`break-words ${value === null || value === undefined || value === "" || value === "—" ? "italic text-ab-faint" : "font-medium"}`}>
-            {value === null || value === undefined || value === "" || value === "—" ? "Not provided" : value}
+            {value === null || value === undefined || value === "" || value === "—" ? t("Not provided") : value}
           </dd>
         </div>
       ))}
@@ -312,15 +322,15 @@ export function Confirm({ title, message, confirmLabel, onConfirm, onCancel, bus
   title: string; message: ReactNode; confirmLabel: string; onConfirm: () => void; onCancel: () => void; busy?: boolean
 }) {
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-label={title}>
-      <button type="button" aria-label="Cancel" className="absolute inset-0 bg-black/55" onClick={onCancel} />
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-label={t(title)}>
+      <button type="button" aria-label={t("Cancel")} className="absolute inset-0 bg-black/55" onClick={onCancel} />
       <div className="ab-pop relative w-full max-w-md rounded-2xl border border-ab-border bg-ab-card p-6 shadow-2xl">
-        <h2 className="text-lg font-bold">{title}</h2>
-        <div className="mt-2 text-sm text-ab-muted">{message}</div>
+        <h2 className="text-lg font-bold">{t(title)}</h2>
+        <div className="mt-2 text-sm text-ab-muted">{typeof message === "string" ? t(message) : message}</div>
         <div className="mt-6 flex justify-end gap-2">
-          <Button onClick={onCancel} disabled={busy}>Cancel</Button>
+          <Button onClick={onCancel} disabled={busy}>{t("Cancel")}</Button>
           <Button variant="danger" onClick={onConfirm} disabled={busy}>
-            {busy && <LoaderCircle className="h-4 w-4 animate-spin" />} {confirmLabel}
+            {busy && <LoaderCircle className="h-4 w-4 animate-spin" />} {t(confirmLabel)}
           </Button>
         </div>
       </div>

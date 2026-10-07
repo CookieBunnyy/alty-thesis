@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react"
 import { ChevronRight, Folder as FolderIcon, FolderOpen } from "lucide-react"
 import type { FolderIndex } from "./folders"
+import { t } from "./i18n"
 
 /** Nested folder list. Counts include sub-folders; category folders start
  *  open, per-person folders (filed automatically) are folded under them. */
@@ -23,7 +24,7 @@ export function FolderTree({ index, counts, total, selected, onSelect }: {
     return (
       <div className="flex items-center" style={{ paddingLeft: depth * 14 }}>
         {hasChildren && id != null ? (
-          <button type="button" onClick={() => toggle(id)} aria-expanded={expanded} aria-label={`${expanded ? "Collapse" : "Expand"} ${name}`}
+          <button type="button" onClick={() => toggle(id)} aria-expanded={expanded} aria-label={t(expanded ? "Collapse {name}" : "Expand {name}", { name })}
             className="grid h-7 w-6 shrink-0 place-items-center rounded text-ab-faint hover:text-ab-text">
             <ChevronRight className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
           </button>
@@ -55,7 +56,7 @@ export function FolderTree({ index, counts, total, selected, onSelect }: {
 
   return (
     <ul className="space-y-0.5 text-sm">
-      <li>{row(null, "All documents", total, 0, false)}</li>
+      <li>{row(null, t("All documents"), total, 0, false)}</li>
       {branch(null, 0)}
     </ul>
   )

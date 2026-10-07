@@ -8,6 +8,7 @@ import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData } from "./useApiData"
 import { useBlobUrl } from "./useBlobUrl"
+import { t } from "./i18n"
 
 type Media = {
   id: number; listing_id: number; file_name: string; mime_type: string; file_size: number
@@ -49,15 +50,15 @@ export function MediaPage() {
     const results: string[] = []
     let failed = 0
     for (const [index, file] of [...files].entries()) {
-      setUploading(`Uploading ${index + 1} of ${files.length}…`)
+      setUploading(t("Uploading {n} of {total}…", { n: index + 1, total: files.length }))
       const body = new FormData()
       body.append("file", file)
       try {
         const saved = await api<Media>(`/media/properties/${listing}`, { method: "POST", body })
-        results.push(`${file.name}: ${statusLabel(saved.quality_status)}${saved.quality_issues?.length ? ` (${saved.quality_issues.join(", ")})` : ""}`)
+        results.push(`${file.name}: ${statusLabel(saved.quality_status)}${saved.quality_issues?.length ? ` (${saved.quality_issues.map((issue) => t(issue)).join(", ")})` : ""}`)
       } catch (uploadError) {
         failed += 1
-        results.push(`${file.name}: ${uploadError instanceof ApiError ? uploadError.message : "upload failed"}`)
+        results.push(`${file.name}: ${uploadError instanceof ApiError ? t(uploadError.message) : t("upload failed")}`)
       }
     }
     setUploading("")
@@ -71,7 +72,7 @@ export function MediaPage() {
     setDeleting(true)
     try {
       await api(`/media/${toDelete.id}`, { method: "DELETE" })
-      toast(`Removed ${toDelete.file_name}.`)
+      toast(t("Removed {name}.", { name: toDelete.file_name }))
       setToDelete(null)
       void reload()
     } catch (deleteError) {
@@ -88,10 +89,10 @@ export function MediaPage() {
         subtitle="Property photos uploaded to ALTY. Each image is checked for resolution, sharpness, brightness and contrast; only photos that pass are shown on the website."
         actions={editable && (
           <>
-            <input ref={picker} type="file" accept={IMAGE_ACCEPT} multiple className="sr-only" aria-label="Property photos" onChange={(e) => void upload(e.target.files)} />
+            <input ref={picker} type="file" accept={IMAGE_ACCEPT} multiple className="sr-only" aria-label={t("Property photos")} onChange={(e) => void upload(e.target.files)} />
             <Button variant="primary" disabled={!listing || !!uploading} onClick={() => picker.current?.click()}
-              title={listing ? "Upload photos to the selected property" : "Choose a property first"}>
-              {uploading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />} {uploading || "Upload photos"}
+              title={listing ? t("Upload photos to the selected property") : t("Choose a property first")}>
+              {uploading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />} {uploading || t("Upload photos")}
             </Button>
           </>
         )}
@@ -102,20 +103,20 @@ export function MediaPage() {
           ...["GOOD", "ACCEPTABLE", "POOR"].map((q) => ({
             label: statusLabel(q), value: summary.by_quality[q] ?? 0, onClick: () => setQuality(quality === q ? "" : q), active: quality === q,
           })),
-          { label: "Properties with photos", value: summary.listings_with_media, detail: `of ${listings.length}` },
+          { label: "Properties with photos", value: summary.listings_with_media, detail: t("of {n}", { n: listings.length }) },
         ]} />
       )}
       <div className="flex flex-wrap gap-2">
         <Select label="Property" value={listing} onChange={setListing}
-          options={[{ value: "", label: "All properties" }, ...listings.map((l) => ({ value: String(l.listing_id), label: `#${l.listing_id} · ${l.title ?? "Untitled"}` }))]} />
+          options={[{ value: "", label: "All properties" }, ...listings.map((l) => ({ value: String(l.listing_id), label: `#${l.listing_id} · ${l.title ?? t("Untitled")}` }))]} />
         <Select label="Quality" value={quality} onChange={setQuality} options={[{ value: "", label: "Any quality" }, ...["GOOD", "ACCEPTABLE", "POOR"].map((q) => ({ value: q, label: statusLabel(q) }))]} />
       </div>
-      {editable && !listing && <p className="text-xs text-ab-faint">Choose a property to upload photos to it.</p>}
+      {editable && !listing && <p className="text-xs text-ab-faint">{t("Choose a property to upload photos to it.")}</p>}
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (shown.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-ab-border px-4 py-14 text-center text-sm text-ab-muted">
-          {media.length ? "No photos match this quality filter." : listing ? "No photos uploaded for this property yet." : "No property photos uploaded yet."}
-          <p className="mt-1 text-xs text-ab-faint">Listings synced from Supabase keep their own photo links, which are edited on the Properties page.</p>
+          {t(media.length ? "No photos match this quality filter." : listing ? "No photos uploaded for this property yet." : "No property photos uploaded yet.")}
+          <p className="mt-1 text-xs text-ab-faint">{t("Listings synced from Supabase keep their own photo links, which are edited on the Properties page.")}</p>
         </div>
       ) : (
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -124,12 +125,14 @@ export function MediaPage() {
       ))}
       {thresholds && (
         <p className="text-xs text-ab-faint">
-          Checks: at least {thresholds.min_resolution}; sharpness (blur variance) poor below {thresholds.blur_variance_poor_below}, good above {thresholds.blur_variance_good_above};
-          brightness {thresholds.brightness_range[0]}–{thresholds.brightness_range[1]}; contrast at least {thresholds.min_contrast_std}. {thresholds.note}
+          {t("Checks: at least {res}; sharpness (blur variance) poor below {poor}, good above {good}; brightness {lo}–{hi}; contrast at least {contrast}.", {
+            res: thresholds.min_resolution, poor: thresholds.blur_variance_poor_below, good: thresholds.blur_variance_good_above,
+            lo: thresholds.brightness_range[0], hi: thresholds.brightness_range[1], contrast: thresholds.min_contrast_std,
+          })} {t(thresholds.note)}
         </p>
       )}
       {toDelete && (
-        <Confirm title="Remove photo?" message={<>Remove “{toDelete.file_name}” from {titles[toDelete.listing_id] ?? `property #${toDelete.listing_id}`}? It will no longer appear on the website.</>}
+        <Confirm title="Remove photo?" message={t("Remove “{name}” from {property}? It will no longer appear on the website.", { name: toDelete.file_name, property: titles[toDelete.listing_id] ?? t("property #{id}", { id: toDelete.listing_id }) })}
           confirmLabel="Remove" busy={deleting} onConfirm={remove} onCancel={() => setToDelete(null)} />
       )}
     </div>
@@ -148,13 +151,13 @@ function MediaCard({ media: m, title, canDelete, onDelete }: { media: Media; tit
       </div>
       <div className="space-y-1.5 p-3 text-xs">
         <p className="truncate text-sm font-semibold">{m.file_name}</p>
-        <Link to={`/manage/properties?id=${m.listing_id}`} className="block truncate text-ab-muted hover:underline">{title ?? `Property #${m.listing_id}`}</Link>
+        <Link to={`/manage/properties?id=${m.listing_id}`} className="block truncate text-ab-muted hover:underline">{title ?? t("Property #{id}", { id: m.listing_id })}</Link>
         <p className="text-ab-faint">{m.width}×{m.height} · {fileSize(m.file_size)} · {date(m.created_at)}</p>
-        <p className="text-ab-faint">Sharpness {m.blur_score?.toFixed(0) ?? "—"} · Brightness {m.brightness?.toFixed(0) ?? "—"} · Contrast {m.contrast?.toFixed(0) ?? "—"}</p>
-        {m.quality_issues?.length ? <p className="text-ab-warning">{m.quality_issues.join(" · ")}</p> : null}
+        <p className="text-ab-faint">{t("Sharpness")} {m.blur_score?.toFixed(0) ?? "—"} · {t("Brightness")} {m.brightness?.toFixed(0) ?? "—"} · {t("Contrast")} {m.contrast?.toFixed(0) ?? "—"}</p>
+        {m.quality_issues?.length ? <p className="text-ab-warning">{m.quality_issues.map((issue) => t(issue)).join(" · ")}</p> : null}
         {canDelete && (
           <button type="button" onClick={onDelete} className="inline-flex items-center gap-1 font-semibold text-ab-danger hover:underline">
-            <Trash2 className="h-3.5 w-3.5" /> Remove
+            <Trash2 className="h-3.5 w-3.5" /> {t("Remove")}
           </button>
         )}
       </div>

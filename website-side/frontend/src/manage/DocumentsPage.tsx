@@ -10,6 +10,8 @@ import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { downloadBlob, useBlobUrl } from "./useBlobUrl"
+import { UploadResult } from "./UploadResult"
+import { t } from "./i18n"
 
 type Doc = DocumentRecord & {
   description: string | null; mime_type: string; file_size: number; sync_status: string
@@ -32,7 +34,6 @@ const STATUSES = ["SUCCESS", "FAILED", "PROCESSING", "ARCHIVED"]
 
 export function DocumentsPage() {
   const { api, user } = useStaffAuth()
-  const toast = useToast()
   const { id, open, close } = useOpenRecord()
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
@@ -40,6 +41,7 @@ export function DocumentsPage() {
   const [folder, setFolder] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const [creatingFolder, setCreatingFolder] = useState(false)
+  const [result, setResult] = useState<{ doc: DocumentRecord; newFolder: boolean } | null>(null)
 
   const load = useCallback(() => Promise.all([
     api<Doc[]>("/documents?limit=1000"),
@@ -49,8 +51,8 @@ export function DocumentsPage() {
   ]), [api])
   const { data, error, loading, reload } = useApiData(load)
   const [docs, summary, folders, types] = data ?? [[], null, [], []]
-  const typeLabel = useMemo(() => Object.fromEntries(types.map((t) => [t.code, t.label])), [types])
-  const label = (code: string) => typeLabel[code] ?? statusLabel(code)
+  const typeLabel = useMemo(() => Object.fromEntries(types.map((dt) => [dt.code, dt.label])), [types])
+  const label = (code: string) => (typeLabel[code] ? t(typeLabel[code]) : statusLabel(code))
 
   const index = useMemo(() => indexFolders(folders), [folders])
   const inFolder = useMemo(() => (folder === null ? null : index.within(folder)), [index, folder])
@@ -104,8 +106,8 @@ export function DocumentsPage() {
         subtitle="Upload documents and ALTY processes them automatically: it reads, classifies and matches each one, then records the property, client, agent and transaction it describes. Failed documents show the stage and reason."
         actions={
           <>
-            <Button onClick={() => setCreatingFolder(true)}><FolderPlus className="h-4 w-4" /> New folder</Button>
-            <Button variant="primary" onClick={() => setUploading(true)} disabled={!data}><UploadCloud className="h-4 w-4" /> Upload document</Button>
+            <Button onClick={() => setCreatingFolder(true)}><FolderPlus className="h-4 w-4" /> {t("New folder")}</Button>
+            <Button variant="primary" onClick={() => setUploading(true)} disabled={!data}><UploadCloud className="h-4 w-4" /> {t("Upload document")}</Button>
           </>
         }
       />
@@ -121,8 +123,8 @@ export function DocumentsPage() {
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <div className="grid gap-5 lg:grid-cols-[250px_1fr]">
-          <nav aria-label="Folders" className="hidden lg:block">
-            <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-ab-faint">Folders</p>
+          <nav aria-label={t("Folders")} className="hidden lg:block">
+            <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-ab-faint">{t("Folders")}</p>
             <FolderTree index={index} counts={counts} total={docs.length} selected={folder} onSelect={setFolder} />
           </nav>
           <div className="min-w-0 space-y-3">
@@ -132,10 +134,10 @@ export function DocumentsPage() {
                 <Select label="Folder" value={folder === null ? "" : String(folder)} onChange={(v) => setFolder(v ? Number(v) : null)}
                   options={[{ value: "", label: "All folders" }, ...index.options]} />
               </div>
-              <Select label="Type" value={type} onChange={setType} options={[{ value: "", label: "All types" }, ...types.filter((t) => t.code !== "AUTO").map((t) => ({ value: t.code, label: t.label }))]} />
+              <Select label="Type" value={type} onChange={setType} options={[{ value: "", label: "All types" }, ...types.filter((dt) => dt.code !== "AUTO").map((dt) => ({ value: dt.code, label: dt.label }))]} />
               <Select label="Status" value={status} onChange={setStatus} options={[{ value: "", label: "All statuses" }, ...STATUSES.map((s) => ({ value: s, label: statusLabel(s) }))]} />
             </div>
-            <p className="text-xs text-ab-faint">{shown.length} of {docs.length} documents</p>
+            <p className="text-xs text-ab-faint">{t("{n} of {total} documents", { n: shown.length, total: docs.length })}</p>
             <DataTable rows={shown} columns={columns} rowKey={(d) => d.document_id} onOpen={(d) => open(d.document_id)}
               empty={docs.length ? "No documents match these filters." : "No documents yet. Upload one to get started."} initialSort={{ key: "uploaded", dir: "desc" }} />
           </div>
@@ -151,10 +153,20 @@ export function DocumentsPage() {
           onClose={() => setUploading(false)}
           onUploaded={(doc) => {
             setUploading(false)
-            toast(doc.status === "FAILED" ? `Uploaded, but processing failed: ${doc.processing_error ?? "see details"}`
-              : `“${doc.document_name}” processed${doc.folder_path ? ` and filed to ${doc.folder_path}` : ""}.`, doc.status === "FAILED" ? "error" : "success")
-            void reload().then(() => open(doc.document_id))
+            // A folder ALTY created while filing this document wasn't in the list before.
+            setResult({ doc, newFolder: doc.folder_id != null && !folders.some((f) => f.id === doc.folder_id) })
+            void reload()
           }}
+        />
+      )}
+      {result && (
+        <UploadResult
+          doc={result.doc}
+          newFolder={result.newFolder}
+          onClose={() => setResult(null)}
+          onView={() => { const docId = result.doc.document_id; setResult(null); open(docId) }}
+          onOpenFolder={() => { setFolder(result.doc.folder_id); setStatus(""); setType(""); setSearch(""); setResult(null) }}
+          onUploadAnother={() => { setResult(null); setUploading(true) }}
         />
       )}
       {creatingFolder && <NewFolder folders={folders} onClose={() => setCreatingFolder(false)} onCreated={() => { setCreatingFolder(false); void reload() }} />}
@@ -171,11 +183,11 @@ function NewFolder({ folders, onClose, onCreated }: { folders: Folder[]; onClose
   const [busy, setBusy] = useState(false)
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (!name.trim()) return setError("Enter a folder name.")
+    if (!name.trim()) return setError(t("Enter a folder name."))
     setBusy(true)
     try {
       await api("/documents/folders", { method: "POST", body: JSON.stringify({ name: name.trim(), parent_id: parent ? Number(parent) : null }) })
-      toast(`Folder “${name.trim()}” created.`)
+      toast(t("Folder “{name}” created.", { name: name.trim() }))
       onCreated()
     } catch (createError) {
       setError((createError as Error).message)
@@ -183,23 +195,23 @@ function NewFolder({ folders, onClose, onCreated }: { folders: Folder[]; onClose
     }
   }
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="New folder">
-      <button type="button" aria-label="Cancel" className="absolute inset-0 bg-black/55" onClick={onClose} />
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={t("New folder")}>
+      <button type="button" aria-label={t("Cancel")} className="absolute inset-0 bg-black/55" onClick={onClose} />
       <form onSubmit={submit} className="ab-pop relative w-full max-w-sm rounded-2xl border border-ab-border bg-ab-card p-5 shadow-2xl">
-        <h2 className="text-lg font-bold">New folder</h2>
-        <label className="mt-4 block text-sm font-medium">Name
+        <h2 className="text-lg font-bold">{t("New folder")}</h2>
+        <label className="mt-4 block text-sm font-medium">{t("Name")}
           <input autoFocus className="mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm focus:border-ab-accent focus:outline-none" value={name} onChange={(e) => setName(e.target.value)} />
         </label>
-        <label className="mt-3 block text-sm font-medium">Inside
+        <label className="mt-3 block text-sm font-medium">{t("Inside")}
           <select className="mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm" value={parent} onChange={(e) => setParent(e.target.value)}>
-            <option value="">Top level</option>
+            <option value="">{t("Top level")}</option>
             {indexFolders(folders).options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </label>
         {error && <p role="alert" className="mt-3 text-sm text-ab-danger">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
-          <Button onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={busy}>{busy && <LoaderCircle className="h-4 w-4 animate-spin" />} Create</Button>
+          <Button onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
+          <Button type="submit" variant="primary" disabled={busy}>{busy && <LoaderCircle className="h-4 w-4 animate-spin" />} {t("Create")}</Button>
         </div>
       </form>
     </div>
@@ -211,7 +223,7 @@ const RECORD_LINKS: Record<string, string> = { clients: "/manage/clients", trans
 function recordLink(ref: string) {
   const [table, idPart, field] = ref.split(":")
   const base = RECORD_LINKS[table]
-  const textLabel = `${statusLabel(table.replace(/s$/, "").replace("property_listing", "property"))} ${idPart.length > 12 ? idPart.slice(0, 8) : idPart}${field ? ` (${field})` : ""}`
+  const textLabel = `${statusLabel(table.replace(/s$/, "").replace("property_listing", "property"))} ${idPart.length > 12 ? idPart.slice(0, 8) : idPart}${field ? ` (${statusLabel(field)})` : ""}`
   return base ? <Link key={ref} to={`${base}?id=${idPart}`} className="mr-2 inline-block hover:underline">{textLabel}</Link> : <span key={ref} className="mr-2">{textLabel}</span>
 }
 
@@ -226,6 +238,7 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
   const [newVersion, setNewVersion] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [versionResult, setVersionResult] = useState<DocumentRecord | null>(null)
   const [meta, setMeta] = useState({ document_name: doc.document_name, folder_id: doc.folder_id ? String(doc.folder_id) : "", description: doc.description ?? "" })
   const [reprocessType, setReprocessType] = useState("")
   const loadExtra = useCallback(() => Promise.all([
@@ -245,7 +258,7 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
     setBusy(name)
     try {
       await run()
-      toast(done)
+      toast(t(done))
       await onChanged()
       extra.reload()
     } catch (error) {
@@ -263,19 +276,19 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
       onClose={onClose}
       footer={
         <>
-          {canEdit && <Button variant="danger" onClick={() => setConfirmDelete(true)}><Trash2 className="h-4 w-4" /> Delete</Button>}
-          {previewable && <Button onClick={() => setPreview(true)}><Eye className="h-4 w-4" /> Preview</Button>}
+          {canEdit && <Button variant="danger" onClick={() => setConfirmDelete(true)}><Trash2 className="h-4 w-4" /> {t("Delete")}</Button>}
+          {previewable && <Button onClick={() => setPreview(true)}><Eye className="h-4 w-4" /> {t("Preview")}</Button>}
           <Button variant="primary" disabled={busy === "download"}
             onClick={() => act("download", () => downloadBlob(apiBlob, `${path}/download`, doc.document_name), "Download started.")}>
-            <Download className="h-4 w-4" /> Download
+            <Download className="h-4 w-4" /> {t("Download")}
           </Button>
         </>
       }
     >
       {doc.status === "FAILED" && (
         <div role="alert" className="rounded-2xl border border-ab-danger/50 bg-ab-danger/10 p-4">
-          <p className="text-sm font-extrabold uppercase tracking-wide text-ab-danger">Failed{doc.processing_stage ? ` · ${statusLabel(doc.processing_stage)} stage` : ""}</p>
-          <p className="mt-1 text-sm"><span className="font-semibold">Reason:</span> {doc.processing_error ?? doc.processing?.error_reason ?? "Not recorded"}</p>
+          <p className="text-sm font-extrabold uppercase tracking-wide text-ab-danger">{t("Failed")}{doc.processing_stage ? ` · ${t("{stage} stage", { stage: statusLabel(doc.processing_stage) })}` : ""}</p>
+          <p className="mt-1 text-sm"><span className="font-semibold">{t("Reason:")}</span> {doc.processing_error ?? doc.processing?.error_reason ?? t("Not recorded")}</p>
           {doc.processing?.validation_result?.errors?.length ? (
             <ul className="mt-2 list-disc pl-5 text-xs text-ab-muted">{doc.processing.validation_result.errors.map((e) => <li key={e}>{e}</li>)}</ul>
           ) : null}
@@ -287,22 +300,22 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
           <div className="flex flex-wrap gap-2">
             {doc.status === "ARCHIVED" ? (
               <Button disabled={!!busy} onClick={() => act("restore", () => api(`${path}/restore`, { method: "POST" }), "Document restored.")}>
-                <ArchiveRestore className="h-4 w-4" /> Restore
+                <ArchiveRestore className="h-4 w-4" /> {t("Restore")}
               </Button>
             ) : (
               <Button disabled={!!busy} onClick={() => act("archive", () => api(`${path}/archive`, { method: "POST" }), "Document archived.")}>
-                <Archive className="h-4 w-4" /> Archive
+                <Archive className="h-4 w-4" /> {t("Archive")}
               </Button>
             )}
-            <Button disabled={!!busy} onClick={() => setNewVersion(true)}><FilePlus2 className="h-4 w-4" /> New version</Button>
-            <Button disabled={!!busy} onClick={() => setEditing((v) => !v)}>Edit details</Button>
+            <Button disabled={!!busy} onClick={() => setNewVersion(true)}><FilePlus2 className="h-4 w-4" /> {t("New version")}</Button>
+            <Button disabled={!!busy} onClick={() => setEditing((v) => !v)}>{t("Edit details")}</Button>
           </div>
           {doc.status !== "ARCHIVED" && doc.status !== "SUPERSEDED" && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ab-border pt-3">
               <Select label="Reprocess as" value={reprocessType} onChange={setReprocessType}
-                options={[{ value: "", label: "Reprocess (same type)" }, ...types.filter((t) => t.code !== "AUTO").map((t) => ({ value: t.code, label: `Reprocess as ${t.label}` }))]} />
+                options={[{ value: "", label: "Reprocess (same type)" }, ...types.filter((dt) => dt.code !== "AUTO").map((dt) => ({ value: dt.code, label: t("Reprocess as {type}", { type: t(dt.label) }) }))]} />
               <Button disabled={!!busy} onClick={() => act("reprocess", () => api(`${path}/reprocess`, { method: "POST", body: JSON.stringify(reprocessType ? { document_type: reprocessType } : {}) }), "Document reprocessed.")}>
-                {busy === "reprocess" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Reprocess
+                {busy === "reprocess" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} {t("Reprocess")}
               </Button>
             </div>
           )}
@@ -319,21 +332,21 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
                 void act("edit", () => api(path, { method: "PUT", body: JSON.stringify(body) }), "Details saved.").then(() => setEditing(false))
               }}
             >
-              <label className="text-sm font-medium sm:col-span-2">Name
+              <label className="text-sm font-medium sm:col-span-2">{t("Name")}
                 <input className="mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm" value={meta.document_name} onChange={(e) => setMeta({ ...meta, document_name: e.target.value })} />
               </label>
-              <label className="text-sm font-medium">Folder
+              <label className="text-sm font-medium">{t("Folder")}
                 <select className="mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm" value={meta.folder_id} onChange={(e) => setMeta({ ...meta, folder_id: e.target.value })}>
-                  <option value="">No folder</option>
+                  <option value="">{t("No folder")}</option>
                   {indexFolders(folders).options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </label>
-              <label className="text-sm font-medium">Description
+              <label className="text-sm font-medium">{t("Description")}
                 <input className="mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm" value={meta.description} onChange={(e) => setMeta({ ...meta, description: e.target.value })} />
               </label>
               <div className="flex justify-end gap-2 sm:col-span-2">
-                <Button onClick={() => setEditing(false)}>Cancel</Button>
-                <Button type="submit" variant="primary" disabled={!!busy}>Save</Button>
+                <Button onClick={() => setEditing(false)}>{t("Cancel")}</Button>
+                <Button type="submit" variant="primary" disabled={!!busy}>{t("Save")}</Button>
               </div>
             </form>
           )}
@@ -349,8 +362,8 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
         ]} />
         {(doc.processing?.created_records?.length || doc.processing?.updated_records?.length) ? (
           <div className="mt-3 space-y-1 text-xs text-ab-muted">
-            {doc.processing.created_records?.length ? <p><span className="font-semibold text-ab-text">Created:</span> {doc.processing.created_records.map(recordLink)}</p> : null}
-            {doc.processing.updated_records?.length ? <p><span className="font-semibold text-ab-text">Updated:</span> {doc.processing.updated_records.map(recordLink)}</p> : null}
+            {doc.processing.created_records?.length ? <p><span className="font-semibold text-ab-text">{t("Created:")}</span> {doc.processing.created_records.map(recordLink)}</p> : null}
+            {doc.processing.updated_records?.length ? <p><span className="font-semibold text-ab-text">{t("Updated:")}</span> {doc.processing.updated_records.map(recordLink)}</p> : null}
           </div>
         ) : null}
       </Section>
@@ -391,7 +404,7 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
                   <span>v{v.version} · {date(v.created_at)} · <Badge value={v.status} /></span>
                   <button type="button" className="text-xs font-semibold text-ab-accent hover:underline"
                     onClick={() => act("download", () => downloadBlob(apiBlob, `${path}/download?version=${v.version}`, v.document_name), "Download started.")}>
-                    Download
+                    {t("Download")}
                   </button>
                 </li>
               ))}
@@ -415,16 +428,20 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
           onClose={() => setNewVersion(false)}
           onUploaded={(next) => {
             setNewVersion(false)
-            toast(next.status === "FAILED" ? `New version uploaded, but processing failed: ${next.processing_error ?? "see details"}` : `Version ${next.version} uploaded and processed.`, next.status === "FAILED" ? "error" : "success")
+            setVersionResult(next)
             void onChanged()
             extra.reload()
           }}
         />
       )}
+      {versionResult && (
+        <UploadResult doc={versionResult} newFolder={false} isVersion
+          onClose={() => setVersionResult(null)} onView={() => setVersionResult(null)} />
+      )}
       {confirmDelete && (
         <Confirm
           title="Delete document?"
-          message={<>Deletes “{doc.document_name}” and all its versions and files. The audit history is kept. Records it created (clients, transactions) are not removed. This can't be undone — consider <strong>Archive</strong> instead.</>}
+          message={t("Deletes “{name}” and all its versions and files. The audit history is kept. Records it created (clients, transactions) are not removed. This can't be undone — consider Archive instead.", { name: doc.document_name })}
           confirmLabel="Delete"
           busy={busy === "delete"}
           onCancel={() => setConfirmDelete(false)}
@@ -432,7 +449,7 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
             setBusy("delete")
             try {
               await api(path, { method: "DELETE" })
-              toast("Document deleted.")
+              toast(t("Document deleted."))
               onDeleted()
             } catch (error) {
               toast((error as Error).message, "error")
@@ -449,10 +466,10 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
 function Preview({ path, name, onClose }: { path: string; name: string; onClose: () => void }) {
   const { url, error, type } = useBlobUrl(path)
   return (
-    <div className="fixed inset-0 z-[75] flex flex-col bg-black/85 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={`Preview of ${name}`}>
+    <div className="fixed inset-0 z-[75] flex flex-col bg-black/85 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={t("Preview of {name}", { name })}>
       <div className="mb-2 flex items-center justify-between text-white">
         <p className="truncate text-sm font-semibold">{name}</p>
-        <button type="button" onClick={onClose} aria-label="Close preview" className="rounded-lg p-2 hover:bg-white/10"><X className="h-5 w-5" /></button>
+        <button type="button" onClick={onClose} aria-label={t("Close preview")} className="rounded-lg p-2 hover:bg-white/10"><X className="h-5 w-5" /></button>
       </div>
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl bg-ab-card">
         {error ? <p className="text-sm text-ab-danger">{error}</p> : !url ? (

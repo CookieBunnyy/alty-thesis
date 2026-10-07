@@ -1,4 +1,5 @@
 // Formatting and role helpers shared by the management pages.
+import { locale, t } from "./i18n"
 
 export const peso = (value: unknown): string => {
   if (value === null || value === undefined || value === "") return "—" // missing, not zero
@@ -16,19 +17,19 @@ export const pesoShort = (value: unknown): string => {
 export const date = (value: unknown): string => {
   if (!value) return "—"
   const d = new Date(String(value))
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString(locale(), { month: "short", day: "numeric", year: "numeric" })
 }
 
 export const dateTime = (value: unknown): string => {
   if (!value) return "—"
   const d = new Date(String(value))
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString(locale(), { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
 }
 
-/** RESERVED -> Reserved, ON_HOLD -> On hold. */
+/** RESERVED -> Reserved, ON_HOLD -> On hold (in the chosen language). */
 export const statusLabel = (value: unknown): string => {
   const text = String(value ?? "").replace(/_/g, " ").trim().toLowerCase()
-  return text ? text[0].toUpperCase() + text.slice(1) : "—"
+  return text ? t(text[0].toUpperCase() + text.slice(1)) : "—"
 }
 
 export const text = (value: unknown): string => (value === null || value === undefined || value === "" ? "—" : String(value))

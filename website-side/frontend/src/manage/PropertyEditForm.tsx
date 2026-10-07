@@ -4,6 +4,7 @@ import { CATEGORIES } from "@/lib/categories"
 import { statusLabel } from "./format"
 import { Button } from "./ui"
 import { useStaffAuth } from "./staffContext"
+import { t } from "./i18n"
 
 export type Listing = {
   listing_id: number
@@ -45,7 +46,7 @@ const MANUAL = ["AVAILABLE", "ON_HOLD", "UNAVAILABLE"]
 function Field({ label, children, wide }: { label: string; children: ReactNode; wide?: boolean }) {
   return (
     <label className={`block text-sm font-medium ${wide ? "sm:col-span-2" : ""}`}>
-      {label}
+      {t(label)}
       {children}
     </label>
   )
@@ -92,13 +93,13 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     setError("")
-    if (!form.title.trim()) return setError("Title is required.")
+    if (!form.title.trim()) return setError(t("Title is required."))
     const numbers = { price_total: num(form.price_total), initial_dp: num(form.initial_dp), monthly_rate: num(form.monthly_rate), num_bedrooms: num(form.num_bedrooms), num_bathrooms: num(form.num_bathrooms), garage_spaces: num(form.garage_spaces) }
-    if (Object.values(numbers).some((v) => v !== null && (!Number.isFinite(v) || v < 0))) return setError("Prices, rooms and garage spaces must be zero or more.")
+    if (Object.values(numbers).some((v) => v !== null && (!Number.isFinite(v) || v < 0))) return setError(t("Prices, rooms and garage spaces must be zero or more."))
     const lat = num(form.lat)
     const lng = num(form.lng)
-    if ((lat === null) !== (lng === null)) return setError("Enter both latitude and longitude, or neither.")
-    if (lat !== null && (lat < -90 || lat > 90 || lng! < -180 || lng! > 180)) return setError("Latitude must be −90 to 90 and longitude −180 to 180.")
+    if ((lat === null) !== (lng === null)) return setError(t("Enter both latitude and longitude, or neither."))
+    if (lat !== null && (lat < -90 || lat > 90 || lng! < -180 || lng! > 180)) return setError(t("Latitude must be −90 to 90 and longitude −180 to 180."))
 
     const next: Record<string, unknown> = {
       title: form.title.trim(),
@@ -130,12 +131,12 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Edit property">
-      <button type="button" aria-label="Cancel" className="absolute inset-0 bg-black/55" onClick={onClose} />
+    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={t("Edit property")}>
+      <button type="button" aria-label={t("Cancel")} className="absolute inset-0 bg-black/55" onClick={onClose} />
       <form onSubmit={submit} noValidate className="ab-pop relative flex max-h-[94dvh] w-full max-w-3xl flex-col rounded-t-2xl border border-ab-border bg-ab-card shadow-2xl sm:rounded-2xl">
         <header className="flex items-center justify-between border-b border-ab-border px-5 py-4">
-          <h2 className="text-lg font-bold">Edit property #{listing.listing_id}</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-2 text-ab-muted hover:bg-ab-hover"><X className="h-4 w-4" /></button>
+          <h2 className="text-lg font-bold">{t("Edit property #{id}", { id: listing.listing_id })}</h2>
+          <button type="button" onClick={onClose} aria-label={t("Close")} className="rounded-lg p-2 text-ab-muted hover:bg-ab-hover"><X className="h-4 w-4" /></button>
         </header>
         <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2">
           <Field label="Title *" wide><input className={field} value={form.title} onChange={(e) => set("title", e.target.value)} required /></Field>
@@ -148,12 +149,12 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
               {statusOptions.map((s) => <option key={s} value={s} disabled={!MANUAL.includes(s) && s !== listing.status}>{statusLabel(s)}</option>)}
             </select>
             <span className="mt-1 block text-xs font-normal text-ab-faint">
-              {locked ? "A sold property's status can't be changed." : "Reserved and Sold are set by reservation and sale documents."}
+              {locked ? t("A sold property's status can't be changed.") : t("Reserved and Sold are set by reservation and sale documents.")}
             </span>
           </Field>
           <Field label="Developer / partner">
             <select className={field} value={form.partner_id} onChange={(e) => set("partner_id", e.target.value)}>
-              <option value="">Not set</option>
+              <option value="">{t("Not set")}</option>
               {partners.filter((p) => p.status === "ACTIVE" || String(p.id) === form.partner_id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
@@ -167,7 +168,7 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
           <Field label="Latitude"><input className={field} inputMode="decimal" value={form.lat} onChange={(e) => set("lat", e.target.value)} /></Field>
           <Field label="Longitude"><input className={field} inputMode="decimal" value={form.lng} onChange={(e) => set("lng", e.target.value)} /></Field>
           <fieldset className="sm:col-span-2">
-            <legend className="text-sm font-medium">Features</legend>
+            <legend className="text-sm font-medium">{t("Features")}</legend>
             <div className="mt-2 flex flex-wrap items-center gap-4 text-sm">
               {(["has_balcony", "has_kitchen", "has_backyard", "has_garage"] as const).map((key) => (
                 <label key={key} className="flex items-center gap-2">
@@ -176,7 +177,7 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
                 </label>
               ))}
               {form.has_garage && (
-                <label className="flex items-center gap-2">Spaces
+                <label className="flex items-center gap-2">{t("Spaces")}
                   <input className="w-16 rounded-lg border border-ab-border bg-ab-input px-2 py-1" inputMode="numeric" value={form.garage_spaces} onChange={(e) => set("garage_spaces", e.target.value)} />
                 </label>
               )}
@@ -185,12 +186,12 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
           <Field label="Amenities (comma-separated)" wide><input className={field} value={form.amenities} onChange={(e) => set("amenities", e.target.value)} /></Field>
           <Field label="Description" wide><textarea className={`${field} min-h-24`} value={form.details} onChange={(e) => set("details", e.target.value)} /></Field>
           <Field label="Photo URLs (one per line)" wide><textarea className={`${field} min-h-20 font-mono text-xs`} value={form.photos} onChange={(e) => set("photos", e.target.value)} /></Field>
-          <p className="text-xs text-ab-faint sm:col-span-2">Nearby places and establishments are edited in the desktop app for now.</p>
+          <p className="text-xs text-ab-faint sm:col-span-2">{t("Nearby places and establishments are edited in the desktop app for now.")}</p>
         </div>
         {error && <p role="alert" className="mx-5 mb-2 rounded-lg border border-ab-danger/40 bg-ab-danger/10 px-3 py-2 text-sm text-ab-danger">{error}</p>}
         <footer className="flex justify-end gap-2 border-t border-ab-border px-5 py-3">
-          <Button onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={busy}>{busy && <LoaderCircle className="h-4 w-4 animate-spin" />} Save changes</Button>
+          <Button onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
+          <Button type="submit" variant="primary" disabled={busy}>{busy && <LoaderCircle className="h-4 w-4 animate-spin" />} {t("Save changes")}</Button>
         </footer>
       </form>
     </div>

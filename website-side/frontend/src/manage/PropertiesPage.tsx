@@ -10,6 +10,7 @@ import { Badge, Button, Confirm, DataTable, Drawer, Facts, LoadState, PageHeader
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
+import { t } from "./i18n"
 
 type PartnerOption = { id: number; name: string; status: string }
 type Summary = { available: number; reserved: number; sold: number; on_hold: number; unavailable: number; total: number }
@@ -66,7 +67,7 @@ export function PropertiesPage() {
         </span>
       ),
     },
-    { key: "category", label: "Category", sort: (l) => categoryLabel(l.category), render: (l) => categoryLabel(l.category) },
+    { key: "category", label: "Category", sort: (l) => categoryLabel(l.category), render: (l) => t(categoryLabel(l.category)) },
     { key: "price", label: "Price", align: "right", sort: (l) => Number(l.price_total ?? 0), render: (l) => peso(l.price_total) },
     { key: "monthly", label: "Monthly", align: "right", sort: (l) => Number(l.monthly_rate ?? 0), render: (l) => peso(l.monthly_rate), hideOnPhone: true },
     { key: "rooms", label: "Bed / Bath", sort: (l) => l.num_bedrooms ?? 0, render: (l) => `${l.num_bedrooms ?? "—"} / ${l.num_bathrooms ?? "—"}`, hideOnPhone: true },
@@ -99,7 +100,7 @@ export function PropertiesPage() {
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
-          <p className="text-xs text-ab-faint">{shown.length} of {listings.length} listings</p>
+          <p className="text-xs text-ab-faint">{t("{n} of {total} listings", { n: shown.length, total: listings.length })}</p>
           <DataTable rows={shown} columns={columns} rowKey={(l) => String(l.listing_id)} onOpen={(l) => open(String(l.listing_id))}
             empty="No listings match these filters." initialSort={{ key: "title", dir: "asc" }} />
         </>
@@ -134,7 +135,7 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
     setDeleting(true)
     try {
       await api(`/property-listings/${listing.listing_id}`, { method: "DELETE" })
-      toast(`Deleted "${listing.title}".`)
+      toast(t("Deleted “{name}”.", { name: listing.title ?? "" }))
       onDeleted()
     } catch (error) {
       toast((error as Error).message, "error")
@@ -149,31 +150,31 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
     : []
   const photos = listing.photos ?? []
   const features = ([["Balcony", listing.has_balcony], ["Kitchen", listing.has_kitchen], ["Backyard", listing.has_backyard], ["Garage", listing.has_garage]] as const)
-  const relatedClients = [...new Map((history.data?.transactions ?? []).map((t) => [t.client_id, t.client_name])).entries()]
-  const relatedAgents = [...new Map((history.data?.transactions ?? []).map((t) => [t.agent_id, t.agent_name])).entries()]
+  const relatedClients = [...new Map((history.data?.transactions ?? []).map((tx) => [tx.client_id, tx.client_name])).entries()]
+  const relatedAgents = [...new Map((history.data?.transactions ?? []).map((tx) => [tx.agent_id, tx.agent_name])).entries()]
 
   return (
     <Drawer
-      title={listing.title ?? `Property #${listing.listing_id}`}
-      subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={listing.status} /> {categoryLabel(listing.category)} · #{listing.listing_id}</span>}
+      title={listing.title ?? t("Property #{id}", { id: listing.listing_id })}
+      subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={listing.status} /> {t(categoryLabel(listing.category))} · #{listing.listing_id}</span>}
       onClose={onClose}
       footer={
         <>
-          {isManagement(user?.role) && <Button variant="danger" onClick={() => setConfirmDelete(true)}><Trash2 className="h-4 w-4" /> Delete</Button>}
+          {isManagement(user?.role) && <Button variant="danger" onClick={() => setConfirmDelete(true)}><Trash2 className="h-4 w-4" /> {t("Delete")}</Button>}
           <Link to={`/map?property=${listing.listing_id}`} target="_blank" className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-ab-border-strong px-3.5 text-sm font-semibold hover:bg-ab-hover">
-            <MapPin className="h-4 w-4" /> Public map <ExternalLink className="h-3 w-3" />
+            <MapPin className="h-4 w-4" /> {t("Public map")} <ExternalLink className="h-3 w-3" />
           </Link>
-          {canEditListings(user?.role) && <Button variant="primary" onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /> Edit</Button>}
+          {canEditListings(user?.role) && <Button variant="primary" onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /> {t("Edit")}</Button>}
         </>
       }
     >
       {photos.length > 0 && (
         <div>
-          <img src={photos[Math.min(photo, photos.length - 1)]} alt={`Photo ${photo + 1} of ${listing.title}`} className="aspect-video w-full rounded-2xl object-cover" />
+          <img src={photos[Math.min(photo, photos.length - 1)]} alt={t("Photo {n} of {name}", { n: photo + 1, name: listing.title ?? "" })} className="aspect-video w-full rounded-2xl object-cover" />
           {photos.length > 1 && (
             <div className="mt-2 flex gap-2 overflow-x-auto">
               {photos.map((src, i) => (
-                <button key={src} type="button" onClick={() => setPhoto(i)} aria-label={`Photo ${i + 1}`}
+                <button key={src} type="button" onClick={() => setPhoto(i)} aria-label={t("Photo {n}", { n: i + 1 })}
                   className={`h-14 w-20 shrink-0 overflow-hidden rounded-lg border-2 ${i === photo ? "border-ab-accent" : "border-transparent"}`}>
                   <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
                 </button>
@@ -186,14 +187,14 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
       <div className="grid grid-cols-3 gap-2">
         {([["Total price", listing.price_total], ["Down payment", listing.initial_dp], ["Monthly", listing.monthly_rate]] as const).map(([label, value]) => (
           <div key={label} className="rounded-xl border border-ab-border bg-ab-card p-3">
-            <p className="text-[11px] text-ab-faint">{label}</p>
+            <p className="text-[11px] text-ab-faint">{t(label)}</p>
             <p className="mt-0.5 font-bold tabular-nums text-ab-text">{value ? peso(value) : "—"}</p>
           </div>
         ))}
       </div>
 
       {isManagement(user?.role) && (
-        <SubjectInsights path={`/intelligence/properties/${listing.listing_id}`} empty="Nothing needs attention for this property right now." />
+        <SubjectInsights path={`/intelligence/properties/${listing.listing_id}`} empty={t("Nothing needs attention for this property right now.")} />
       )}
 
       <Section title="Details">
@@ -203,13 +204,13 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
           ["Layout", listing.layout_type],
           ["Bedrooms", listing.num_bedrooms],
           ["Bathrooms", listing.num_bathrooms],
-          ["Garage", listing.has_garage ? `${listing.garage_spaces || "Yes"}${listing.garage_spaces ? " space(s)" : ""}` : null],
+          ["Garage", listing.has_garage ? (listing.garage_spaces ? t("{n} space(s)", { n: listing.garage_spaces }) : t("Yes")) : null],
           ["Coordinates", listing.lat != null && listing.lng != null ? `${Number(listing.lat).toFixed(5)}, ${Number(listing.lng).toFixed(5)}` : null],
         ]} />
         <div className="mt-3 flex flex-wrap gap-1.5">
           {features.map(([name, on]) => (
             <span key={name} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${on ? "bg-ab-accent-soft text-ab-accent" : "border border-dashed border-ab-border text-ab-faint"}`}>
-              {on ? "✓ " : ""}{name}
+              {on ? "✓ " : ""}{t(name)}
             </span>
           ))}
         </div>
@@ -219,7 +220,7 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
       <Section title="Amenities & nearby">
         {amenities.length ? (
           <div className="flex flex-wrap gap-1.5">{amenities.map((a) => <span key={String(a)} className="rounded-full border border-ab-border bg-ab-card-2 px-2.5 py-1 text-xs">{String(a)}</span>)}</div>
-        ) : <p className="text-sm italic text-ab-faint">No amenities listed</p>}
+        ) : <p className="text-sm italic text-ab-faint">{t("No amenities listed")}</p>}
         {nearby.length > 0 && (
           <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
             {nearby.map(([group, items]) => (
@@ -239,18 +240,18 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
         {history.data && (
           <>
             {history.data.transactions.length === 0 ? (
-              <p className="text-sm italic text-ab-faint">No transactions recorded for this property.</p>
+              <p className="text-sm italic text-ab-faint">{t("No transactions recorded for this property.")}</p>
             ) : (
               <ul className="space-y-2">
-                {history.data.transactions.map((t) => (
-                  <li key={t.transaction_id} className="rounded-xl border border-ab-border p-3 text-sm">
+                {history.data.transactions.map((tx) => (
+                  <li key={tx.transaction_id} className="rounded-xl border border-ab-border p-3 text-sm">
                     <div className="flex items-center justify-between gap-2">
-                      <Link to={`/manage/transactions?id=${t.transaction_id}`} className="font-semibold hover:underline">{statusLabel(t.transaction_type)} · {peso(t.amount)}</Link>
-                      <Badge value={t.status} />
+                      <Link to={`/manage/transactions?id=${tx.transaction_id}`} className="font-semibold hover:underline">{statusLabel(tx.transaction_type)} · {peso(tx.amount)}</Link>
+                      <Badge value={tx.status} />
                     </div>
                     <p className="mt-1 text-xs text-ab-muted">
-                      {date(t.transaction_date)} · <Link to={`/manage/clients?id=${t.client_id}`} className="hover:underline">{text(t.client_name)}</Link>
-                      {" · "}<Link to={`/manage/agents?id=${t.agent_id}`} className="hover:underline">{text(t.agent_name)}</Link> · {statusLabel(t.source)}
+                      {date(tx.transaction_date)} · <Link to={`/manage/clients?id=${tx.client_id}`} className="hover:underline">{text(tx.client_name)}</Link>
+                      {" · "}<Link to={`/manage/agents?id=${tx.agent_id}`} className="hover:underline">{text(tx.agent_name)}</Link> · {statusLabel(tx.source)}
                     </p>
                   </li>
                 ))}
@@ -262,14 +263,14 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
                 ["Related agents", relatedAgents.map(([aid, name]) => <Link key={aid} to={`/manage/agents?id=${aid}`} className="mr-2 hover:underline">{name ?? aid}</Link>)],
               ]} />
             )}
-            <p className="mt-3 text-xs font-semibold text-ab-faint">Documents</p>
+            <p className="mt-3 text-xs font-semibold text-ab-faint">{t("Documents")}</p>
             {history.data.documents.length === 0 ? (
-              <p className="text-sm italic text-ab-faint">No documents linked to this property.</p>
+              <p className="text-sm italic text-ab-faint">{t("No documents linked to this property.")}</p>
             ) : (
               <ul className="mt-1 space-y-1 text-sm">
                 {history.data.documents.map((d, i) => (
                   <li key={d.document_id ?? d.id ?? i} className="flex items-center justify-between gap-2">
-                    <span className="truncate">{text(d.document_name)} <span className="text-xs text-ab-faint">{text(d.document_type)} · {date(d.created_at)}</span></span>
+                    <span className="truncate">{text(d.document_name)} <span className="text-xs text-ab-faint">{d.document_type ? statusLabel(d.document_type) : "—"} · {date(d.created_at)}</span></span>
                     {d.status && <Badge value={d.status} />}
                   </li>
                 ))}
@@ -295,13 +296,13 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
           listing={listing}
           partners={partners}
           onClose={() => setEditing(false)}
-          onSaved={(updated) => { onSaved(updated); setEditing(false); toast("Property saved.") }}
+          onSaved={(updated) => { onSaved(updated); setEditing(false); toast(t("Property saved.")) }}
         />
       )}
       {confirmDelete && (
         <Confirm
           title="Delete property?"
-          message={<>“{listing.title}” will be removed here and from the central database (Supabase). This can't be undone. Properties with recorded transactions can't be deleted.</>}
+          message={t("“{name}” will be removed here and from the central database (Supabase). This can't be undone. Properties with recorded transactions can't be deleted.", { name: listing.title ?? "" })}
           confirmLabel="Delete"
           busy={deleting}
           onConfirm={remove}

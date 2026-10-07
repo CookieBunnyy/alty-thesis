@@ -5,6 +5,7 @@ import { dateTime, statusLabel } from "./format"
 import { Badge, Button, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
+import { t } from "./i18n"
 
 type Event = { id: number; timestamp: string; actor: string; actor_id: number | null; action: string; entity_type: string | null; entity_id: string | null; result: string; details: Record<string, unknown> }
 type Page = { total: number; items: Event[] }
@@ -51,7 +52,7 @@ export function AuditPage() {
     try {
       const all = await api<Page>(`/audit?${params(1000, 0)}`)
       const quote = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`
-      const lines = [["Time", "Actor", "Action", "Entity", "Entity ID", "Result", "Details"].join(","),
+      const lines = [["Time", "Actor", "Action", "Entity", "Entity ID", "Result", "Details"].map((h) => t(h)).join(","),
         ...all.items.map((e) => [e.timestamp, e.actor, e.action, e.entity_type, e.entity_id, e.result, JSON.stringify(e.details)].map(quote).join(","))]
       const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }))
       const link = Object.assign(document.createElement("a"), { href: url, download: `alty-audit-${new Date().toLocaleDateString("en-CA")}.csv` })
@@ -76,25 +77,25 @@ export function AuditPage() {
       <PageHeader
         title="Audit Logs"
         subtitle="Every sign-in, record change, document action and sync, from the desktop app and the website. Entries can't be edited or deleted."
-        actions={<Button onClick={exportCsv} disabled={exporting || !page.total}><Download className="h-4 w-4" /> {exporting ? "Exporting…" : "Export CSV"}</Button>}
+        actions={<Button onClick={exportCsv} disabled={exporting || !page.total}><Download className="h-4 w-4" /> {exporting ? t("Exporting…") : t("Export CSV")}</Button>}
       />
       <div className="flex flex-wrap items-end gap-2">
         <div className="w-full md:w-auto md:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search action, actor or record ID" /></div>
         <Select label="Action" value={action} onChange={(v) => { setAction(v); setOffset(0) }} options={[{ value: "", label: "All actions" }, ...actions.map((a) => ({ value: a, label: statusLabel(a) }))]} />
         <Select label="Result" value={result} onChange={(v) => { setResult(v); setOffset(0) }} options={[{ value: "", label: "Any result" }, { value: "SUCCESS", label: "Success" }, { value: "FAILED", label: "Failed" }]} />
-        <label className="text-xs text-ab-faint">From<input type="date" value={since} onChange={(e) => { setSince(e.target.value); setOffset(0) }} className="ml-1 min-h-10 rounded-xl border border-ab-border bg-ab-input px-2 text-sm text-ab-text" /></label>
-        <label className="text-xs text-ab-faint">To<input type="date" value={until} onChange={(e) => { setUntil(e.target.value); setOffset(0) }} className="ml-1 min-h-10 rounded-xl border border-ab-border bg-ab-input px-2 text-sm text-ab-text" /></label>
-        {(search || action || result || since || until) && <Button onClick={reset}>Clear</Button>}
+        <label className="text-xs text-ab-faint">{t("From")}<input type="date" value={since} onChange={(e) => { setSince(e.target.value); setOffset(0) }} className="ml-1 min-h-10 rounded-xl border border-ab-border bg-ab-input px-2 text-sm text-ab-text" /></label>
+        <label className="text-xs text-ab-faint">{t("To")}<input type="date" value={until} onChange={(e) => { setUntil(e.target.value); setOffset(0) }} className="ml-1 min-h-10 rounded-xl border border-ab-border bg-ab-input px-2 text-sm text-ab-text" /></label>
+        {(search || action || result || since || until) && <Button onClick={reset}>{t("Clear")}</Button>}
       </div>
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
           <DataTable rows={page.items} columns={columns} rowKey={(e) => String(e.id)} onOpen={setOpen} empty="No audit entries match these filters." />
           <div className="flex items-center justify-between text-sm text-ab-muted">
-            <span>{page.total ? `${offset + 1}–${Math.min(offset + PAGE_SIZE, page.total)} of ${page.total}` : "0 entries"}</span>
+            <span>{page.total ? t("{from}–{to} of {total}", { from: offset + 1, to: Math.min(offset + PAGE_SIZE, page.total), total: page.total }) : t("0 entries")}</span>
             <span className="flex gap-2">
-              <Button onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))} disabled={offset === 0 || loading}><ChevronLeft className="h-4 w-4" /> Newer</Button>
-              <Button onClick={() => setOffset(offset + PAGE_SIZE)} disabled={offset + PAGE_SIZE >= page.total || loading}>Older <ChevronRight className="h-4 w-4" /></Button>
+              <Button onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))} disabled={offset === 0 || loading}><ChevronLeft className="h-4 w-4" /> {t("Newer")}</Button>
+              <Button onClick={() => setOffset(offset + PAGE_SIZE)} disabled={offset + PAGE_SIZE >= page.total || loading}>{t("Older")} <ChevronRight className="h-4 w-4" /></Button>
             </span>
           </div>
         </>
@@ -114,7 +115,7 @@ export function AuditPage() {
           <Section title="Details">
             {Object.keys(open.details ?? {}).length ? (
               <pre className="max-h-[50vh] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-ab-card-2 p-3 text-xs">{JSON.stringify(open.details, null, 2)}</pre>
-            ) : <p className="text-sm italic text-ab-faint">No extra details recorded.</p>}
+            ) : <p className="text-sm italic text-ab-faint">{t("No extra details recorded.")}</p>}
           </Section>
         </Drawer>
       )}

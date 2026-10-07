@@ -5,6 +5,7 @@ import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/hooks/useTheme"
 import { navigate, safeNext, useLocation } from "@/lib/router"
 import { useStaffAuth } from "./staffContext"
+import { t } from "./i18n"
 
 const field =
   "mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2.5 text-sm text-ab-text placeholder:text-ab-faint focus:border-ab-accent focus:outline-none"
@@ -29,7 +30,7 @@ export function ManageSignIn() {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!username.trim() || !password) {
-      setError("Please enter both username and password.")
+      setError(t("Please enter both username and password."))
       return
     }
     setError("")
@@ -37,7 +38,7 @@ export function ManageSignIn() {
     try {
       await signIn(username.trim(), password, remember)
     } catch (submitError) {
-      setError((submitError as Error).message)
+      setError(t((submitError as Error).message))
       setBusy(false)
     }
   }
@@ -56,15 +57,15 @@ export function ManageSignIn() {
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-ab-accent-soft text-ab-accent">
             <ShieldCheck className="h-5 w-5" />
           </span>
-          <h1 className="mt-4 text-2xl font-extrabold">Management sign in</h1>
+          <h1 className="mt-4 text-2xl font-extrabold">{t("Management sign in")}</h1>
           <p className="mt-1 text-sm text-ab-muted">
-            For Abellar Realty staff. Use the same username and password as the desktop app.
+            {t("For Abellar Realty staff. Use the same username and password as the desktop app.")}
           </p>
 
-          <label className="mt-6 block text-sm font-medium" htmlFor="staff-username">Username</label>
+          <label className="mt-6 block text-sm font-medium" htmlFor="staff-username">{t("Username")}</label>
           <input id="staff-username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} className={field} autoFocus />
 
-          <label className="mt-4 block text-sm font-medium" htmlFor="staff-password">Password</label>
+          <label className="mt-4 block text-sm font-medium" htmlFor="staff-password">{t("Password")}</label>
           <div className="relative">
             <input
               id="staff-password"
@@ -77,7 +78,7 @@ export function ManageSignIn() {
             <button
               type="button"
               onClick={() => setShowPassword((value) => !value)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-label={showPassword ? t("Hide password") : t("Show password")}
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-ab-muted hover:text-ab-text"
             >
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -86,7 +87,7 @@ export function ManageSignIn() {
 
           <label className="mt-4 flex items-center gap-2 text-sm text-ab-muted">
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-[var(--color-ab-accent)]" />
-            Stay signed in on this computer
+            {t("Stay signed in on this computer")}
           </label>
 
           {error && (
@@ -101,10 +102,10 @@ export function ManageSignIn() {
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-ab-accent px-4 py-3 font-semibold text-ab-ink transition hover:bg-ab-accent-hover disabled:opacity-70"
           >
             {busy && <LoaderCircle className="h-4 w-4 animate-spin" />}
-            {busy ? "Signing in…" : "Sign In"}
+            {busy ? t("Signing in…") : t("Sign In")}
           </button>
           <p className="mt-5 text-center text-xs text-ab-faint">
-            Looking for your client account? <Link to="/signin" className="font-semibold text-ab-accent hover:underline">Client sign in</Link>
+            {t("Looking for your client account?")} <Link to="/signin" className="font-semibold text-ab-accent hover:underline">{t("Client sign in")}</Link>
           </p>
         </form>
       </main>

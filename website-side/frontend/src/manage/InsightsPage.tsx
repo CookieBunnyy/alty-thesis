@@ -4,6 +4,7 @@ import { InsightList, type Insight } from "./Insights"
 import { Button, LoadState, PageHeader, Select, Tiles } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
+import { t } from "./i18n"
 
 type Feed = { generated_at: string; counts: Record<Insight["severity"], number>; items: Insight[] }
 
@@ -29,9 +30,9 @@ export function InsightsPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <PageHeader
-        title="Insights"
+        title="Recommendations"
         subtitle="Everything ALTY's analysis currently flags, highest priority first. Each item shows the finding, a suggested action, the supporting data and the rule behind it — management makes the decision."
-        actions={<Button onClick={reload}>Refresh</Button>}
+        actions={<Button onClick={reload}>{t("Refresh")}</Button>}
       />
       {data && (
         <Tiles items={[
@@ -43,10 +44,10 @@ export function InsightsPage() {
       )}
       <div className="flex flex-wrap items-center gap-2">
         <Select label="Area" value={scope} onChange={setScope} options={SCOPES} />
-        {data && <p className="text-xs text-ab-faint">Generated {dateTime(data.generated_at)} from current records</p>}
+        {data && <p className="text-xs text-ab-faint">{t("Generated {when} from current records", { when: dateTime(data.generated_at) })}</p>}
       </div>
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
-      {data && <InsightList insights={shown} showSubject empty="Nothing matches these filters." />}
+      {data && <InsightList insights={shown} showSubject empty={t("Nothing matches these filters.")} />}
     </div>
   )
 }

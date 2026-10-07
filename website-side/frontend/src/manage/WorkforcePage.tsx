@@ -6,6 +6,7 @@ import { InsightPanel, type Insight } from "./Insights"
 import { Badge, DataTable, LoadState, PageHeader, Section, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
+import { t } from "./i18n"
 
 type Workforce = {
   generated_at: string
@@ -42,33 +43,33 @@ export function WorkforcePage() {
       {workforce && (
         <>
           <Tiles items={[
-            { label: "Staff accounts", value: workforce.users.total, detail: `${workforce.users.active} active` },
-            { label: "Agents", value: workforce.agents.total, detail: `${workforce.agents.active} active` },
-            { label: "Open reservations", value: openReservations, detail: activeAgents.length ? `${(openReservations / activeAgents.length).toFixed(1)} per active agent` : undefined },
+            { label: "Staff accounts", value: workforce.users.total, detail: t("{n} active", { n: workforce.users.active }) },
+            { label: "Agents", value: workforce.agents.total, detail: t("{n} active", { n: workforce.agents.active }) },
+            { label: "Open reservations", value: openReservations, detail: activeAgents.length ? t("{n} per active agent", { n: (openReservations / activeAgents.length).toFixed(1) }) : undefined },
             { label: "Sales (90 days)", value: rows.reduce((s, a) => s + a.sales_last_90_days, 0), detail: "Completed, recorded in ALTY" },
           ]} />
           <div className="grid gap-5 lg:grid-cols-2">
             <Section title="Open reservations per agent">
               <BarList empty="No open reservations right now." format={(v) => String(v)}
                 rows={[...rows].sort((a, b) => b.active_reservations - a.active_reservations).filter((a) => a.active_reservations > 0)
-                  .map((a) => ({ name: a.full_name, value: a.active_reservations, note: `${a.assigned_clients} assigned client(s)` }))} />
+                  .map((a) => ({ name: a.full_name, value: a.active_reservations, note: t("{n} assigned client(s)", { n: a.assigned_clients }) }))} />
             </Section>
             <Section title="Staff by role">
               <ul className="space-y-2 text-sm">
                 {workforce.users.by_role.map((r) => (
                   <li key={r.role} className="flex items-center justify-between gap-3 rounded-xl border border-ab-border px-3 py-2">
-                    <span className="font-semibold">{r.role}</span>
-                    <span className="text-xs text-ab-muted">{r.users} account(s) · {r.active} active · {r.logged_in_30d} signed in (30 days)</span>
+                    <span className="font-semibold">{t(r.role)}</span>
+                    <span className="text-xs text-ab-muted">{t("{n} account(s) · {a} active · {s} signed in (30 days)", { n: r.users, a: r.active, s: r.logged_in_30d })}</span>
                   </li>
                 ))}
               </ul>
             </Section>
           </div>
-          <InsightPanel title="ALTY Workforce Insights" insights={agentInsights} empty="No agent needs attention right now — workload and performance are within the normal range." />
+          <InsightPanel title="Workforce Recommendation" insights={agentInsights} empty={t("No agent needs attention right now — workload and performance are within the normal range.")} />
           <div>
-            <h2 className="mb-2 font-bold">Agent workload</h2>
+            <h2 className="mb-2 font-bold">{t("Agent workload")}</h2>
             <DataTable rows={rows} columns={columns} rowKey={(a) => a.agent_id} empty="No agents." initialSort={{ key: "open", dir: "desc" }} />
-            <p className="mt-2 text-xs text-ab-faint">Generated {dateTime(workforce.generated_at)}. Counts are from records in ALTY (transactions from documents and sync).</p>
+            <p className="mt-2 text-xs text-ab-faint">{t("Generated {when}. Counts are from records in ALTY (transactions from documents and sync).", { when: dateTime(workforce.generated_at) })}</p>
           </div>
         </>
       )}

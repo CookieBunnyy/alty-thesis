@@ -7,6 +7,7 @@ import { SyncButton } from "./SyncButton"
 import { Badge, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData, useOpenRecord } from "./useApiData"
+import { t } from "./i18n"
 
 type Agent = {
   agent_id: string; full_name: string; phone_number: string | null; agent_location: string | null
@@ -27,7 +28,7 @@ type Reviews = {
 }
 
 function Stars({ value }: { value: number | null }) {
-  if (value == null) return <span className="text-ab-faint">No reviews</span>
+  if (value == null) return <span className="text-ab-faint">{t("No reviews")}</span>
   return (
     <span className="inline-flex items-center gap-1 tabular-nums">
       <Star className="h-3.5 w-3.5 fill-ab-warning text-ab-warning" aria-hidden /> {value.toFixed(1)}
@@ -87,7 +88,7 @@ export function AgentsPage() {
           { label: "Active", value: active, onClick: () => setStatus(status === "ACTIVE" ? "" : "ACTIVE"), active: status === "ACTIVE" },
           { label: "Completed sales", value: agents.reduce((s, a) => s + a.completed_sales, 0), detail: "From agent records" },
           { label: "Sales value", value: pesoShort(agents.reduce((s, a) => s + Number(a.total_sales ?? 0), 0)), detail: "From agent records" },
-          { label: "Client-reviewed agents", value: reviewed.length, detail: reviewed.length ? `of ${agents.length}` : "No client reviews yet" },
+          { label: "Client-reviewed agents", value: reviewed.length, detail: reviewed.length ? t("of {n}", { n: agents.length }) : t("No client reviews yet") },
         ]} />
       )}
       <div className="flex flex-wrap gap-2 sm:flex-nowrap">
@@ -97,7 +98,7 @@ export function AgentsPage() {
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
-          <p className="text-xs text-ab-faint">{shown.length} of {agents.length} agents</p>
+          <p className="text-xs text-ab-faint">{t("{n} of {total} agents", { n: shown.length, total: agents.length })}</p>
           <DataTable rows={shown} columns={columns} rowKey={(a) => a.agent_id} onOpen={(a) => open(a.agent_id)} empty="No agents match these filters." initialSort={{ key: "value", dir: "desc" }} />
         </>
       )}
@@ -123,7 +124,7 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
       onClose={onClose}
       footer={phone && (
         <a href={`tel:${phone}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-ab-accent px-3.5 text-sm font-semibold text-ab-ink hover:bg-ab-accent-hover">
-          <Phone className="h-4 w-4" /> Call {agent.phone_number}
+          <Phone className="h-4 w-4" /> {t("Call {phone}", { phone: agent.phone_number ?? "" })}
         </a>
       )}
     >
@@ -136,18 +137,18 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
           ["Sales value", peso(agent.total_sales)],
           ["Commission", peso(agent.total_commission)],
           ["System rating", agent.star_rating ? `${Number(agent.star_rating).toFixed(1)} ★` : "—"],
-          ["Client rating", agent.client_rating != null ? `${agent.client_rating.toFixed(1)} ★ (${agent.review_count})` : "No reviews"],
+          ["Client rating", agent.client_rating != null ? `${agent.client_rating.toFixed(1)} ★ (${agent.review_count})` : t("No reviews")],
         ] as const).map(([label, value]) => (
           <div key={label} className="rounded-xl border border-ab-border bg-ab-card p-3">
-            <p className="text-[11px] text-ab-faint">{label}</p>
+            <p className="text-[11px] text-ab-faint">{t(label)}</p>
             <p className="mt-0.5 font-bold tabular-nums">{value}</p>
           </div>
         ))}
       </div>
-      <p className="text-xs text-ab-faint">Assignments, sales value, commission, performance and system rating are the figures stored on the agent record (synced from Supabase). Client rating comes only from verified client reviews.</p>
+      <p className="text-xs text-ab-faint">{t("Assignments, sales value, commission, performance and system rating are the figures stored on the agent record (synced from Supabase). Client rating comes only from verified client reviews.")}</p>
 
       {isManagement(user?.role) && (
-        <SubjectInsights path={`/intelligence/agents/${encodeURIComponent(agent.agent_id)}`} empty="Nothing needs attention for this agent right now." />
+        <SubjectInsights path={`/intelligence/agents/${encodeURIComponent(agent.agent_id)}`} empty={t("Nothing needs attention for this agent right now.")} />
       )}
 
       <Section title="Contact & location">
@@ -168,8 +169,10 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
         {activity.data && (
           <>
             <p className="text-sm text-ab-muted">
-              {activity.data.recorded.clients} clients · {activity.data.recorded.properties} properties · {activity.data.recorded.transactions} transactions
-              ({activity.data.recorded.active_reservations} active reservations, {activity.data.recorded.completed_sales} completed sales, {peso(activity.data.recorded.sales_value)})
+              {t("{c} clients · {p} properties · {n} transactions ({r} active reservations, {s} completed sales, {v})", {
+                c: activity.data.recorded.clients, p: activity.data.recorded.properties, n: activity.data.recorded.transactions,
+                r: activity.data.recorded.active_reservations, s: activity.data.recorded.completed_sales, v: peso(activity.data.recorded.sales_value),
+              })}
             </p>
             {activity.data.clients.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
@@ -181,14 +184,14 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
               </div>
             )}
             <ul className="mt-3 space-y-2">
-              {activity.data.transactions.map((t) => (
-                <li key={t.transaction_id} className="rounded-xl border border-ab-border p-3 text-sm">
+              {activity.data.transactions.map((tx) => (
+                <li key={tx.transaction_id} className="rounded-xl border border-ab-border p-3 text-sm">
                   <div className="flex items-center justify-between gap-2">
-                    <Link to={`/manage/transactions?id=${t.transaction_id}`} className="font-semibold hover:underline">{statusLabel(t.transaction_type)} · {peso(t.amount)}</Link>
-                    <Badge value={t.status} />
+                    <Link to={`/manage/transactions?id=${tx.transaction_id}`} className="font-semibold hover:underline">{statusLabel(tx.transaction_type)} · {peso(tx.amount)}</Link>
+                    <Badge value={tx.status} />
                   </div>
                   <p className="mt-1 text-xs text-ab-muted">
-                    {date(t.transaction_date)} · {text(t.client_name)} · <Link to={`/manage/properties?id=${t.property_id}`} className="hover:underline">{text(t.property_title)}</Link>
+                    {date(tx.transaction_date)} · {text(tx.client_name)} · <Link to={`/manage/properties?id=${tx.property_id}`} className="hover:underline">{text(tx.property_title)}</Link>
                   </p>
                 </li>
               ))}
@@ -200,7 +203,7 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
       <Section title="Client reviews">
         <LoadState loading={reviews.loading} error={reviews.error} onRetry={reviews.reload} />
         {reviews.data && (
-          reviews.data.review_count === 0 ? <p className="text-sm italic text-ab-faint">No client reviews yet.</p> : (
+          reviews.data.review_count === 0 ? <p className="text-sm italic text-ab-faint">{t("No client reviews yet.")}</p> : (
             <>
               <ul className="space-y-1">
                 {Object.entries(reviews.data.distribution).map(([stars, n]) => (

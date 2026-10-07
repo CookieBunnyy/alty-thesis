@@ -2,6 +2,7 @@
 // users, roles and permissions as the desktop app. Website client accounts are
 // refused by those endpoints, so a client token never opens management pages.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { t } from "./i18n"
 import { API_URL } from "@/config"
 import { ApiError, requestJson } from "@/lib/auth"
 import { StaffAuthContext, type StaffUser } from "./staffContext"
@@ -99,13 +100,13 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
       try {
         response = await fetch(`${API_URL}/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
       } catch {
-        throw new ApiError("Can't reach the server. Check your connection and try again.", 0)
+        throw new ApiError(t("Can't reach the server. Check your connection and try again."), 0)
       }
       if (response.status === 401) signOut()
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
         const detail = (payload as { detail?: unknown }).detail
-        throw new ApiError(typeof detail === "string" ? detail : "The file is currently unavailable.", response.status, detail)
+        throw new ApiError(typeof detail === "string" ? t(detail) : t("The file is currently unavailable."), response.status, detail)
       }
       return response.blob()
     },

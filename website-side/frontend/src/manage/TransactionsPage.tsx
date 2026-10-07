@@ -5,6 +5,7 @@ import { SyncButton } from "./SyncButton"
 import { Badge, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData, useOpenRecord } from "./useApiData"
+import { t } from "./i18n"
 
 type Transaction = {
   transaction_id: string; external_transaction_id: string | null; client_id: string; client_name: string | null
@@ -74,7 +75,7 @@ export function TransactionsPage() {
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
-          <p className="text-xs text-ab-faint">{shown.length} of {rows.length} transactions</p>
+          <p className="text-xs text-ab-faint">{t("{n} of {total} transactions", { n: shown.length, total: rows.length })}</p>
           <DataTable rows={shown} columns={columns} rowKey={(t) => t.transaction_id} onOpen={(t) => open(t.transaction_id)} empty="No transactions match these filters." initialSort={{ key: "date", dir: "desc" }} />
         </>
       )}
@@ -83,31 +84,31 @@ export function TransactionsPage() {
   )
 }
 
-function TransactionDrawer({ transaction: t, related, onClose }: { transaction: Transaction; related: Transaction[]; onClose: () => void }) {
+function TransactionDrawer({ transaction: tx, related, onClose }: { transaction: Transaction; related: Transaction[]; onClose: () => void }) {
   // Timeline: every transaction for the same property and client (reservation -> sale).
   const timeline = related
-    .filter((r) => r.property_id === t.property_id && r.client_id === t.client_id)
+    .filter((r) => r.property_id === tx.property_id && r.client_id === tx.client_id)
     .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date))
   return (
     <Drawer
-      title={`${statusLabel(t.transaction_type)} · ${peso(t.amount)}`}
-      subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={t.status} /> {date(t.transaction_date)}</span>}
+      title={`${statusLabel(tx.transaction_type)} · ${peso(tx.amount)}`}
+      subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={tx.status} /> {date(tx.transaction_date)}</span>}
       onClose={onClose}
     >
       <Section title="Parties">
         <Facts items={[
-          ["Client", <Link to={`/manage/clients?id=${t.client_id}`} className="hover:underline">{text(t.client_name)}</Link>],
-          ["Property", <Link to={`/manage/properties?id=${t.property_id}`} className="hover:underline">{text(t.property_title)} (#{t.property_id})</Link>],
-          ["Agent", <Link to={`/manage/agents?id=${t.agent_id}`} className="hover:underline">{text(t.agent_name)} ({t.agent_id})</Link>],
-          ["Amount", peso(t.amount)],
+          ["Client", <Link to={`/manage/clients?id=${tx.client_id}`} className="hover:underline">{text(tx.client_name)}</Link>],
+          ["Property", <Link to={`/manage/properties?id=${tx.property_id}`} className="hover:underline">{text(tx.property_title)} (#{tx.property_id})</Link>],
+          ["Agent", <Link to={`/manage/agents?id=${tx.agent_id}`} className="hover:underline">{text(tx.agent_name)} ({tx.agent_id})</Link>],
+          ["Amount", peso(tx.amount)],
         ]} />
       </Section>
       <Section title="Timeline for this client and property">
         <ol className="relative space-y-3 border-l border-ab-border pl-4">
           {timeline.map((r) => (
             <li key={r.transaction_id} className="text-sm">
-              <span className={`absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full ${r.transaction_id === t.transaction_id ? "bg-ab-accent" : "bg-ab-border-strong"}`} aria-hidden />
-              <p className={r.transaction_id === t.transaction_id ? "font-semibold" : ""}>
+              <span className={`absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full ${r.transaction_id === tx.transaction_id ? "bg-ab-accent" : "bg-ab-border-strong"}`} aria-hidden />
+              <p className={r.transaction_id === tx.transaction_id ? "font-semibold" : ""}>
                 {statusLabel(r.transaction_type)} · {peso(r.amount)} <span className="ml-1"><Badge value={r.status} /></span>
               </p>
               <p className="text-xs text-ab-muted">{date(r.transaction_date)} · {statusLabel(r.source)}</p>
@@ -117,14 +118,14 @@ function TransactionDrawer({ transaction: t, related, onClose }: { transaction: 
       </Section>
       <Section title="Record">
         <Facts items={[
-          ["Transaction ID", <span className="break-all font-mono text-xs">{t.transaction_id}</span>],
-          ["External ID", t.external_transaction_id],
-          ["Source", statusLabel(t.source)],
-          ["Source document", t.source_document_id ? <span className="break-all font-mono text-xs">{t.source_document_id}</span> : null],
-          ["Notes", t.notes],
-          ["Sync status", statusLabel(t.sync_status)],
-          ["Recorded", dateTime(t.created_at)],
-          ["Updated", dateTime(t.updated_at)],
+          ["Transaction ID", <span className="break-all font-mono text-xs">{tx.transaction_id}</span>],
+          ["External ID", tx.external_transaction_id],
+          ["Source", statusLabel(tx.source)],
+          ["Source document", tx.source_document_id ? <span className="break-all font-mono text-xs">{tx.source_document_id}</span> : null],
+          ["Notes", tx.notes],
+          ["Sync status", statusLabel(tx.sync_status)],
+          ["Recorded", dateTime(tx.created_at)],
+          ["Updated", dateTime(tx.updated_at)],
         ]} />
       </Section>
     </Drawer>

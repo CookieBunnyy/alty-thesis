@@ -5,14 +5,15 @@
 // colour), per-column hover tooltip, and a table view of the same numbers.
 import { useEffect, useId, useRef, useState } from "react"
 import { Table2 } from "lucide-react"
+import { locale, t } from "./i18n"
 
 export type Series = { key: string; label: string; color: string; values: number[] }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 /** "2026-07" -> "Jul" (plus the year on January and the first column). */
 function monthLabel(month: string, index: number): string {
   const [year, m] = month.split("-")
-  const name = MONTHS[Number(m) - 1] ?? month
+  const index0 = Number(m) - 1
+  const name = index0 >= 0 && index0 < 12 ? new Date(2000, index0, 1).toLocaleString(locale(), { month: "short" }) : month
   return index === 0 || m === "01" ? `${name} ${year.slice(2)}` : name
 }
 
@@ -45,7 +46,7 @@ export function TableToggle({ shown, onToggle }: { shown: boolean; onToggle: () 
       aria-pressed={shown}
       className="inline-flex items-center gap-1 rounded-lg border border-ab-border px-2 py-1 text-[11px] font-semibold text-ab-muted hover:bg-ab-hover hover:text-ab-text"
     >
-      <Table2 className="h-3.5 w-3.5" /> {shown ? "Chart" : "Table"}
+      <Table2 className="h-3.5 w-3.5" /> {shown ? t("Chart") : t("Table")}
     </button>
   )
 }
@@ -90,14 +91,14 @@ export function StackedBarChart({ months, series, format, axisFormat = format, h
 
   if (showTable) {
     return (
-      <div className="overflow-x-auto">
+      <div className="ab-table-scroll">
         <table className="w-full text-left text-xs">
           <caption className="sr-only">{caption}</caption>
           <thead className="text-ab-faint">
             <tr>
-              <th className="py-1.5 pr-3 font-semibold">Month</th>
+              <th className="py-1.5 pr-3 font-semibold">{t("Month")}</th>
               {series.map((s) => <th key={s.key} className="py-1.5 pr-3 text-right font-semibold">{s.label}</th>)}
-              {series.length > 1 && <th className="py-1.5 text-right font-semibold">Total</th>}
+              {series.length > 1 && <th className="py-1.5 text-right font-semibold">{t("Total")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -296,7 +297,7 @@ export function ForecastChart({ history, forecast, format, axisFormat = format, 
         {forecast.length > 0 && (
           <>
             <rect x={boundary} y={top} width={W - boundary} height={plotH} fill="var(--color-ab-chart-2)" opacity={0.06} />
-            <text x={boundary + 6} y={top + 12} fontSize={10} fill="var(--color-ab-faint)">Forecast</text>
+            <text x={boundary + 6} y={top + 12} fontSize={10} fill="var(--color-ab-faint)">{t("Forecast")}</text>
           </>
         )}
         {columns.map((c, i) => {
@@ -326,7 +327,7 @@ export function ForecastChart({ history, forecast, format, axisFormat = format, 
               )}
               <rect x={left + step * i} y={top} width={step} height={plotH + bottom} fill="transparent" tabIndex={0}
                 onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} onFocus={() => setHover(i)} onBlur={() => setHover(null)}
-                aria-label={`${c.month}: ${c.kind === "forecast" ? "forecast " : ""}${format(c.value)}${"upper" in c ? `, range ${format(c.lower)} to ${format(c.upper)}` : ""}`} />
+                aria-label={`${c.month}: ${c.kind === "forecast" ? `${t("forecast")} ` : ""}${format(c.value)}${"upper" in c ? `, ${t("Likely range {low} – {high}", { low: format(c.lower), high: format(c.upper) })}` : ""}`} />
             </g>
           )
         })}
@@ -338,9 +339,9 @@ export function ForecastChart({ history, forecast, format, axisFormat = format, 
         return (
           <div className={`pointer-events-none absolute top-1 z-10 min-w-40 rounded-xl border border-ab-border-strong bg-ab-card-2 px-3 py-2 text-xs shadow-lg ${flip ? "-translate-x-full" : ""}`}
             style={{ left: x + (flip ? -(barW / 2 + 8) : barW / 2 + 8) }} role="status">
-            <p className="font-semibold text-ab-text">{c.month} {c.kind === "forecast" && <span className="font-normal text-ab-faint">· forecast</span>}</p>
+            <p className="font-semibold text-ab-text">{c.month} {c.kind === "forecast" && <span className="font-normal text-ab-faint">· {t("forecast")}</span>}</p>
             <p className="mt-0.5 tabular-nums text-ab-text">{format(c.value)}</p>
-            {"upper" in c && <p className="tabular-nums text-ab-muted">Likely range {format(c.lower)} – {format(c.upper)}</p>}
+            {"upper" in c && <p className="tabular-nums text-ab-muted">{t("Likely range {low} – {high}", { low: format(c.lower), high: format(c.upper) })}</p>}
           </div>
         )
       })()}
@@ -351,7 +352,7 @@ export function ForecastChart({ history, forecast, format, axisFormat = format, 
 /** Horizontal bars for a ranked breakdown (one measure, one colour). */
 export function BarList({ rows, format, empty }: { rows: { name: string; value: number; note?: string }[]; format: (v: number) => string; empty: string }) {
   const max = Math.max(0, ...rows.map((r) => r.value))
-  if (!rows.length || max === 0) return <p className="py-6 text-center text-sm text-ab-muted">{empty}</p>
+  if (!rows.length || max === 0) return <p className="py-6 text-center text-sm text-ab-muted">{t(empty)}</p>
   return (
     <ul className="space-y-2.5">
       {rows.map((r) => (

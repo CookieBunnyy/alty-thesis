@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState, type ReactNode } from "react"
 import { AlertTriangle, ArrowLeftRight, Building2, FileWarning, RefreshCw, TrendingUp, UserRound, Users, type LucideIcon } from "lucide-react"
 import { Legend, ShareBar, StackedBarChart, TableToggle } from "./charts"
 import { useStaffAuth } from "./staffContext"
+import { statusLabel } from "./format"
+import { locale, t } from "./i18n"
 
 // Every number below comes from the same API the desktop dashboard uses.
 type Summary = {
@@ -31,7 +33,7 @@ type Data = {
   recent: Recent[]; overview: Overview; forecast: Forecast
 }
 
-const peso = (value: number) => `₱${Math.round(value).toLocaleString("en-PH")}`
+const peso = (value: number) => `₱${Math.round(value).toLocaleString(locale())}`
 const pesoShort = (value: number) =>
   value >= 1e9 ? `₱${+(value / 1e9).toFixed(1)}B` : value >= 1e6 ? `₱${+(value / 1e6).toFixed(1)}M` : value >= 1e3 ? `₱${Math.round(value / 1e3)}K` : `₱${value}`
 const count = (value: number) => String(Math.round(value))
@@ -45,14 +47,14 @@ const STATUS_STYLE: Record<string, string> = {
 
 function greeting(): string {
   const hour = new Date().getHours()
-  return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
+  return t(hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening")
 }
 
 function Card({ title, action, children, className = "" }: { title: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={`rounded-2xl border border-ab-border bg-ab-card p-5 ${className}`}>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="font-bold text-ab-text">{title}</h2>
+        <h2 className="font-bold text-ab-text">{t(title)}</h2>
         {action}
       </div>
       {children}
@@ -64,7 +66,7 @@ function Kpi({ icon: Icon, label, value, detail, tone = "text-ab-muted" }: { ico
   return (
     <div className="rounded-2xl border border-ab-border bg-ab-card p-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-ab-muted">{label}</p>
+        <p className="text-xs font-semibold text-ab-muted">{t(label)}</p>
         <Icon className="h-4 w-4 text-ab-faint" aria-hidden />
       </div>
       <p className="mt-2 text-2xl font-extrabold tabular-nums text-ab-text">{value}</p>
@@ -109,7 +111,7 @@ export function DashboardPage() {
     void load()
   }, [load])
 
-  const today = new Date().toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric", year: "numeric" })
+  const today = new Date().toLocaleDateString(locale(), { weekday: "long", month: "long", day: "numeric", year: "numeric" })
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -123,19 +125,19 @@ export function DashboardPage() {
           onClick={() => { setData(null); void load() }}
           className="inline-flex items-center gap-1.5 rounded-xl border border-ab-border-strong px-3 py-2 text-sm font-semibold hover:bg-ab-hover"
         >
-          <RefreshCw className="h-4 w-4" /> Refresh
+          <RefreshCw className="h-4 w-4" /> {t("Refresh")}
         </button>
       </div>
 
       {error && (
         <p role="alert" className="flex items-center gap-2 rounded-xl border border-ab-danger/40 bg-ab-danger/10 px-4 py-3 text-sm text-ab-danger">
-          <AlertTriangle className="h-4 w-4 shrink-0" /> Couldn't load the dashboard: {error}
-          <button type="button" onClick={() => void load()} className="ml-auto font-semibold underline">Try again</button>
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {t("Couldn't load the dashboard: {error}", { error })}
+          <button type="button" onClick={() => void load()} className="ml-auto font-semibold underline">{t("Try again")}</button>
         </p>
       )}
 
       {!data && !error && (
-        <div className="space-y-5" aria-busy="true" aria-label="Loading dashboard">
+        <div className="space-y-5" aria-busy="true" aria-label={t("Loading dashboard")}>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-28" />)}</div>
           <div className="grid gap-5 lg:grid-cols-3"><Skeleton className="h-72 lg:col-span-2" /><Skeleton className="h-72" /></div>
         </div>
@@ -157,15 +159,15 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
     <>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <Kpi icon={Building2} label="Total properties" value={count(summary.total_properties)}
-          detail={`${summary.available_properties} available · ${summary.reserved_properties} reserved · ${summary.sold_properties} sold`} />
-        <Kpi icon={Users} label="Buyers & sellers" value={count(summary.total_clients)} detail="From client records" />
+          detail={t("{a} available · {r} reserved · {s} sold", { a: summary.available_properties, r: summary.reserved_properties, s: summary.sold_properties })} />
+        <Kpi icon={Users} label="Buyers & sellers" value={count(summary.total_clients)} detail={t("From client records")} />
         <Kpi icon={ArrowLeftRight} label="Transactions" value={count(txSummary.total)}
-          detail={`${txSummary.reserved} reserved · ${txSummary.completed} completed · ${txSummary.cancelled} cancelled`} />
+          detail={t("{r} reserved · {c} completed · {x} cancelled", { r: txSummary.reserved, c: txSummary.completed, x: txSummary.cancelled })} />
         <Kpi icon={TrendingUp} label="Sales revenue" value={pesoShort(summary.completed_revenue)}
-          detail={overview.transactions.average_sale_value ? `Avg sale ${pesoShort(overview.transactions.average_sale_value)}` : "Completed sales"} />
-        <Kpi icon={UserRound} label="Active agents" value={count(summary.active_agents)} detail={`of ${summary.total_agents} agent records`} />
+          detail={overview.transactions.average_sale_value ? t("Avg sale {v}", { v: pesoShort(overview.transactions.average_sale_value) }) : t("Completed sales")} />
+        <Kpi icon={UserRound} label="Active agents" value={count(summary.active_agents)} detail={t("of {n} agent records", { n: summary.total_agents })} />
         <Kpi icon={FileWarning} label="Documents needing attention" value={count(attention)}
-          detail={`${summary.failed_documents} failed · ${summary.processing_documents} processing · ${summary.successful_documents} done`}
+          detail={t("{f} failed · {p} processing · {d} done", { f: summary.failed_documents, p: summary.processing_documents, d: summary.successful_documents })}
           tone={summary.failed_documents ? "text-ab-danger" : "text-ab-muted"} />
       </div>
 
@@ -175,38 +177,38 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
           className="lg:col-span-2"
           action={<TableToggle shown={txTable} onToggle={() => setTxTable(!txTable)} />}
         >
-          <div className="mb-3"><Legend items={[{ label: "Reservations", color: "var(--color-ab-chart-2)" }, { label: "Completed sales", color: "var(--color-ab-chart-1)" }]} /></div>
+          <div className="mb-3"><Legend items={[{ label: t("Reservations"), color: "var(--color-ab-chart-2)" }, { label: t("Completed sales"), color: "var(--color-ab-chart-1)" }]} /></div>
           {tx.has_data ? (
             <StackedBarChart
-              caption="Reservations and completed sales recorded per month, last 12 months"
+              caption={t("Reservations and completed sales recorded per month, last 12 months")}
               months={tx.months}
               series={[
-                { key: "reservations", label: "Reservations", color: "var(--color-ab-chart-2)", values: tx.reservations },
-                { key: "sales", label: "Completed sales", color: "var(--color-ab-chart-1)", values: tx.sales },
+                { key: "reservations", label: t("Reservations"), color: "var(--color-ab-chart-2)", values: tx.reservations },
+                { key: "sales", label: t("Completed sales"), color: "var(--color-ab-chart-1)", values: tx.sales },
               ]}
               format={count}
               integer
               showTable={txTable}
             />
           ) : (
-            <p className="py-10 text-center text-sm text-ab-muted">No transactions recorded in the last 12 months.</p>
+            <p className="py-10 text-center text-sm text-ab-muted">{t("No transactions recorded in the last 12 months.")}</p>
           )}
         </Card>
 
         <Card title="Property status">
-          <p className="mb-3 text-3xl font-extrabold tabular-nums">{status.total}<span className="ml-1.5 text-sm font-semibold text-ab-muted">listings</span></p>
+          <p className="mb-3 text-3xl font-extrabold tabular-nums">{status.total}<span className="ml-1.5 text-sm font-semibold text-ab-muted">{t("listings")}</span></p>
           <ShareBar
             parts={[
-              { label: "Available", value: status.available, color: "var(--color-ab-chart-1)" },
-              { label: "Reserved", value: status.reserved, color: "var(--color-ab-chart-2)" },
-              { label: "Sold", value: status.sold, color: "var(--color-ab-muted)" },
-              { label: "On hold", value: status.on_hold, color: "var(--color-ab-warning)" },
-              { label: "Unavailable", value: status.unavailable, color: "var(--color-ab-danger)" },
+              { label: t("Available"), value: status.available, color: "var(--color-ab-chart-1)" },
+              { label: t("Reserved"), value: status.reserved, color: "var(--color-ab-chart-2)" },
+              { label: t("Sold"), value: status.sold, color: "var(--color-ab-muted)" },
+              { label: t("On hold"), value: status.on_hold, color: "var(--color-ab-warning)" },
+              { label: t("Unavailable"), value: status.unavailable, color: "var(--color-ab-danger)" },
             ]}
           />
           {overview.absorption_rate != null && (
             <p className="mt-4 border-t border-ab-border pt-3 text-xs text-ab-muted">
-              Absorption rate <span className="font-semibold text-ab-text">{Math.round(overview.absorption_rate * 100)}%</span> — share of listings already sold.
+              {t("Absorption rate")} <span className="font-semibold text-ab-text">{Math.round(overview.absorption_rate * 100)}%</span> — {t("share of listings already sold.")}
             </p>
           )}
         </Card>
@@ -216,35 +218,33 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
         <Card title="Sales revenue per month" className="lg:col-span-2" action={<TableToggle shown={revenueTable} onToggle={() => setRevenueTable(!revenueTable)} />}>
           {revenue.has_data ? (
             <StackedBarChart
-              caption="Revenue from completed sales per month, last 12 months"
+              caption={t("Revenue from completed sales per month, last 12 months")}
               months={revenue.months}
-              series={[{ key: "revenue", label: "Revenue", color: "var(--color-ab-chart-1)", values: revenue.revenue }]}
+              series={[{ key: "revenue", label: t("Revenue"), color: "var(--color-ab-chart-1)", values: revenue.revenue }]}
               format={peso}
               axisFormat={pesoShort}
               showTable={revenueTable}
             />
           ) : (
-            <p className="py-10 text-center text-sm text-ab-muted">No completed sales in the last 12 months.</p>
+            <p className="py-10 text-center text-sm text-ab-muted">{t("No completed sales in the last 12 months.")}</p>
           )}
         </Card>
 
         <Card title="Revenue forecast">
           {forecast.status === "estimated" && forecast.forecast.length ? (
             <>
-              <p className="text-xs text-ab-muted">Next month ({forecast.forecast[0].month})</p>
+              <p className="text-xs text-ab-muted">{t("Next month ({month})", { month: forecast.forecast[0].month })}</p>
               <p className="text-3xl font-extrabold tabular-nums">{pesoShort(forecast.forecast[0].value)}</p>
               <p className="mt-1 text-sm text-ab-muted">
-                Likely range {pesoShort(forecast.forecast[0].lower)} – {pesoShort(forecast.forecast[0].upper)}
+                {t("Likely range {low} – {high}", { low: pesoShort(forecast.forecast[0].lower), high: pesoShort(forecast.forecast[0].upper) })}
               </p>
-              <p className="mt-3 text-xs text-ab-faint">{forecast.method} · {forecast.observations} months of history.</p>
+              <p className="mt-3 text-xs text-ab-faint">{t(forecast.method ?? "")} · {t("{n} months of history.", { n: forecast.observations })}</p>
             </>
           ) : (
             <div className="rounded-xl border border-dashed border-ab-border p-4">
-              <p className="font-semibold text-ab-text">{forecast.message || "Forecast unavailable."}</p>
+              <p className="font-semibold text-ab-text">{t(forecast.message || "Forecast unavailable.")}</p>
               <p className="mt-1 text-sm text-ab-muted">
-                Needs at least {forecast.minimum_required} complete months, with sales in 3 or more of them. Recorded so far:{" "}
-                {forecast.observations} month{forecast.observations === 1 ? "" : "s"}, {forecast.nonzero_months} with sales.
-                No forecast is shown until there's enough real data.
+                {t("Needs at least {min} complete months, with sales in 3 or more of them. Recorded so far: {n} month(s), {s} with sales. No forecast is shown until there's enough real data.", { min: forecast.minimum_required, n: forecast.observations, s: forecast.nonzero_months })}
               </p>
             </div>
           )}
@@ -254,7 +254,7 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Agent performance" className="lg:col-span-2">
           {agents.length === 0 ? (
-            <p className="text-sm text-ab-muted">No agent records.</p>
+            <p className="text-sm text-ab-muted">{t("No agent records.")}</p>
           ) : (
             <>
               {/* Phones: one card per agent. */}
@@ -263,21 +263,21 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
                   <li key={a.agent_id} className="rounded-xl border border-ab-border p-3 text-sm">
                     <p className="font-semibold">{a.full_name}</p>
                     <p className="mt-1 text-xs text-ab-muted">
-                      {a.transactions} transactions · {a.completed_sales} sales · {peso(a.sales_value)}
-                      {a.recorded_total_commission != null && ` · commission ${peso(a.recorded_total_commission)}`}
+                      {t("{n} transactions · {s} sales", { n: a.transactions, s: a.completed_sales })} · {peso(a.sales_value)}
+                      {a.recorded_total_commission != null && ` · ${t("commission {v}", { v: peso(a.recorded_total_commission) })}`}
                     </p>
                   </li>
                 ))}
               </ul>
-              <div className="hidden overflow-x-auto sm:block">
+              <div className="ab-table-scroll hidden sm:block">
                 <table className="w-full text-left text-sm">
                   <thead className="text-[11px] uppercase tracking-wide text-ab-faint">
                     <tr>
-                      <th className="pb-2 pr-3 font-semibold">Agent</th>
-                      <th className="pb-2 pr-3 text-right font-semibold">Transactions</th>
-                      <th className="pb-2 pr-3 text-right font-semibold">Completed sales</th>
-                      <th className="pb-2 pr-3 text-right font-semibold">Sales value</th>
-                      <th className="pb-2 text-right font-semibold">Recorded commission</th>
+                      <th className="pb-2 pr-3 font-semibold">{t("Agent")}</th>
+                      <th className="pb-2 pr-3 text-right font-semibold">{t("Transactions")}</th>
+                      <th className="pb-2 pr-3 text-right font-semibold">{t("Completed sales")}</th>
+                      <th className="pb-2 pr-3 text-right font-semibold">{t("Sales value")}</th>
+                      <th className="pb-2 text-right font-semibold">{t("Recorded commission")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -296,26 +296,26 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
                   </tbody>
                 </table>
               </div>
-              <p className="mt-3 text-xs text-ab-faint">Top {agents.length} by sales value. Commission is the figure recorded on the agent's record.</p>
+              <p className="mt-3 text-xs text-ab-faint">{t("Top {n} by sales value. Commission is the figure recorded on the agent's record.", { n: agents.length })}</p>
             </>
           )}
         </Card>
 
         <Card title="Recent transactions">
           {recent.length === 0 ? (
-            <p className="text-sm text-ab-muted">No transactions recorded yet.</p>
+            <p className="text-sm text-ab-muted">{t("No transactions recorded yet.")}</p>
           ) : (
             <ul className="space-y-3">
-              {recent.slice(0, 6).map((t) => (
-                <li key={t.transaction_id} className="text-sm">
+              {recent.slice(0, 6).map((tx) => (
+                <li key={tx.transaction_id} className="text-sm">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="min-w-0 truncate font-semibold">{t.client_name ?? "Unknown client"}</p>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLE[t.status] ?? "bg-ab-hover text-ab-muted"}`}>{t.status}</span>
+                    <p className="min-w-0 truncate font-semibold">{tx.client_name ?? t("Unknown client")}</p>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLE[tx.status] ?? "bg-ab-hover text-ab-muted"}`}>{statusLabel(tx.status)}</span>
                   </div>
-                  <p className="truncate text-xs text-ab-muted">{t.property_title ?? "—"}</p>
+                  <p className="truncate text-xs text-ab-muted">{tx.property_title ?? "—"}</p>
                   <p className="text-xs text-ab-faint">
-                    {new Date(t.transaction_date).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })} · {peso(t.amount)}
-                    {t.agent_name && ` · ${t.agent_name}`}
+                    {new Date(tx.transaction_date).toLocaleDateString(locale(), { month: "short", day: "numeric", year: "numeric" })} · {peso(tx.amount)}
+                    {tx.agent_name && ` · ${tx.agent_name}`}
                   </p>
                 </li>
               ))}

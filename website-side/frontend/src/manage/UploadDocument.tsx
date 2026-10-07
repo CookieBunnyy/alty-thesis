@@ -5,6 +5,7 @@ import { fileSize } from "./format"
 import { Button } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { indexFolders } from "./folders"
+import { t } from "./i18n"
 
 export type DocType = { code: string; label: string; processing: string }
 export type Folder = { id: number; name: string; parent_id: number | null; is_archived: boolean }
@@ -42,14 +43,14 @@ export function UploadDocument({ types, folders, defaultFolder, versionOf, onClo
     setDuplicate(null)
     if (!picked) return
     const extension = picked.name.slice(picked.name.lastIndexOf(".")).toLowerCase()
-    if (!ACCEPT.split(",").includes(extension)) return setError("Use a PDF, Word (.docx) or image file (PNG, JPG, TIFF, BMP, WEBP).")
-    if (picked.size > MAX_MB * 1024 * 1024) return setError(`Files must be ${MAX_MB} MB or smaller.`)
-    if (picked.size === 0) return setError("The selected file is empty.")
+    if (!ACCEPT.split(",").includes(extension)) return setError(t("Use a PDF, Word (.docx) or image file (PNG, JPG, TIFF, BMP, WEBP)."))
+    if (picked.size > MAX_MB * 1024 * 1024) return setError(t("Files must be {n} MB or smaller.", { n: MAX_MB }))
+    if (picked.size === 0) return setError(t("The selected file is empty."))
     setFile(picked)
   }
 
   const send = async (allowDuplicate: boolean) => {
-    if (!file) return setError("Choose a file to upload.")
+    if (!file) return setError(t("Choose a file to upload."))
     setBusy(true)
     setError("")
     const body = new FormData()
@@ -65,7 +66,7 @@ export function UploadDocument({ types, folders, defaultFolder, versionOf, onClo
     } catch (uploadError) {
       const detail = uploadError instanceof ApiError ? (uploadError.detail as { existing_document?: DocumentRecord } | undefined) : undefined
       if (uploadError instanceof ApiError && uploadError.status === 409 && detail?.existing_document) setDuplicate(detail.existing_document)
-      setError((uploadError as Error).message)
+      setError(t((uploadError as Error).message))
       setBusy(false)
     }
   }
@@ -81,12 +82,12 @@ export function UploadDocument({ types, folders, defaultFolder, versionOf, onClo
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={versionOf ? "Upload new version" : "Upload document"}>
-      <button type="button" aria-label="Cancel" className="absolute inset-0 bg-black/55" onClick={onClose} />
+    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={versionOf ? t("Upload new version") : t("Upload document")}>
+      <button type="button" aria-label={t("Cancel")} className="absolute inset-0 bg-black/55" onClick={onClose} />
       <form onSubmit={submit} className="ab-pop relative flex max-h-[94dvh] w-full max-w-xl flex-col rounded-t-2xl border border-ab-border bg-ab-card shadow-2xl sm:rounded-2xl">
         <header className="flex items-center justify-between border-b border-ab-border px-5 py-4">
-          <h2 className="text-lg font-bold">{versionOf ? `New version of “${versionOf.document_name}”` : "Upload document"}</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-2 text-ab-muted hover:bg-ab-hover"><X className="h-4 w-4" /></button>
+          <h2 className="text-lg font-bold">{versionOf ? t("New version of “{name}”", { name: versionOf.document_name }) : t("Upload document")}</h2>
+          <button type="button" onClick={onClose} aria-label={t("Close")} className="rounded-lg p-2 text-ab-muted hover:bg-ab-hover"><X className="h-4 w-4" /></button>
         </header>
         <div className="space-y-4 overflow-y-auto p-5">
           <div
@@ -99,43 +100,41 @@ export function UploadDocument({ types, folders, defaultFolder, versionOf, onClo
             {file ? (
               <p className="mt-2 text-sm"><span className="font-semibold">{file.name}</span> <span className="text-ab-faint">· {fileSize(file.size)}</span></p>
             ) : (
-              <p className="mt-2 text-sm text-ab-muted">Drag a file here, or</p>
+              <p className="mt-2 text-sm text-ab-muted">{t("Drag a file here, or")}</p>
             )}
             <button type="button" onClick={() => input.current?.click()} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-ab-border-strong px-3 py-1.5 text-sm font-semibold hover:bg-ab-hover">
-              <FileUp className="h-4 w-4" /> {file ? "Choose another file" : "Choose file"}
+              <FileUp className="h-4 w-4" /> {file ? t("Choose another file") : t("Choose file")}
             </button>
-            <input ref={input} type="file" accept={ACCEPT} className="sr-only" onChange={(e) => choose(e.target.files?.[0])} aria-label="Document file" />
-            <p className="mt-2 text-xs text-ab-faint">PDF, Word (.docx) or image · up to {MAX_MB} MB</p>
+            <input ref={input} type="file" accept={ACCEPT} className="sr-only" onChange={(e) => choose(e.target.files?.[0])} aria-label={t("Document file")} />
+            <p className="mt-2 text-xs text-ab-faint">{t("PDF, Word (.docx) or image · up to {n} MB", { n: MAX_MB })}</p>
           </div>
           {!versionOf && (
-            <label className="block text-sm font-medium">Display name (optional)
-              <input className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder={file?.name ?? "Defaults to the file name"} />
+            <label className="block text-sm font-medium">{t("Display name (optional)")}
+              <input className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder={file?.name ?? t("Defaults to the file name")} />
             </label>
           )}
-          <label className="block text-sm font-medium">Document type
+          <label className="block text-sm font-medium">{t("Document type")}
             <select className={field} value={type} onChange={(e) => setType(e.target.value)}>
-              {types.map((t) => <option key={t.code} value={t.code}>{t.label}</option>)}
+              {types.map((dt) => <option key={dt.code} value={dt.code}>{t(dt.label)}</option>)}
             </select>
-            <span className="mt-1 block text-xs font-normal text-ab-faint">{types.find((t) => t.code === type)?.processing}</span>
+            <span className="mt-1 block text-xs font-normal text-ab-faint">{t(types.find((dt) => dt.code === type)?.processing ?? "")}</span>
           </label>
-          <label className="block text-sm font-medium">Folder
+          <label className="block text-sm font-medium">{t("Folder")}
             <select className={field} value={folder} onChange={(e) => setFolder(e.target.value)}>
-              <option value="">{versionOf ? "No folder" : "Automatic (by person / property)"}</option>
+              <option value="">{versionOf ? t("No folder") : t("Automatic (by person / property)")}</option>
               {indexFolders(folders).options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
             {!versionOf && (
               <span className="mt-1 block text-xs font-normal text-ab-faint">
-                Processed documents are filed by who they are about: a buyer document for John Doe goes to Buyers / John Doe. A custom folder you pick is kept.
+                {t("Processed documents are filed by who they are about: a buyer document for John Doe goes to Buyers / John Doe. A custom folder you pick is kept.")}
               </span>
             )}
           </label>
-          <label className="block text-sm font-medium">Description (optional)
+          <label className="block text-sm font-medium">{t("Description (optional)")}
             <textarea className={`${field} min-h-16`} value={description} onChange={(e) => setDescription(e.target.value)} />
           </label>
           <p className="text-xs text-ab-faint">
-            After upload, ALTY validates the file, extracts its text (OCR for scans), classifies it, matches the property, client, agent and
-            transaction, checks for duplicates and records the result automatically. If something can't be processed, the document is marked
-            <strong> Failed</strong> with the reason.
+            {t("After upload, ALTY validates the file, extracts its text (OCR for scans), classifies it, matches the property, client, agent and transaction, checks for duplicates and records the result automatically. If something can't be processed, the document is marked Failed with the reason.")}
           </p>
         </div>
         {error && (
@@ -143,16 +142,16 @@ export function UploadDocument({ types, folders, defaultFolder, versionOf, onClo
             {error}
             {duplicate && (
               <p className="mt-1 text-ab-muted">
-                Existing: <span className="font-semibold text-ab-text">{duplicate.document_name}</span> (v{duplicate.version}).{" "}
-                <button type="button" onClick={() => void send(true)} className="font-semibold text-ab-accent underline">Upload anyway</button>
+                {t("Existing:")} <span className="font-semibold text-ab-text">{duplicate.document_name}</span> (v{duplicate.version}).{" "}
+                <button type="button" onClick={() => void send(true)} className="font-semibold text-ab-accent underline">{t("Upload anyway")}</button>
               </p>
             )}
           </div>
         )}
         <footer className="flex justify-end gap-2 border-t border-ab-border px-5 py-3">
-          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
           <Button type="submit" variant="primary" disabled={busy || !file}>
-            {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />} {busy ? "Uploading & processing…" : "Upload"}
+            {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />} {busy ? t("Uploading & processing…") : t("Upload")}
           </Button>
         </footer>
       </form>
