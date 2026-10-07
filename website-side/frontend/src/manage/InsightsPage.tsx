@@ -24,7 +24,7 @@ export function InsightsPage() {
   const [severity, setSeverity] = useState<Insight["severity"] | "">("")
   const [scope, setScope] = useState("")
   const load = useCallback(() => api<Feed>("/intelligence/insights"), [api])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, "insights")
   const shown = useMemo(() => (data?.items ?? []).filter((i) => (!severity || i.severity === severity) && (!scope || i.scope === scope)), [data, severity, scope])
 
   return (

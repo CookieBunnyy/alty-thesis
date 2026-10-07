@@ -10,6 +10,7 @@ from app.models.property_listing import PropertyListing
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
 from app.services import analytics
+from app.services.transaction_queries import WITH_PARTIES
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -67,7 +68,7 @@ def get_dashboard_recent_transactions(limit: int = Query(default=6, ge=1, le=20)
                                       db: Session = Depends(get_db),
                                       _user: User = Depends(get_current_user)):
     rows = db.execute(
-        select(PropertyTransaction)
+        select(PropertyTransaction).options(*WITH_PARTIES)
         .order_by(PropertyTransaction.transaction_date.desc(), PropertyTransaction.created_at.desc())
         .limit(limit)
     ).scalars().all()

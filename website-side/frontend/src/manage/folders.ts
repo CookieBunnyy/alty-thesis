@@ -11,6 +11,17 @@ export type FolderIndex = {
   options: { value: string; label: string }[]
 }
 
+// The standard category folders (same as services/document_filing.py on the
+// server). Filing relies on them, so they can't be deleted.
+const CATEGORY_FOLDERS = ["Properties", "Buyers", "Sellers", "Agents", "Transactions", "Financial", "Contracts", "Archived"]
+const FINANCIAL_FOLDERS = ["Receipts", "Vouchers", "Proof of Payment", "Invoices"]
+
+export function isStandardFolder(folder: Folder, folders: Folder[]): boolean {
+  if (folder.parent_id == null) return CATEGORY_FOLDERS.includes(folder.name)
+  const parent = folders.find((f) => f.id === folder.parent_id)
+  return Boolean(parent && parent.parent_id == null && parent.name === "Financial" && FINANCIAL_FOLDERS.includes(folder.name))
+}
+
 export function indexFolders(folders: Folder[]): FolderIndex {
   const active = folders.filter((f) => !f.is_archived)
   const byId = new Map(active.map((f) => [f.id, f]))

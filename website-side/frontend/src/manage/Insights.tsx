@@ -93,7 +93,7 @@ export function InsightPanel({ insights, title = "Recommendation", empty }: { in
 export function SubjectInsights({ path, empty }: { path: string; empty: string }) {
   const { api } = useStaffAuth()
   const load = useCallback(() => api<{ insights: Insight[] }>(path), [api, path])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, `insights:${path}`)
   return (
     <section className="rounded-2xl border border-ab-accent/30 bg-ab-card p-4" aria-label={t("Recommendation")}>
       <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-ab-faint">{t("Recommendation")}</h3>

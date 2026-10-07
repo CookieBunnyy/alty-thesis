@@ -22,7 +22,7 @@ type Work = {
 export function MyWorkPage() {
   const { api } = useStaffAuth()
   const load = useCallback(() => api<Work>("/agents/me/work"), [api])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, "my-work")
   const open = data?.activity.transactions.filter((tx) => tx.status === "RESERVED") ?? []
   return (
     <div className="mx-auto max-w-6xl space-y-5">

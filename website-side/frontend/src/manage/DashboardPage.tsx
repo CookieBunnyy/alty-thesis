@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react"
+import { useCallback, useState, type ReactNode } from "react"
 import { AlertTriangle, ArrowLeftRight, Building2, FileWarning, RefreshCw, TrendingUp, UserRound, Users, type LucideIcon } from "lucide-react"
 import { Legend, ShareBar, StackedBarChart, TableToggle } from "./charts"
 import { useStaffAuth } from "./staffContext"
+import { useApiData } from "./useApiData"
 import { statusLabel, transactionDate } from "./format"
 import { locale, t } from "./i18n"
 
@@ -81,35 +82,24 @@ function Skeleton({ className }: { className: string }) {
 
 export function DashboardPage() {
   const { api, user } = useStaffAuth()
-  const [data, setData] = useState<Data | null>(null)
-  const [error, setError] = useState("")
   const [txTable, setTxTable] = useState(false)
   const [revenueTable, setRevenueTable] = useState(false)
 
-  const load = useCallback(async () => {
-    setError("")
-    try {
-      const [summary, status, tx, revenue, txSummary, recent, overview, forecast] = await Promise.all([
-        api<Summary>("/dashboard/summary"),
-        api<PropertyStatus>("/dashboard/property-status"),
-        api<TxTrend>("/dashboard/transaction-trend?months=12"),
-        api<RevenueTrend>("/dashboard/revenue-trend"),
-        api<TxSummary>("/transactions/summary"),
-        api<Recent[]>("/dashboard/recent-transactions"),
-        api<Overview>("/analytics/overview"),
-        api<Forecast>("/dashboard/forecast"),
-      ])
-      setData({ summary, status, tx, revenue, txSummary, recent, overview, forecast })
-    } catch (loadError) {
-      setError((loadError as Error).message)
-    }
+  const load = useCallback(async (): Promise<Data> => {
+    const [summary, status, tx, revenue, txSummary, recent, overview, forecast] = await Promise.all([
+      api<Summary>("/dashboard/summary"),
+      api<PropertyStatus>("/dashboard/property-status"),
+      api<TxTrend>("/dashboard/transaction-trend?months=12"),
+      api<RevenueTrend>("/dashboard/revenue-trend"),
+      api<TxSummary>("/transactions/summary"),
+      api<Recent[]>("/dashboard/recent-transactions"),
+      api<Overview>("/analytics/overview"),
+      api<Forecast>("/dashboard/forecast"),
+    ])
+    return { summary, status, tx, revenue, txSummary, recent, overview, forecast }
   }, [api])
-
-  useEffect(() => {
-    // Fetching from the API (an external system) when the page opens.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load()
-  }, [load])
+  // Shows the last dashboard straight away on a return visit, then refreshes.
+  const { data, error, reload } = useApiData(load, "dashboard")
 
   const today = new Date().toLocaleDateString(locale(), { weekday: "long", month: "long", day: "numeric", year: "numeric" })
 
@@ -122,7 +112,7 @@ export function DashboardPage() {
         </div>
         <button
           type="button"
-          onClick={() => { setData(null); void load() }}
+          onClick={() => void reload()}
           className="inline-flex items-center gap-1.5 rounded-xl border border-ab-border-strong px-3 py-2 text-sm font-semibold hover:bg-ab-hover"
         >
           <RefreshCw className="h-4 w-4" /> {t("Refresh")}
@@ -132,7 +122,7 @@ export function DashboardPage() {
       {error && (
         <p role="alert" className="flex items-center gap-2 rounded-xl border border-ab-danger/40 bg-ab-danger/10 px-4 py-3 text-sm text-ab-danger">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {t("Couldn't load the dashboard: {error}", { error })}
-          <button type="button" onClick={() => void load()} className="ml-auto font-semibold underline">{t("Try again")}</button>
+          <button type="button" onClick={() => void reload()} className="ml-auto font-semibold underline">{t("Try again")}</button>
         </p>
       )}
 

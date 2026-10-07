@@ -30,7 +30,7 @@ export function ClientsPage() {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
   const load = useCallback(() => Promise.all([api<Client[]>("/clients?limit=2000"), api<Summary>("/clients/summary")]), [api])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, "clients")
   const [clients, summary] = data ?? [[], null]
   const shown = useMemo(
     () => clients.filter((c) => (!status || c.status === status) &&
@@ -186,7 +186,7 @@ function ClientDrawer({ client, onClose, onDeleted }: { client: Client; onClose:
       </Section>
 
       {confirm && (
-        <Confirm
+        <Confirm typeToConfirm="Delete"
           title="Delete client?"
           message={
             t("Remove {name}, created in error? This also deletes their {n} recorded transaction(s), and any property they had reserved goes back to Available. This can't be undone.", { name: client.full_name, n: profile.data ? profile.data.transactions.length : "" })

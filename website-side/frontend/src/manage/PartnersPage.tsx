@@ -29,7 +29,7 @@ export function PartnersPage() {
   const [status, setStatus] = useState("")
   const [editing, setEditing] = useState<Partner | "new" | null>(null)
   const load = useCallback(() => api<Partner[]>("/partners"), [api])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, "partners")
   const partners = useMemo(() => data ?? [], [data])
   const shown = partners.filter((p) => (!type || (type === "NONE" ? !p.partner_type : p.partner_type === type)) && (!status || p.status === status) &&
     contains([p.name, p.contact_person, p.email, p.phone_number, p.address, typeLabel(p.partner_type)], search))
@@ -165,7 +165,7 @@ function PartnerDrawer({ partner, canManage, onClose, onEdit, onDeleted }: { par
         ))}
       </Section>
       {confirm && (
-        <Confirm title="Delete partner?" confirmLabel="Delete" busy={busy} onConfirm={remove} onCancel={() => setConfirm(false)}
+        <Confirm typeToConfirm="Delete" title="Delete partner?" confirmLabel="Delete" busy={busy} onConfirm={remove} onCancel={() => setConfirm(false)}
           message={t("Delete {name}? Partners linked to listings can't be deleted — mark them Inactive instead.", { name: partner.name })} />
       )}
     </Drawer>

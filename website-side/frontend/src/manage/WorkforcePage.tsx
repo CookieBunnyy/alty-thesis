@@ -20,7 +20,7 @@ type AgentRow = Workforce["agents"]["rows"][number]
 export function WorkforcePage() {
   const { api } = useStaffAuth()
   const load = useCallback(() => Promise.all([api<Workforce>("/analytics/workforce"), api<{ items: Insight[] }>("/intelligence/insights")]), [api])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, "workforce")
   const [workforce, feed] = data ?? [null, null]
   const agentInsights = useMemo(() => (feed?.items ?? []).filter((i) => i.scope === "agent"), [feed])
   const rows = workforce?.agents.rows ?? []

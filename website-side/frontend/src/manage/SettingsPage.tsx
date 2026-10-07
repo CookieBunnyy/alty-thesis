@@ -54,7 +54,7 @@ function AdminSettings() {
   const toast = useToast()
   const [pushing, setPushing] = useState(false)
   const load = useCallback(() => Promise.all([api<Record<string, Record<string, unknown>>>("/system/settings"), api<Sync>("/system/sync")]), [api])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, "settings")
   const [config, sync] = data ?? [null, null]
   const pending = sync ? Object.values(sync.counts).reduce((s, c) => s + (c.PENDING ?? 0), 0) : 0
 

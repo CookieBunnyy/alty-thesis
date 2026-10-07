@@ -17,14 +17,16 @@ def _listing(db, title, category, price, status="AVAILABLE", lat=14.5, lng=121.0
     return listing
 
 
-def _agent(db, agent_id, transactions, completed, assignments=10, status="ACTIVE"):
+def _agent(db, agent_id, status="ACTIVE"):
+    # The stored (imported) counts are deliberately misleading: insights must
+    # use the transactions recorded in ALTY, not these.
     db.add(Agent(agent_id=agent_id, full_name=f"Agent {agent_id}", status=status, sync_status="SYNCED",
-                 transactions_count=transactions, completed_sales=completed, assignments_count=assignments))
+                 transactions_count=99, completed_sales=99, assignments_count=99))
 
 
 def _tx(db, listing, agent_id, kind, status, days_ago, amount="1000000"):
     client = Client(full_name=f"Client {listing.listing_id}-{days_ago}", status="RESERVED", source="DOCUMENT",
-                    sync_status="SYNCED")
+                    sync_status="SYNCED", agent_id=agent_id)
     db.add(client)
     db.flush()
     db.add(PropertyTransaction(client_id=client.client_id, property_id=listing.listing_id, agent_id=agent_id,
@@ -32,11 +34,26 @@ def _tx(db, listing, agent_id, kind, status, days_ago, amount="1000000"):
                                transaction_date=datetime.now(timezone.utc) - timedelta(days=days_ago)))
 
 
+def _deals(db, listing, agent_id, sold, lost):
+    """Recorded deals: completed sales, and reservations that were cancelled."""
+    for _ in range(sold):
+        _tx(db, listing, agent_id, "SOLD", "COMPLETED", 10)
+    for _ in range(lost):
+        _tx(db, listing, agent_id, "RESERVED", "CANCELLED", 10)
+
+
 def _seed(db):
-    _agent(db, "AGT-A", 20, 18)            # 90% — well above average
-    _agent(db, "AGT-B", 20, 6, assignments=30)  # 30% with a heavy workload
-    _agent(db, "AGT-C", 20, 12)
-    _agent(db, "AGT-D", 20, 12)
+    for agent_id in ("AGT-A", "AGT-B", "AGT-C", "AGT-D"):
+        _agent(db, agent_id)
+    db.flush()
+    sold_house = _listing(db, "Sold Condo", "condo", 2_020_000, status="SOLD")
+    _deals(db, sold_house, "AGT-A", 12, 0)   # 12 of 16 deals sold (75%), plus 4 open below
+    _deals(db, sold_house, "AGT-B", 3, 7)    # 3 of 11 (27%) ...
+    for n in range(10):                       # ... with many assigned clients
+        db.add(Client(full_name=f"Prospect {n}", status="PROSPECT", source="DOCUMENT",
+                      sync_status="SYNCED", agent_id="AGT-B"))
+    _deals(db, sold_house, "AGT-C", 6, 4)    # 60%
+    _deals(db, sold_house, "AGT-D", 6, 4)    # 60%
     condos = [_listing(db, f"Condo {i}", "condo", 2_000_000 + i * 10_000) for i in range(4)]
     pricey = _listing(db, "Pricey Condo", "Condominium", 3_500_000)       # "condo" and "Condominium" compare together
     unmapped = _listing(db, "No Map House", "house", 5_000_000, lat=None, lng=None, photos=())

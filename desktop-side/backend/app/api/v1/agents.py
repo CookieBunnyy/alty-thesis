@@ -14,6 +14,7 @@ from app.models.user import User
 from app.schemas.agent import AgentResponse, AgentSyncResult
 from app.services import reviews as review_service
 from app.services.agent_sync import sync_agents
+from app.services.analytics import agent_recorded_stats
 from app.services.audit import record_audit
 
 
@@ -37,12 +38,17 @@ def get_agents(
 ):
     agents = db.execute(select(Agent).order_by(Agent.full_name)).scalars().all()
     stats = review_service.review_stats(db, [agent.agent_id for agent in agents])
-    return [_with_reviews(agent, stats) for agent in agents]
+    recorded = agent_recorded_stats(db)
+    return [_with_reviews(agent, stats, recorded) for agent in agents]
 
 
-def _with_reviews(agent: Agent, stats: dict) -> AgentResponse:
+def _with_reviews(agent: Agent, stats: dict, recorded: dict) -> AgentResponse:
+    """The agent record plus client-review and recorded-activity figures."""
     response = AgentResponse.model_validate(agent)
-    return response.model_copy(update=review_service.stats_for(stats, agent.agent_id))
+    return response.model_copy(update={
+        **review_service.stats_for(stats, agent.agent_id),
+        **recorded.get(agent.agent_id, {}),
+    })
 
 
 # =========================================================
@@ -79,7 +85,8 @@ def get_my_work(db: Session = Depends(get_db), user: User = Depends(get_current_
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
     return {
-        "agent": _with_reviews(agent, review_service.review_stats(db, [agent.agent_id])).model_dump(mode="json"),
+        "agent": _with_reviews(agent, review_service.review_stats(db, [agent.agent_id]),
+                               agent_recorded_stats(db, [agent.agent_id])).model_dump(mode="json"),
         "activity": get_agent_activity(agent.agent_id, db, user),
         "reviews": get_agent_reviews(agent.agent_id, 10, 0, db, user),
     }
@@ -105,7 +112,8 @@ def get_agent(
             detail="Agent not found",
         )
 
-    return _with_reviews(agent, review_service.review_stats(db, [agent_id]))
+    return _with_reviews(agent, review_service.review_stats(db, [agent_id]),
+                         agent_recorded_stats(db, [agent_id]))
 
 
 # =========================================================

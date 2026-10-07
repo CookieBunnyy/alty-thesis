@@ -32,7 +32,7 @@ export function ForecastingPage() {
   const [metric, setMetric] = useState<Metric>("revenue")
   const [horizon, setHorizon] = useState("3")
   const load = useCallback(() => api<{ forecast: Forecast; insights: Insight[] }>(`/intelligence/forecast?metric=${metric}&horizon=${horizon}`), [api, metric, horizon])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, `forecast:${metric}:${horizon}`)
   const look = METRICS[metric]
   const f = data?.forecast
 

@@ -23,7 +23,7 @@ export function TransactionsPage() {
   const [status, setStatus] = useState("")
   const [type, setType] = useState("")
   const load = useCallback(() => Promise.all([api<Transaction[]>("/transactions?limit=2000"), api<Summary>("/transactions/summary")]), [api])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, "transactions")
   const [rows, summary] = data ?? [[], null]
   const shown = useMemo(
     () => rows.filter((t) => (!status || t.status === status) && (!type || t.transaction_type === type) &&

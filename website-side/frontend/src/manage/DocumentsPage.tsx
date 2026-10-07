@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState, type FormEvent } from "react"
-import { Archive, ArchiveRestore, Download, Eye, FilePlus2, FolderPlus, LoaderCircle, RefreshCw, Trash2, UploadCloud, X } from "lucide-react"
+import { Archive, ArchiveRestore, Download, Eye, FilePlus2, FolderPlus, FolderX, LoaderCircle, RefreshCw, Trash2, UploadCloud, X } from "lucide-react"
 import { Link } from "@/components/Link"
 import { canFile, contains, date, dateTime, fileSize, statusLabel, text } from "./format"
 import { UploadDocument, type DocType, type DocumentRecord, type Folder } from "./UploadDocument"
 import { FolderTree } from "./FolderTree"
-import { indexFolders } from "./folders"
+import { indexFolders, isStandardFolder } from "./folders"
 import { Badge, Button, Confirm, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
@@ -46,6 +46,9 @@ export function DocumentsPage() {
   const [uploading, setUploading] = useState(false)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [result, setResult] = useState<{ doc: DocumentRecord; newFolder: boolean } | null>(null)
+  const [deletingFolder, setDeletingFolder] = useState(false)
+  const [folderBusy, setFolderBusy] = useState(false)
+  const toast = useToast()
 
   const load = useCallback(() => Promise.all([
     api<Doc[]>("/documents?limit=1000"),
@@ -53,7 +56,7 @@ export function DocumentsPage() {
     api<Folder[]>("/documents/folders"),
     api<DocType[]>("/documents/types"),
   ]), [api])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, "documents")
   const [docs, summary, folders, types] = data ?? [[], null, [], []]
   const typeLabel = useMemo(() => Object.fromEntries(types.map((dt) => [dt.code, dt.label])), [types])
   const label = (code: string) => (typeLabel[code] ? t(typeLabel[code]) : statusLabel(code))
@@ -78,6 +81,32 @@ export function DocumentsPage() {
     }
     return out
   }, [docs, folders])
+
+  // Delete folder: only for a selected folder that isn't one of the standard ones.
+  const selectedFolder = folder === null ? null : folders.find((f) => f.id === folder) ?? null
+  const standard = selectedFolder ? isStandardFolder(selectedFolder, folders) : false
+  const canDeleteFolder = Boolean(selectedFolder) && !standard && canFile(user?.role)
+  const deleteFolderTitle = !selectedFolder ? t("Select a folder first")
+    : standard ? t("“{name}” is a standard folder and can't be deleted", { name: selectedFolder.name })
+    : !canFile(user?.role) ? t("Only filing and management roles can delete folders")
+    : t("Delete “{name}”", { name: index.path.get(selectedFolder.id) ?? selectedFolder.name })
+  const removeFolder = async () => {
+    if (!selectedFolder) return
+    setFolderBusy(true)
+    try {
+      const done = await api<{ deleted: string; moved_documents: number; moved_to: string | null }>(`/documents/folders/${selectedFolder.id}`, { method: "DELETE" })
+      toast(done.moved_documents
+        ? t("Deleted “{name}”. {n} document(s) moved to {dest}.", { name: done.deleted, n: done.moved_documents, dest: done.moved_to ?? t("All documents (no folder)") })
+        : t("Deleted “{name}”.", { name: done.deleted }))
+      setFolder(selectedFolder.parent_id)
+      setDeletingFolder(false)
+      void reload()
+    } catch (deleteError) {
+      toast((deleteError as Error).message, "error")
+    } finally {
+      setFolderBusy(false)
+    }
+  }
 
   const columns: Column<Doc>[] = [
     {
@@ -111,6 +140,9 @@ export function DocumentsPage() {
         actions={
           <>
             <Button onClick={() => setCreatingFolder(true)}><FolderPlus className="h-4 w-4" /> {t("New folder")}</Button>
+            <Button variant="danger" onClick={() => setDeletingFolder(true)} disabled={!canDeleteFolder} title={deleteFolderTitle}>
+              <FolderX className="h-4 w-4" /> {t("Delete folder")}
+            </Button>
             <Button variant="primary" onClick={() => setUploading(true)} disabled={!data}><UploadCloud className="h-4 w-4" /> {t("Upload document")}</Button>
           </>
         }
@@ -171,6 +203,22 @@ export function DocumentsPage() {
           onView={() => { const docId = result.doc.document_id; setResult(null); open(docId) }}
           onOpenFolder={() => { setFolder(result.doc.folder_id); setStatus(""); setType(""); setSearch(""); setResult(null) }}
           onUploadAnother={() => { setResult(null); setUploading(true) }}
+        />
+      )}
+      {deletingFolder && selectedFolder && (
+        <Confirm
+          typeToConfirm="Delete"
+          title="Delete folder?"
+          message={t("Delete the folder “{path}”{sub}? The {n} document(s) inside are kept and move to {dest}. This can't be undone.", {
+            path: index.path.get(selectedFolder.id) ?? selectedFolder.name,
+            sub: index.within(selectedFolder.id).size > 1 ? t(" and its {n} sub-folder(s)", { n: index.within(selectedFolder.id).size - 1 }) : "",
+            n: counts.get(selectedFolder.id) ?? 0,
+            dest: selectedFolder.parent_id != null ? index.path.get(selectedFolder.parent_id) ?? "" : t("All documents (no folder)"),
+          })}
+          confirmLabel="Delete"
+          busy={folderBusy}
+          onConfirm={() => void removeFolder()}
+          onCancel={() => setDeletingFolder(false)}
         />
       )}
       {creatingFolder && <NewFolder folders={folders} onClose={() => setCreatingFolder(false)} onCreated={() => { setCreatingFolder(false); void reload() }} />}
@@ -443,7 +491,7 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
           onClose={() => setVersionResult(null)} onView={() => setVersionResult(null)} />
       )}
       {confirmDelete && (
-        <Confirm
+        <Confirm typeToConfirm="Delete"
           title="Delete document?"
           message={t("Deletes “{name}” and all its versions and files. The audit history is kept. Records it created (clients, transactions) are not removed. This can't be undone — consider Archive instead.", { name: doc.document_name })}
           confirmLabel="Delete"

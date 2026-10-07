@@ -6,7 +6,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import String, and_, cast, func, or_, select, update
+from sqlalchemy import String, and_, cast, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -23,7 +23,13 @@ from app.schemas.document import (
     DocumentResponse,
     DocumentUpdate,
 )
-from app.services.document_filing import DEFAULT_FOLDERS, FINANCIAL_SUBFOLDERS, file_document, folder_path
+from app.services.document_filing import (
+    DEFAULT_FOLDERS,
+    FINANCIAL_SUBFOLDERS,
+    file_document,
+    folder_path,
+    is_category_folder,
+)
 from app.services.audit import record_audit
 from app.services.cloud_sync import try_push_pending
 from app.services.document_classification import AUTO, canonical_type, type_catalog
@@ -74,25 +80,69 @@ def _latest_processing(db: Session, document: Document) -> dict:
 
 
 def _serialize_document(db: Session, document: Document, processing: dict | None = None) -> dict:
-    result = DocumentResponse.model_validate(document).model_dump(mode="json")
-    folder = db.get(DocumentFolder, document.folder_id) if document.folder_id else None
-    listing = (
-        db.get(PropertyListing, document.property_listing_id)
-        if document.property_listing_id else None
-    )
-    uploader = db.get(User, document.uploaded_by)
-    details = processing if processing is not None else _latest_processing(db, document)
-    details.pop("entity_events", None)
-    result.update(
-        folder_name=folder.name if folder else None,
-        folder_path=folder_path(db, document.folder_id),
-        property_name=listing.title if listing else document.property_listing_title,
-        property_listing_title=listing.title if listing else document.property_listing_title,
-        extracted_fields=details.get("extracted_fields") or {},
-        processing=details,
-        uploaded_by_name=uploader.full_name if uploader else None,
-    )
-    return result
+    extra = {document.id: processing} if processing is not None else None
+    return _serialize_documents(db, [document], processing=extra)[0]
+
+
+def _serialize_documents(db: Session, documents: list[Document],
+                         processing: dict[int, dict] | None = None) -> list[dict]:
+    """Serialize many documents with a fixed number of queries.
+
+    Folders, listings, uploaders and the latest processing result are loaded
+    for the whole page at once — one query each — instead of per document,
+    because every query is a network round trip to the database."""
+    if not documents:
+        return []
+    folders = {f.id: f for f in db.execute(select(DocumentFolder)).scalars()}
+
+    def path_of(folder_id: int | None) -> str | None:
+        names, seen = [], set()
+        while folder_id is not None and folder_id in folders and folder_id not in seen:
+            seen.add(folder_id)
+            names.append(folders[folder_id].name)
+            folder_id = folders[folder_id].parent_id
+        return " / ".join(reversed(names)) or None
+
+    listing_ids = {d.property_listing_id for d in documents if d.property_listing_id}
+    titles = dict(db.execute(
+        select(PropertyListing.listing_id, PropertyListing.title)
+        .where(PropertyListing.listing_id.in_(listing_ids))
+    ).all()) if listing_ids else {}
+    user_ids = {d.uploaded_by for d in documents if d.uploaded_by}
+    names = dict(db.execute(
+        select(User.id, User.full_name).where(User.id.in_(user_ids))
+    ).all()) if user_ids else {}
+    processing = dict(processing or {})
+    missing = [d.id for d in documents if d.id not in processing]
+    if missing:
+        latest = (
+            select(DocumentAuditEvent.document_row_id, DocumentAuditEvent.details)
+            .where(DocumentAuditEvent.document_row_id.in_(missing),
+                   DocumentAuditEvent.event_type == "DOCUMENT_PROCESSING")
+            .order_by(DocumentAuditEvent.document_row_id, DocumentAuditEvent.id.desc())
+            .distinct(DocumentAuditEvent.document_row_id)
+        )
+        for row_id, details in db.execute(latest).all():
+            processing[row_id] = dict(details or {})
+
+    results = []
+    for document in documents:
+        result = DocumentResponse.model_validate(document).model_dump(mode="json")
+        folder = folders.get(document.folder_id) if document.folder_id else None
+        title = titles.get(document.property_listing_id) if document.property_listing_id else None
+        details = dict(processing.get(document.id) or {})
+        details.pop("entity_events", None)
+        result.update(
+            folder_name=folder.name if folder else None,
+            folder_path=path_of(document.folder_id),
+            property_name=title or document.property_listing_title,
+            property_listing_title=title or document.property_listing_title,
+            extracted_fields=details.get("extracted_fields") or {},
+            processing=details,
+            uploaded_by_name=names.get(document.uploaded_by),
+        )
+        results.append(result)
+    return results
 
 
 def _record_event(db: Session, event_type: str, actor: User, document: Document | None = None,
@@ -322,10 +372,14 @@ def get_folders(include_archived: bool = False, db: Session = Depends(get_db),
                 actor: User = Depends(get_current_user)):
     parents: dict[str, DocumentFolder] = {}
     created = False
+    # One query for the top-level folders and one for Financial's, rather than
+    # one per default folder (each query is a round trip to the database).
+    top = {}
+    for folder in db.execute(select(DocumentFolder).where(DocumentFolder.parent_id.is_(None))
+                             .order_by(DocumentFolder.id)).scalars():
+        top.setdefault(folder.name, folder)
     for name in DEFAULT_FOLDERS:
-        folder = db.execute(select(DocumentFolder).where(
-            DocumentFolder.name == name, DocumentFolder.parent_id.is_(None)
-        )).scalars().first()
+        folder = top.get(name)
         if folder is None:
             folder = DocumentFolder(name=name, created_by=actor.id)
             db.add(folder)
@@ -333,11 +387,13 @@ def get_folders(include_archived: bool = False, db: Session = Depends(get_db),
             _record_event(db, "FOLDER_CREATED", actor, folder=folder, details={"name": name})
             created = True
         parents[name] = folder
+    parent = parents["Financial"]
+    children = {}
+    for folder in db.execute(select(DocumentFolder).where(DocumentFolder.parent_id == parent.id)
+                             .order_by(DocumentFolder.id)).scalars():
+        children.setdefault(folder.name, folder)
     for name in FINANCIAL_SUBFOLDERS:
-        parent = parents["Financial"]
-        folder = db.execute(select(DocumentFolder).where(
-            DocumentFolder.name == name, DocumentFolder.parent_id == parent.id
-        )).scalars().first()
+        folder = children.get(name)
         if folder is None:
             folder = DocumentFolder(name=name, parent_id=parent.id, created_by=actor.id)
             db.add(folder)
@@ -402,6 +458,39 @@ def update_folder(folder_id: int, payload: DocumentFolderUpdate, db: Session = D
     return folder
 
 
+@router.delete("/folders/{folder_id}")
+def delete_folder(folder_id: int, db: Session = Depends(get_db),
+                  actor: User = Depends(get_current_user)):
+    """Delete a folder and its sub-folders. Documents are never deleted with
+    it: they move to the folder's parent (or to no folder at the top level).
+    The standard category folders can't be deleted — filing relies on them."""
+    require_filing(actor)
+    folder = db.get(DocumentFolder, folder_id)
+    if folder is None:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    if is_category_folder(db, folder.id):
+        raise HTTPException(status_code=409, detail=f"“{folder.name}” is a standard folder and can't be deleted")
+    path = folder_path(db, folder.id)
+    subtree = _descendant_folder_ids(db, folder.id)
+    destination = folder.parent_id
+    moved = db.execute(
+        select(func.count(func.distinct(Document.document_id))).where(Document.folder_id.in_(subtree))
+    ).scalar_one()
+    db.execute(update(Document).where(Document.folder_id.in_(subtree)).values(folder_id=destination))
+    # History entries keep their details; they just no longer point at the folder.
+    db.execute(update(DocumentAuditEvent).where(DocumentAuditEvent.folder_id.in_(subtree)).values(folder_id=None))
+    db.execute(update(DocumentFolder).where(DocumentFolder.id.in_(subtree)).values(parent_id=None))
+    db.execute(delete(DocumentFolder).where(DocumentFolder.id.in_(subtree)))
+    moved_to = folder_path(db, destination)
+    details = {"folder": path, "subfolders": len(subtree) - 1, "moved_documents": int(moved),
+               "moved_to": moved_to}
+    _record_event(db, "FOLDER_DELETED", actor, details=details)
+    record_audit(db, "FOLDER_DELETED", actor=actor, entity_type="document_folders",
+                 entity_id=str(folder_id), details=details)
+    db.commit()
+    return {"deleted": path, **details}
+
+
 # ---------------------------------------------------------------------------
 # Documents
 # ---------------------------------------------------------------------------
@@ -451,7 +540,7 @@ def get_documents(
     rows = db.execute(
         statement.order_by(Document.created_at.desc()).offset(offset).limit(limit)
     ).scalars().all()
-    return [_serialize_document(db, row) for row in rows]
+    return _serialize_documents(db, list(rows))
 
 
 @router.get("/summary")
@@ -497,7 +586,7 @@ def get_document_versions(document_id: str, db: Session = Depends(get_db),
     ).scalars().all()
     if not versions:
         raise HTTPException(status_code=404, detail="Document not found")
-    return [_serialize_document(db, row) for row in versions]
+    return _serialize_documents(db, list(versions))
 
 
 @router.get("/{document_id}/audit")

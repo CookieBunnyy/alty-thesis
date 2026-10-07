@@ -1,10 +1,12 @@
 """Agent Management: real agents from the backend (no sample data).
 
 Data flow: Supabase -> (Sync) -> local PostgreSQL -> FastAPI /api/v1/agents
--> ApiClient -> this page. Two ratings are shown and kept distinct:
+-> ApiClient -> this page.
 
+* Activity (clients, reservations, sales) is counted from the records in ALTY
+  (``assigned_clients``, ``recorded_*``), the same basis as Workforce — not
+  the figures stored on the imported agent record.
 * Client rating – average of client reviews (agent_reviews), with count.
-* System rating – the legacy ``star_rating`` synced from Supabase.
 """
 
 from __future__ import annotations
@@ -184,8 +186,6 @@ class AgentProfileDialog(QDialog):
             f"/*alty-raw*/ color: {T['warning']}; font-size: 16px; font-weight: 800;")
         grid.addWidget(self._label("Client rating (from client reviews)", "faint"), 0, 0)
         grid.addWidget(self.client_rating_label, 1, 0)
-        grid.addWidget(self._label("System rating (synced from Supabase)", "faint"), 0, 1)
-        grid.addWidget(self._label(system_rating_text(self.agent.get("star_rating"))), 1, 1)
         ratings_layout.addLayout(grid)
         self.distribution = QGridLayout()
         self.distribution.setHorizontalSpacing(8)
@@ -207,16 +207,16 @@ class AgentProfileDialog(QDialog):
 
         # Performance
         performance, perf_layout = self._card()
-        perf_layout.addWidget(self._label("Performance", "section"))
+        perf_layout.addWidget(self._label("Recorded in ALTY", "section"))
         metrics = QGridLayout()
         metrics.setSpacing(10)
         values = (
-            ("Assignments", self.agent.get("assignments_count", 0)),
-            ("Transactions", self.agent.get("transactions_count", 0)),
-            ("Completed sales", self.agent.get("completed_sales", 0)),
-            ("Performance", percent(self.agent.get("performance_score"))),
-            ("Total sales", money(self.agent.get("total_sales"))),
-            ("Commission", money(self.agent.get("total_commission"))),
+            ("Assigned clients", self.agent.get("assigned_clients", 0)),
+            ("Open reservations", self.agent.get("open_reservations", 0)),
+            ("Transactions", self.agent.get("recorded_transactions", 0)),
+            ("Completed sales", self.agent.get("recorded_completed_sales", 0)),
+            ("Sales value", money(self.agent.get("recorded_sales_value"))),
+            ("Client reviews", self.agent.get("review_count", 0)),
         )
         for index, (label, value) in enumerate(values):
             tile = QFrame()
@@ -298,9 +298,10 @@ class AgentProfileDialog(QDialog):
 # Agent Management page
 # ---------------------------------------------------------------------------
 
-COLUMNS = ["Agent ID", "Full Name", "Phone Number", "Location", "Client Rating", "System Rating",
-           "Assignments", "Transactions", "Completed Sales", "Performance", "Status"]
-CENTERED = {0, 6, 7, 8, 9, 10}
+# Activity columns are counted from the records in ALTY (same as Workforce).
+COLUMNS = ["Agent ID", "Full Name", "Phone Number", "Location", "Client Rating", "Assigned Clients",
+           "Open Reservations", "Transactions", "Completed Sales", "Sales Value", "Status"]
+CENTERED = {0, 5, 6, 7, 8, 9, 10}
 
 
 class AgentsPage(QWidget):
@@ -517,11 +518,9 @@ class AgentsPage(QWidget):
                 SortItem(str(agent.get("agent_location") or "—")),
                 SortItem(client_rating_text(agent),
                          (_number(agent.get("client_rating")) or 0) * 1000 + int(agent.get("review_count") or 0)),
-                SortItem(system_rating_text(agent.get("star_rating")), _number(agent.get("star_rating")) or 0),
-                SortItem(str(agent.get("assignments_count", 0)), int(agent.get("assignments_count") or 0)),
-                SortItem(str(agent.get("transactions_count", 0)), int(agent.get("transactions_count") or 0)),
-                SortItem(str(agent.get("completed_sales", 0)), int(agent.get("completed_sales") or 0)),
-                SortItem(percent(agent.get("performance_score")), _number(agent.get("performance_score")) or 0),
+                *(SortItem(str(int(agent.get(key) or 0)), int(agent.get(key) or 0)) for key in
+                  ("assigned_clients", "open_reservations", "recorded_transactions", "recorded_completed_sales")),
+                SortItem(money(agent.get("recorded_sales_value")), _number(agent.get("recorded_sales_value")) or 0),
                 SortItem(status),
             ]
             for column, item in enumerate(cells):

@@ -31,7 +31,7 @@ export function UsersPage() {
   const [resetting, setResetting] = useState<StaffUser | null>(null)
   const [now] = useState(() => Date.now()) // "signed in within 30 days" is measured from page load
   const load = useCallback(() => Promise.all([api<StaffUser[]>("/users"), api<Role[]>("/users/roles"), api<AgentOption[]>("/agents")]), [api])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, "users")
   const [users, rawRoles, agents] = data ?? [[], [], []]
   const roles = useMemo(() => rawRoles.map((r) => (typeof r === "string" ? r : r.name)).filter((r) => r !== "Client"), [rawRoles])
   const shown = users.filter((u) => (!role || u.role === role) && contains([u.full_name, u.username, u.role], search))

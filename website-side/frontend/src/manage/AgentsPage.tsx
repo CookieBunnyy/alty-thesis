@@ -15,6 +15,9 @@ type Agent = {
   assignments_count: number; transactions_count: number; completed_sales: number
   total_sales: string | null; total_commission: string | null; performance_score: string | null
   client_rating: number | null; review_count: number; status: string; sync_status: string
+  // counted from the clients and transactions recorded in ALTY
+  assigned_clients: number; recorded_transactions: number; open_reservations: number
+  recorded_completed_sales: number; recorded_sales_value: number
   last_synced_at: string | null; created_at: string | null; updated_at: string | null
 }
 type Activity = {
@@ -42,7 +45,7 @@ export function AgentsPage() {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
   const load = useCallback(() => api<Agent[]>("/agents"), [api])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, "agents")
   const agents = useMemo(() => data ?? [], [data])
   const shown = useMemo(
     () => agents.filter((a) => (!status || a.status === status) && contains([a.full_name, a.agent_id, a.agent_location, a.phone_number], search)),
@@ -69,25 +72,27 @@ export function AgentsPage() {
     },
     { key: "status", label: "Status", sort: (a) => a.status, render: (a) => <Badge value={a.status} /> },
     { key: "client", label: "Client rating", sort: (a) => a.client_rating ?? -1, render: (a) => <span>{<Stars value={a.client_rating} />}{a.review_count ? <span className="ml-1 text-xs text-ab-faint">({a.review_count})</span> : null}</span> },
-    { key: "transactions", label: "Transactions", align: "right", sort: (a) => a.transactions_count, render: (a) => a.transactions_count, hideOnPhone: true },
-    { key: "sales", label: "Completed sales", align: "right", sort: (a) => a.completed_sales, render: (a) => a.completed_sales },
-    { key: "value", label: "Sales value", align: "right", sort: (a) => Number(a.total_sales ?? 0), render: (a) => pesoShort(a.total_sales) },
-    { key: "performance", label: "Performance", align: "right", sort: (a) => Number(a.performance_score ?? -1), render: (a) => (a.performance_score ? `${Number(a.performance_score).toFixed(1)}%` : "—"), hideOnPhone: true },
+    { key: "clients", label: "Assigned clients", align: "right", sort: (a) => a.assigned_clients, render: (a) => a.assigned_clients, hideOnPhone: true },
+    { key: "open", label: "Open reservations", align: "right", sort: (a) => a.open_reservations, render: (a) => a.open_reservations },
+    { key: "transactions", label: "Transactions", align: "right", sort: (a) => a.recorded_transactions, render: (a) => a.recorded_transactions, hideOnPhone: true },
+    { key: "sales", label: "Completed sales", align: "right", sort: (a) => a.recorded_completed_sales, render: (a) => a.recorded_completed_sales },
+    { key: "value", label: "Sales value", align: "right", sort: (a) => a.recorded_sales_value, render: (a) => (a.recorded_sales_value ? pesoShort(a.recorded_sales_value) : "—") },
   ]
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
         title="Agents"
-        subtitle="Agent records from Supabase, with client reviews and the clients, properties and transactions recorded for each agent."
+        subtitle="Agents and the clients, reservations and sales recorded for each one in ALTY, with verified client reviews."
         actions={isManagement(user?.role) && <SyncButton path="/agents/sync" what="Agents" onDone={reload} />}
       />
       {data && (
         <Tiles items={[
           { label: "Agents", value: agents.length, onClick: () => setStatus(""), active: !status },
           { label: "Active", value: active, onClick: () => setStatus(status === "ACTIVE" ? "" : "ACTIVE"), active: status === "ACTIVE" },
-          { label: "Completed sales", value: agents.reduce((s, a) => s + a.completed_sales, 0), detail: "From agent records" },
-          { label: "Sales value", value: pesoShort(agents.reduce((s, a) => s + Number(a.total_sales ?? 0), 0)), detail: "From agent records" },
+          { label: "Open reservations", value: agents.reduce((s, a) => s + a.open_reservations, 0), detail: "Waiting to become sales" },
+          { label: "Completed sales", value: agents.reduce((s, a) => s + a.recorded_completed_sales, 0), detail: "Recorded in ALTY" },
+          { label: "Sales value", value: pesoShort(agents.reduce((s, a) => s + a.recorded_sales_value, 0)), detail: "Recorded in ALTY" },
           { label: "Client-reviewed agents", value: reviewed.length, detail: reviewed.length ? t("of {n}", { n: agents.length }) : t("No client reviews yet") },
         ]} />
       )}
@@ -128,15 +133,13 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
         </a>
       )}
     >
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {([
-          ["Assignments", agent.assignments_count],
-          ["Transactions", agent.transactions_count],
-          ["Completed sales", agent.completed_sales],
-          ["Performance", agent.performance_score ? `${Number(agent.performance_score).toFixed(1)}%` : "—"],
-          ["Sales value", peso(agent.total_sales)],
-          ["Commission", peso(agent.total_commission)],
-          ["System rating", agent.star_rating ? `${Number(agent.star_rating).toFixed(1)} ★` : "—"],
+          ["Assigned clients", agent.assigned_clients],
+          ["Open reservations", agent.open_reservations],
+          ["Transactions", agent.recorded_transactions],
+          ["Completed sales", agent.recorded_completed_sales],
+          ["Sales value", agent.recorded_sales_value ? peso(agent.recorded_sales_value) : "—"],
           ["Client rating", agent.client_rating != null ? `${agent.client_rating.toFixed(1)} ★ (${agent.review_count})` : t("No reviews")],
         ] as const).map(([label, value]) => (
           <div key={label} className="rounded-xl border border-ab-border bg-ab-card p-3">
@@ -145,7 +148,7 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
           </div>
         ))}
       </div>
-      <p className="text-xs text-ab-faint">{t("Assignments, sales value, commission, performance and system rating are the figures stored on the agent record (synced from Supabase). Client rating comes only from verified client reviews.")}</p>
+      <p className="text-xs text-ab-faint">{t("Counted from the clients, reservations and sales recorded in ALTY; cancelled transactions are left out. Client rating comes only from verified client reviews.")}</p>
 
       {isManagement(user?.role) && (
         <SubjectInsights path={`/intelligence/agents/${encodeURIComponent(agent.agent_id)}`} empty={t("Nothing needs attention for this agent right now.")} />

@@ -22,6 +22,13 @@ class AgentResponse(BaseModel):
     # system/legacy rating synced from Supabase.
     client_rating: float | None = None
     review_count: int = 0
+    # Counted from the clients and transactions recorded in ALTY (what the
+    # pages show). The stored counts above come from the Supabase import.
+    assigned_clients: int = 0
+    recorded_transactions: int = 0
+    open_reservations: int = 0
+    recorded_completed_sales: int = 0
+    recorded_sales_value: float = 0
     status: str
     sync_status: str
     last_synced_at: datetime | None = None

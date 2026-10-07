@@ -75,3 +75,34 @@ def test_failed_documents_are_not_filed(api, admin, agents, db):
     assert doc["status"] == "FAILED"
     assert doc["folder_path"] is None
     assert not [p for p in folders(api, admin) if p.startswith("Buyers / ")]
+
+
+def test_deleting_a_folder_keeps_its_documents(api, admin, agents, db):
+    upload(api, admin, "property.docx", build.docx(build.PROPERTY_LINES))
+    doc = upload(api, admin, "buyer.docx", build.docx(build.BUYER_LINES))
+    assert doc["folder_path"] == "Buyers / Michael Santos"
+    tree = folders(api, admin)
+    person = tree["Buyers / Michael Santos"]["id"]
+    nested = api.post("/api/v1/documents/folders", headers=admin,
+                      json={"name": "Old IDs", "parent_id": person}).json()
+
+    response = api.delete(f"/api/v1/documents/folders/{person}", headers=admin)
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["deleted"] == "Buyers / Michael Santos"
+    assert result["subfolders"] == 1 and result["moved_documents"] == 1 and result["moved_to"] == "Buyers"
+    after = folders(api, admin)
+    assert "Buyers / Michael Santos" not in after and nested["id"] not in {f["id"] for f in after.values()}
+    moved = api.get(f"/api/v1/documents/{doc['document_id']}", headers=admin).json()
+    assert moved["folder_path"] == "Buyers"  # the document itself is kept
+    history = api.get(f"/api/v1/documents/{doc['document_id']}/audit", headers=admin)
+    assert history.status_code == 200
+
+
+def test_standard_folders_cannot_be_deleted(api, admin, employee):
+    tree = folders(api, admin)
+    refused = api.delete(f"/api/v1/documents/folders/{tree['Buyers']['id']}", headers=admin)
+    assert refused.status_code == 409
+    custom = api.post("/api/v1/documents/folders", headers=admin, json={"name": "Scratch"}).json()
+    assert api.delete(f"/api/v1/documents/folders/{custom['id']}", headers=employee).status_code == 403
+    assert api.delete("/api/v1/documents/folders/999999", headers=admin).status_code == 404

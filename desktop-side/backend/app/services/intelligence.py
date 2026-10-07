@@ -23,8 +23,9 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime
 from statistics import median
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.agent import Agent
@@ -37,7 +38,7 @@ from app.services import reviews as review_service
 SEVERITY_ORDER = {"high": 0, "medium": 1, "positive": 2, "info": 3}
 MIN_COMPARABLES = 3          # listings in the same category to compare prices
 PRICE_GAP = 0.25             # ±25% from the category median
-MIN_AGENT_TRANSACTIONS = 3   # recorded transactions before judging conversion
+MIN_AGENT_DEALS = 3          # recorded deals before judging an agent's sales rate
 CONVERSION_GAP = 0.15        # 15 percentage points from the agent average
 STALE_RESERVATION_DAYS = 60
 SHARE_LEADER = 0.40          # one group holds ≥40% of activity
@@ -278,22 +279,76 @@ def forecast_insights(db: Session, metric: str, result: dict) -> list[dict]:
 
 # --------------------------------------------------------------------- property
 
-def property_insights(db: Session, listing: PropertyListing) -> list[dict]:
+class Shared:
+    """Data several insight rules need, loaded once per request.
+
+    The central feed evaluates every property and agent; loading these per
+    item would cost one database round trip each, which is what made the
+    Recommendations page slow on the hosted database."""
+
+    def __init__(self, db: Session):
+        self.db = db
+        self._cache: dict[str, Any] = {}
+
+    def _get(self, key: str, load):
+        if key not in self._cache:
+            self._cache[key] = load()
+        return self._cache[key]
+
+    def transactions(self, listing_id: int) -> list[PropertyTransaction]:
+        def load():
+            grouped: dict[int, list[PropertyTransaction]] = defaultdict(list)
+            for item in self.db.execute(
+                select(PropertyTransaction).order_by(PropertyTransaction.transaction_date)
+            ).scalars():
+                grouped[item.property_id].append(item)
+            return grouped
+        return self._get("transactions", load).get(listing_id, [])
+
+    def prices(self) -> list[tuple[int, float, str]]:
+        return self._get("prices", lambda: [
+            (listing_id, float(price), category_label(category))
+            for listing_id, price, category in self.db.execute(
+                select(PropertyListing.listing_id, PropertyListing.price_total, PropertyListing.category)
+                .where(PropertyListing.price_total.is_not(None))
+            ).all()
+        ])
+
+    def active_agents(self) -> list[Agent]:
+        return self._get("peers", lambda: self.db.execute(
+            select(Agent).where(func.upper(Agent.status) == "ACTIVE")).scalars().all())
+
+    def deals(self) -> dict[str, tuple[int, int]]:
+        return self._get("deals", lambda: _deals(self.db))
+
+    def assigned_clients(self) -> dict[str, int]:
+        return self._get("clients", lambda: {
+            a: stats["assigned_clients"] for a, stats in analytics.agent_recorded_stats(self.db).items()})
+
+    def open_reservations(self) -> dict[str, int]:
+        return self._get("loads", lambda: {agent_id: int(n) for agent_id, n in self.db.execute(
+            select(PropertyTransaction.agent_id, func.count()).where(
+                PropertyTransaction.transaction_type == "RESERVED", PropertyTransaction.status == "RESERVED")
+            .group_by(PropertyTransaction.agent_id)
+        ).all()})
+
+    def review_stats(self) -> dict:
+        """Every agent's review summary (one grouped query)."""
+        return self._get("reviews", lambda: review_service.review_stats(self.db))
+
+
+def property_insights(db: Session, listing: PropertyListing, shared: Shared | None = None) -> list[dict]:
+    shared = shared or Shared(db)
     subject = {"type": "property", "id": listing.listing_id, "name": listing.title}
     items: list[dict] = []
     now = _now()
-    transactions = db.execute(
-        select(PropertyTransaction).where(PropertyTransaction.property_id == listing.listing_id)
-        .order_by(PropertyTransaction.transaction_date)
-    ).scalars().all()
+    transactions = shared.transactions(listing.listing_id)
 
     # Price vs comparable listings (same category).
     if listing.price_total:
         label = category_label(listing.category)
-        prices = [float(p) for p, category in db.execute(
-            select(PropertyListing.price_total, PropertyListing.category).where(
-                PropertyListing.price_total.is_not(None), PropertyListing.listing_id != listing.listing_id)
-        ).all() if category_label(category) == label]
+        prices = [price for listing_id, price, category in shared.prices()
+                  if category == label and listing_id != listing.listing_id]
         if len(prices) >= MIN_COMPARABLES:
             mid = median(prices)
             gap = float(listing.price_total) / mid - 1 if mid else 0
@@ -370,23 +425,38 @@ def property_insights(db: Session, listing: PropertyListing) -> list[dict]:
 
 # ------------------------------------------------------------------------ agent
 
-def _conversion(agent: Agent) -> float | None:
-    return agent.completed_sales / agent.transactions_count if agent.transactions_count else None
+def _deals(db: Session) -> dict[str, tuple[int, int]]:
+    """agent -> (deals, completed sales), from the transactions recorded in ALTY.
+
+    A deal is one client and one property: a reservation followed by its sale
+    is one deal (two transaction rows), and a cancelled reservation is a deal
+    that did not become a sale."""
+    deal = func.concat(PropertyTransaction.client_id, ":", PropertyTransaction.property_id)
+    rows = db.execute(
+        select(PropertyTransaction.agent_id, func.count(func.distinct(deal)),
+               func.count(func.distinct(case((analytics.SALE, deal)))))
+        .group_by(PropertyTransaction.agent_id)
+    ).all()
+    return {agent_id: (int(deals), int(sales)) for agent_id, deals, sales in rows}
 
 
-def agent_insights(db: Session, agent: Agent) -> list[dict]:
+def agent_insights(db: Session, agent: Agent, shared: Shared | None = None) -> list[dict]:
+    shared = shared or Shared(db)
     subject = {"type": "agent", "id": agent.agent_id, "name": agent.full_name}
     items: list[dict] = []
-    peers = db.execute(select(Agent).where(func.upper(Agent.status) == "ACTIVE")).scalars().all()
-    rated = [(a, _conversion(a)) for a in peers if a.transactions_count >= MIN_AGENT_TRANSACTIONS]
-    rated = [(a, c) for a, c in rated if c is not None]
-    own = _conversion(agent)
+    peers = shared.active_agents()
+    deals = shared.deals()
+    clients = shared.assigned_clients()
+    rate = {a: sales / total for a, (total, sales) in deals.items() if total >= MIN_AGENT_DEALS}
+    rated = [rate[a.agent_id] for a in peers if a.agent_id in rate]
+    own = rate.get(agent.agent_id)
 
-    if own is not None and agent.transactions_count >= MIN_AGENT_TRANSACTIONS and len(rated) >= 3:
-        average = sum(c for _, c in rated) / len(rated)
-        factors = [f"{agent.completed_sales} completed sales of {agent.transactions_count} transactions ({_pct(own)})",
+    if own is not None and len(rated) >= 3:
+        average = sum(rated) / len(rated)
+        total, sales = deals[agent.agent_id]
+        factors = [f"{sales} of {total} recorded deals became completed sales ({_pct(own)})",
                    f"Average across {len(rated)} active agents: {_pct(average)}",
-                   "From the agent records synced from the central database"]
+                   "Counted from the reservations and sales recorded in ALTY"]
         if own - average >= CONVERSION_GAP:
             items.append(_insight(f"agent-{agent.agent_id}-conversion-high", "agent", "positive",
                                   "Completed-sales rate above average",
@@ -396,14 +466,15 @@ def agent_insights(db: Session, agent: Agent) -> list[dict]:
                                                  "for coaching other agents.",
                                   factors=factors, subject=subject, rule=f"≥{int(CONVERSION_GAP * 100)} points above average"))
         elif average - own >= CONVERSION_GAP:
-            assignments_avg = sum(a.assignments_count for a in peers) / len(peers) if peers else 0
-            heavy = agent.assignments_count >= assignments_avg * 1.25
+            own_clients = clients.get(agent.agent_id, 0)
+            clients_avg = sum(clients.get(a.agent_id, 0) for a in peers) / len(peers) if peers else 0
+            heavy = clients_avg > 0 and own_clients >= clients_avg * 1.25
             items.append(_insight(f"agent-{agent.agent_id}-conversion-low", "agent", "medium",
                                   "Completed-sales rate below average"
                                   + (" despite a high workload" if heavy else ""),
                                   f"{agent.full_name}'s completed-sales rate is {(average - own) * 100:.1f} points below "
                                   "the active-agent average"
-                                  + (f", with {agent.assignments_count} assignments (average {assignments_avg:.0f})." if heavy else "."),
+                                  + (f", with {own_clients} assigned clients (average {clients_avg:.0f})." if heavy else "."),
                                   recommendation=("Management may review workload distribution or provide additional "
                                                   "support." if heavy else
                                                   "Management may review this agent's open reservations and provide support."),
@@ -416,16 +487,12 @@ def agent_insights(db: Session, agent: Agent) -> list[dict]:
                                   factors=factors, subject=subject, rule="within the average band"))
     else:
         items.append(_insight(f"agent-{agent.agent_id}-conversion-na", "agent", "info", "Not enough data to compare",
-                              f"Conversion is compared once an agent has {MIN_AGENT_TRANSACTIONS}+ recorded transactions "
+                              f"Sales rates are compared once an agent has {MIN_AGENT_DEALS}+ recorded deals "
                               "and at least 3 active agents qualify.",
                               subject=subject, rule="comparison needs enough transactions"))
 
     # Open reservations in ALTY (workload) vs the other active agents.
-    loads = dict(db.execute(
-        select(PropertyTransaction.agent_id, func.count()).where(
-            PropertyTransaction.transaction_type == "RESERVED", PropertyTransaction.status == "RESERVED")
-        .group_by(PropertyTransaction.agent_id)
-    ).all())
+    loads = shared.open_reservations()
     mine = int(loads.get(agent.agent_id, 0))
     mean = sum(int(loads.get(a.agent_id, 0)) for a in peers) / len(peers) if peers else 0
     if mine >= 3 and mine > 2 * mean:
@@ -439,7 +506,7 @@ def agent_insights(db: Session, agent: Agent) -> list[dict]:
                               recommendation="Management may reassign these clients to an active agent.",
                               subject=subject, rule="agent not ACTIVE with open reservations"))
 
-    stats = review_service.stats_for(review_service.review_stats(db, [agent.agent_id]), agent.agent_id)
+    stats = review_service.stats_for(shared.review_stats(), agent.agent_id)
     if stats["review_count"] >= 3 and stats["client_rating"] is not None:
         if stats["client_rating"] <= 3:
             items.append(_insight(f"agent-{agent.agent_id}-rating-low", "agent", "high", "Low client rating",
@@ -492,11 +559,12 @@ def all_insights(db: Session) -> dict:
     items = market_insights(db, data)
     items += forecast_insights(db, "revenue", analytics.forecast(db, "revenue"))
     items += operations_insights(db)
+    shared = Shared(db)
     for listing in db.execute(select(PropertyListing)).scalars():
         # Sold notes stay on the property itself; the feed shows what needs attention.
-        items += [i for i in property_insights(db, listing) if i["severity"] in {"high", "medium"}]
-    for agent in db.execute(select(Agent)).scalars():
-        items += [i for i in agent_insights(db, agent) if i["severity"] in {"high", "medium", "positive"}]
+        items += [i for i in property_insights(db, listing, shared) if i["severity"] in {"high", "medium"}]
+    for agent in db.execute(select(Agent)).scalars().all():
+        items += [i for i in agent_insights(db, agent, shared) if i["severity"] in {"high", "medium", "positive"}]
     items = _sort(items)
     counts = {level: sum(i["severity"] == level for i in items) for level in SEVERITY_ORDER}
     return {"generated_at": _now().isoformat() + "Z", "counts": counts, "items": items}

@@ -38,7 +38,7 @@ export function PropertiesPage() {
     ]),
     [api],
   )
-  const { data, setData, error, loading, reload } = useApiData(load)
+  const { data, setData, error, loading, reload } = useApiData(load, "properties")
   const [listings, summary, partners] = data ?? [[], null, []]
 
   const shown = useMemo(
@@ -300,7 +300,7 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
         />
       )}
       {confirmDelete && (
-        <Confirm
+        <Confirm typeToConfirm="Delete"
           title="Delete property?"
           message={t("“{name}” will be removed here and from the central database (Supabase). This can't be undone. Properties with recorded transactions can't be deleted.", { name: listing.title ?? "" })}
           confirmLabel="Delete"

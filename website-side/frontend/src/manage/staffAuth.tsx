@@ -3,6 +3,7 @@
 // refused by those endpoints, so a client token never opens management pages.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { t } from "./i18n"
+import { clearApiCache } from "./useApiData"
 import { API_URL } from "@/config"
 import { ApiError, requestJson } from "@/lib/auth"
 import { StaffAuthContext, type StaffUser } from "./staffContext"
@@ -37,6 +38,7 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(!readToken())
 
   const signOut = useCallback(() => {
+    clearApiCache() // the next person must not see this account's data
     const current = readToken()
     if (current) {
       // Records LOGOUT in the audit log; signing out locally never waits for it.

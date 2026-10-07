@@ -44,7 +44,7 @@ export function AuditPage() {
   }, [query, action, result, since, until])
 
   const load = useCallback(() => Promise.all([api<Page>(`/audit?${params(PAGE_SIZE, offset)}`), api<string[]>("/audit/actions")]), [api, params, offset])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, `audit:${params(PAGE_SIZE, offset)}`)
   const [page, actions] = data ?? [{ total: 0, items: [] }, []]
 
   const exportCsv = async () => {

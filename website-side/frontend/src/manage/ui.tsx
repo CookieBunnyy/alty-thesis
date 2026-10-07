@@ -318,22 +318,50 @@ export function Facts({ items }: { items: [string, ReactNode][] }) {
   )
 }
 
-export function Confirm({ title, message, confirmLabel, onConfirm, onCancel, busy }: {
+/** Confirmation dialog. With ``typeToConfirm`` (used for every delete), the
+ *  person must type that word exactly before the action is enabled. */
+export function Confirm({ title, message, confirmLabel, onConfirm, onCancel, busy, typeToConfirm }: {
   title: string; message: ReactNode; confirmLabel: string; onConfirm: () => void; onCancel: () => void; busy?: boolean
+  typeToConfirm?: string
 }) {
+  const [typed, setTyped] = useState("")
+  const ready = !typeToConfirm || typed === typeToConfirm
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !busy && onCancel()
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [busy, onCancel])
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-label={t(title)}>
       <button type="button" aria-label={t("Cancel")} className="absolute inset-0 bg-black/55" onClick={onCancel} />
-      <div className="ab-pop relative w-full max-w-md rounded-2xl border border-ab-border bg-ab-card p-6 shadow-2xl">
+      <form
+        className="ab-pop relative w-full max-w-md rounded-2xl border border-ab-border bg-ab-card p-6 shadow-2xl"
+        onSubmit={(e) => { e.preventDefault(); if (ready && !busy) onConfirm() }}
+      >
         <h2 className="text-lg font-bold">{t(title)}</h2>
         <div className="mt-2 text-sm text-ab-muted">{typeof message === "string" ? t(message) : message}</div>
+        {typeToConfirm && (
+          <label className="mt-4 block text-sm font-medium">
+            {t("Type {word} to confirm", { word: typeToConfirm })}
+            <input
+              autoFocus
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={typeToConfirm}
+              aria-invalid={typed !== "" && !ready}
+              className="mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm placeholder:text-ab-faint focus:border-ab-danger focus:outline-none"
+            />
+          </label>
+        )}
         <div className="mt-6 flex justify-end gap-2">
           <Button onClick={onCancel} disabled={busy}>{t("Cancel")}</Button>
-          <Button variant="danger" onClick={onConfirm} disabled={busy}>
+          <Button type="submit" variant="danger" disabled={busy || !ready}>
             {busy && <LoaderCircle className="h-4 w-4 animate-spin" />} {t(confirmLabel)}
           </Button>
         </div>
-      </div>
+      </form>
     </div>
   )
 }

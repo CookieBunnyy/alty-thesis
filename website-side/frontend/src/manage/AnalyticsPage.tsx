@@ -34,7 +34,7 @@ export function AnalyticsPage() {
   const [activityTable, setActivityTable] = useState(false)
   const [revenueTable, setRevenueTable] = useState(false)
   const load = useCallback(() => api<Data>(`/intelligence/analytics?months=${months}`), [api, months])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, `analytics:${months}`)
 
   const period = useMemo(() => {
     const rows = data?.monthly ?? []

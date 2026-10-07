@@ -12,6 +12,7 @@ from app.services.entity_matching import (
     find_client_by_external_reference,
     find_transaction_by_reference,
 )
+from app.services.transaction_queries import WITH_PARTIES
 from app.services.transaction_sync import sync_transactions
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
@@ -59,7 +60,7 @@ def get_transactions(
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    statement = select(PropertyTransaction)
+    statement = select(PropertyTransaction).options(*WITH_PARTIES)
     if property_id is not None:
         statement = statement.where(PropertyTransaction.property_id == property_id)
     if client_id:

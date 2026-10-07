@@ -343,6 +343,37 @@ def dss_insights(db: Session) -> dict:
     return {"generated_at": _now().isoformat(), "items": items}
 
 
+RECORDED_AGENT_FIELDS = ("assigned_clients", "recorded_transactions", "open_reservations",
+                         "recorded_completed_sales", "recorded_sales_value")
+
+
+def agent_recorded_stats(db: Session, agent_ids: list[str] | None = None) -> dict[str, dict]:
+    """Per agent, counted from the clients and transactions recorded in ALTY
+    (the same basis as the Workforce page) — not the figures stored on the
+    agent record by the Supabase import. Cancelled transactions are left out."""
+    clients = select(Client.agent_id, func.count(func.distinct(Client.client_id))).group_by(Client.agent_id)
+    activity = select(
+        PropertyTransaction.agent_id,
+        func.count(),
+        func.coalesce(func.sum(case((
+            (PropertyTransaction.transaction_type == "RESERVED")
+            & (PropertyTransaction.status == "RESERVED"), 1), else_=0)), 0),
+        func.coalesce(func.sum(case((SALE, 1), else_=0)), 0),
+        func.coalesce(func.sum(case((SALE, PropertyTransaction.amount), else_=0)), 0),
+    ).where(LIVE).group_by(PropertyTransaction.agent_id)
+    if agent_ids is not None:
+        clients = clients.where(Client.agent_id.in_(agent_ids))
+        activity = activity.where(PropertyTransaction.agent_id.in_(agent_ids))
+    stats: dict[str, dict] = {}
+    for agent_id, count in db.execute(clients).all():
+        stats.setdefault(agent_id, dict.fromkeys(RECORDED_AGENT_FIELDS, 0))["assigned_clients"] = int(count)
+    for agent_id, total, reservations, sales, value in db.execute(activity).all():
+        entry = stats.setdefault(agent_id, dict.fromkeys(RECORDED_AGENT_FIELDS, 0))
+        entry.update(recorded_transactions=int(total), open_reservations=int(reservations),
+                     recorded_completed_sales=int(sales), recorded_sales_value=float(value or 0))
+    return stats
+
+
 def workforce(db: Session) -> dict:
     now = _now().replace(tzinfo=None)
     users = db.execute(select(User)).scalars().all()

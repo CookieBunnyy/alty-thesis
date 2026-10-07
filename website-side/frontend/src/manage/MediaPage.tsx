@@ -40,7 +40,7 @@ export function MediaPage() {
     api<Thresholds>("/media/thresholds"),
     api<ListingOption[]>("/property-listings?limit=5000"),
   ]), [api, listing])
-  const { data, error, loading, reload } = useApiData(load)
+  const { data, error, loading, reload } = useApiData(load, `media:${listing}`)
   const [media, summary, thresholds, listings] = data ?? [[], null, null, []]
   const titles = useMemo(() => Object.fromEntries(listings.map((l) => [l.listing_id, l.title ?? `#${l.listing_id}`])), [listings])
   const shown = media.filter((m) => !quality || m.quality_status === quality)
@@ -132,8 +132,8 @@ export function MediaPage() {
         </p>
       )}
       {toDelete && (
-        <Confirm title="Remove photo?" message={t("Remove “{name}” from {property}? It will no longer appear on the website.", { name: toDelete.file_name, property: titles[toDelete.listing_id] ?? t("property #{id}", { id: toDelete.listing_id }) })}
-          confirmLabel="Remove" busy={deleting} onConfirm={remove} onCancel={() => setToDelete(null)} />
+        <Confirm typeToConfirm="Delete" title="Delete photo?" message={t("Remove “{name}” from {property}? It will no longer appear on the website.", { name: toDelete.file_name, property: titles[toDelete.listing_id] ?? t("property #{id}", { id: toDelete.listing_id }) })}
+          confirmLabel="Delete" busy={deleting} onConfirm={remove} onCancel={() => setToDelete(null)} />
       )}
     </div>
   )
