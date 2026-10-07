@@ -6,6 +6,7 @@ import { useLocation } from "@/lib/router"
 import { SignInToContact } from "./SignInToContact"
 import { RatingSummary } from "./Stars"
 import type { NearbyAgentsResult } from "@/types"
+import { CallButton } from "@/components/CallButton"
 
 type Props = {
   listingId: number | string
@@ -112,18 +113,21 @@ export function NearbyAgents({ listingId, selectedAgentId, onSelect, onLoaded }:
                   )}
                   {agent.phone_number && (
                     <>
-                      <a
-                        href={`tel:${agent.phone_number.replace(/[^\d+]/g, "")}`}
+                      <CallButton
+                        phone={agent.phone_number}
+                        name={agent.full_name}
                         className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-ab-border bg-ab-card px-3 text-xs font-semibold text-ab-text transition hover:bg-ab-hover"
                       >
                         <Phone className="h-3.5 w-3.5 text-ab-accent" /> Call
-                      </a>
-                      <a
-                        href={`sms:${agent.phone_number.replace(/[^\d+]/g, "")}`}
+                      </CallButton>
+                      <CallButton
+                        kind="text"
+                        phone={agent.phone_number}
+                        name={agent.full_name}
                         className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-ab-border bg-ab-card px-3 text-xs font-semibold text-ab-text transition hover:bg-ab-hover"
                       >
                         <MessageSquareText className="h-3.5 w-3.5 text-ab-accent" /> Text
-                      </a>
+                      </CallButton>
                     </>
                   )}
                   {onSelect && (

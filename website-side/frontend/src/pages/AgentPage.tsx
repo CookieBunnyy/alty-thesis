@@ -10,6 +10,7 @@ import { ReviewCard } from "@/components/ReviewCard"
 import { RatingSummary } from "@/components/Stars"
 import { Skeleton } from "@/components/Skeleton"
 import type { AgentProfile, PublicReview } from "@/types"
+import { CallButton } from "@/components/CallButton"
 
 const PAGE = 10
 
@@ -100,8 +101,8 @@ export function AgentPage({ agentId }: { agentId: string }) {
               )}
               {phone && (
                 <div className="flex gap-2">
-                  <a href={`tel:${phone}`} className="inline-flex items-center gap-2 rounded-xl bg-ab-accent px-4 py-2.5 text-sm font-semibold text-ab-ink"><Phone className="h-4 w-4" /> Call</a>
-                  <a href={`sms:${phone}`} className="inline-flex items-center gap-2 rounded-xl border border-ab-border-strong px-4 py-2.5 text-sm font-semibold"><MessageSquareText className="h-4 w-4" /> Text</a>
+                  <CallButton phone={phone} name={agent.full_name} className="inline-flex items-center gap-2 rounded-xl bg-ab-accent px-4 py-2.5 text-sm font-semibold text-ab-ink"><Phone className="h-4 w-4" /> Call</CallButton>
+                  <CallButton kind="text" phone={phone} name={agent.full_name} className="inline-flex items-center gap-2 rounded-xl border border-ab-border-strong px-4 py-2.5 text-sm font-semibold"><MessageSquareText className="h-4 w-4" /> Text</CallButton>
                 </div>
               )}
             </section>

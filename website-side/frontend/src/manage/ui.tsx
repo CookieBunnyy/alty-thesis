@@ -11,8 +11,8 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="text-2xl font-extrabold">{t(title)}</h2>
-        {subtitle && <p className="mt-0.5 max-w-3xl text-sm text-ab-muted">{t(subtitle)}</p>}
+        <h2 className="text-xl font-extrabold leading-tight sm:text-2xl">{t(title)}</h2>
+        {subtitle && <p className="mt-1 line-clamp-3 max-w-3xl text-xs text-ab-muted sm:line-clamp-none sm:text-sm">{t(subtitle)}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
@@ -45,16 +45,16 @@ const XL_COLUMNS: Record<number, string> = { 3: "xl:grid-cols-3", 4: "xl:grid-co
 
 export function Tiles({ items }: { items: { label: string; value: ReactNode; detail?: ReactNode; onClick?: () => void; active?: boolean }[] }) {
   return (
-    <div className={`grid grid-cols-2 gap-3 md:grid-cols-3 ${XL_COLUMNS[items.length] ?? "xl:grid-cols-5"}`}>
+    <div className={`grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 ${XL_COLUMNS[items.length] ?? "xl:grid-cols-5"}`}>
       {items.map((item) => {
         const body = (
           <>
             <p className="text-xs font-semibold text-ab-muted">{t(item.label)}</p>
-            <p className="mt-1.5 text-2xl font-extrabold tabular-nums text-ab-text">{item.value}</p>
+            <p className="mt-1 text-xl font-extrabold tabular-nums text-ab-text sm:mt-1.5 sm:text-2xl">{item.value}</p>
             {item.detail && <p className="mt-0.5 text-xs text-ab-faint">{typeof item.detail === "string" ? t(item.detail) : item.detail}</p>}
           </>
         )
-        const cls = `rounded-2xl border bg-ab-card p-4 text-left ${item.active ? "border-ab-accent" : "border-ab-border"}`
+        const cls = `rounded-2xl border bg-ab-card p-3 text-left sm:p-4 ${item.active ? "border-ab-accent" : "border-ab-border"}`
         return item.onClick ? (
           <button key={item.label} type="button" onClick={item.onClick} aria-pressed={item.active} className={`${cls} transition hover:border-ab-border-strong`}>
             {body}

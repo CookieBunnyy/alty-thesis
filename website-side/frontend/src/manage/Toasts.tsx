@@ -15,7 +15,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={show}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[80] flex w-[min(92vw,380px)] flex-col gap-2" aria-live="polite">
+      <div className="pointer-events-none fixed bottom-20 right-4 z-[80] lg:bottom-4 flex w-[min(92vw,380px)] flex-col gap-2" aria-live="polite">
         {toasts.map((toast) => {
           const Icon = toast.tone === "error" ? AlertTriangle : toast.tone === "info" ? Info : CheckCircle2
           const color = toast.tone === "error" ? "text-ab-danger" : toast.tone === "info" ? "text-ab-info" : "text-ab-success"

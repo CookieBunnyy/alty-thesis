@@ -34,7 +34,7 @@ type Result = { id: string; title: string; subtitle: string; page: string }
 type SearchResponse = { total: number; results: Record<string, Result[]> }
 const GROUP_LABELS: Record<string, string> = { properties: "Properties", clients: "Buyers & Sellers", transactions: "Transactions", agents: "Agents", documents: "Documents", partners: "Partners / Developers" }
 
-export function GlobalSearch() {
+export function GlobalSearch({ className = "hidden w-full max-w-md md:block" }: { className?: string }) {
   const { api, can } = useStaffAuth()
   const [query, setQuery] = useState("")
   const [data, setData] = useState<SearchResponse | null>(null)
@@ -65,7 +65,7 @@ export function GlobalSearch() {
   }
 
   return (
-    <div ref={ref} className="relative hidden w-full max-w-md md:block">
+    <div ref={ref} className={`relative ${className}`}>
       <label className="relative block">
         <span className="sr-only">{t("Search all records")}</span>
         {busy ? <LoaderCircle className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-ab-accent" />

@@ -8,6 +8,8 @@ import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
+import { callLabels } from "./callLabels"
+import { CallButton } from "@/components/CallButton"
 
 export type Partner = {
   id: number; name: string; partner_type: string | null; status: string
@@ -125,7 +127,7 @@ function PartnerDrawer({ partner, canManage, onClose, onEdit, onDeleted }: { par
       )}
     >
       <div className="flex flex-wrap gap-2 text-sm">
-        {partner.phone_number && <a href={`tel:${partner.phone_number.replace(/[^\d+]/g, "")}`} className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1 hover:border-ab-accent"><Phone className="h-3.5 w-3.5 text-ab-accent" />{partner.phone_number}</a>}
+        {partner.phone_number && <CallButton phone={partner.phone_number} name={partner.name} labels={callLabels()} className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1 hover:border-ab-accent"><Phone className="h-3.5 w-3.5 text-ab-accent" />{partner.phone_number}</CallButton>}
         {partner.email && <a href={`mailto:${partner.email}`} className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1 hover:border-ab-accent"><Mail className="h-3.5 w-3.5 text-ab-accent" />{partner.email}</a>}
         {partner.website && <a href={partner.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1 hover:border-ab-accent"><ExternalLink className="h-3.5 w-3.5 text-ab-accent" />{t("Website")}</a>}
       </div>

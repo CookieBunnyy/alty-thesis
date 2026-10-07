@@ -9,6 +9,8 @@ import { useStaffAuth } from "./staffContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
 import { CancelReason } from "./cancellation"
+import { callLabels } from "./callLabels"
+import { CallButton } from "@/components/CallButton"
 
 type Agent = {
   agent_id: string; full_name: string; phone_number: string | null; agent_location: string | null
@@ -129,9 +131,10 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
       subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={agent.status} /> {agent.agent_id} · {text(agent.agent_location)}</span>}
       onClose={onClose}
       footer={phone && (
-        <a href={`tel:${phone}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-ab-accent px-3.5 text-sm font-semibold text-ab-ink hover:bg-ab-accent-hover">
+        <CallButton phone={agent.phone_number ?? phone} name={agent.full_name} labels={callLabels()}
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-ab-accent px-3.5 text-sm font-semibold text-ab-ink hover:bg-ab-accent-hover">
           <Phone className="h-4 w-4" /> {t("Call {phone}", { phone: agent.phone_number ?? "" })}
-        </a>
+        </CallButton>
       )}
     >
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

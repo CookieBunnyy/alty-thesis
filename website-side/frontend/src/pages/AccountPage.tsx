@@ -10,6 +10,7 @@ import { ReviewDialog } from "@/components/ReviewDialog"
 import { Stars } from "@/components/Stars"
 import { LoadingLabel, RowSkeleton } from "@/components/Skeleton"
 import type { ClientTransaction } from "@/types"
+import { CallButton } from "@/components/CallButton"
 
 const STATUS: Record<string, string> = {
   RESERVED: "bg-ab-warning/15 text-ab-warning",
@@ -129,9 +130,9 @@ export function AccountPage() {
                     Agent:{" "}
                     <Link to={`/agents/${encodeURIComponent(t.agent.agent_id)}`} className="font-semibold text-ab-accent hover:underline">{t.agent.full_name}</Link>
                     {t.agent.phone_number && (
-                      <a href={`tel:${t.agent.phone_number.replace(/[^\d+]/g, "")}`} className="ml-2 inline-flex items-center gap-1 text-ab-muted hover:text-ab-text">
+                      <CallButton phone={t.agent.phone_number} name={t.agent.full_name} className="ml-2 inline-flex items-center gap-1 text-ab-muted hover:text-ab-text">
                         <Phone className="h-3.5 w-3.5" /> {t.agent.phone_number}
-                      </a>
+                      </CallButton>
                     )}
                   </p>
                 </div>

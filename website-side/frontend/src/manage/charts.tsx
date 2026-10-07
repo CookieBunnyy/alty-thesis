@@ -127,8 +127,8 @@ export function StackedBarChart({ months, series, format, axisFormat = format, h
   const y = (v: number) => top + plotH - (v / max) * plotH
 
   return (
-    <div className="relative" ref={wrapRef}>
-      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="block" role="img" aria-labelledby={titleId}>
+    <div className="relative w-full min-w-0" ref={wrapRef}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="block" role="img" aria-labelledby={titleId}>
         <title id={titleId}>{caption}</title>
         {ticks.map((t) => (
           <g key={t}>
@@ -285,8 +285,8 @@ export function ForecastChart({ history, forecast, format, axisFormat = format, 
   const boundary = left + step * history.length
 
   return (
-    <div className="relative" ref={wrapRef}>
-      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="block" role="img" aria-labelledby={titleId}>
+    <div className="relative w-full min-w-0" ref={wrapRef}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="block" role="img" aria-labelledby={titleId}>
         <title id={titleId}>{caption}</title>
         {[0, max / 2, max].map((t) => (
           <g key={t}>

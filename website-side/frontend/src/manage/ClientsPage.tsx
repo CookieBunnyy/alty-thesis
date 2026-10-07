@@ -9,6 +9,8 @@ import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
 import { CancelReason } from "./cancellation"
+import { callLabels } from "./callLabels"
+import { CallButton } from "@/components/CallButton"
 
 type Client = {
   client_id: string; external_client_id: string | null; full_name: string; location: string | null
@@ -123,7 +125,7 @@ function ClientDrawer({ client, onClose, onDeleted }: { client: Client; onClose:
       )}
     >
       <div className="flex flex-wrap gap-2 text-sm">
-        {client.phone_number && <a href={`tel:${client.phone_number.replace(/[^\d+]/g, "")}`} className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1 hover:border-ab-accent"><Phone className="h-3.5 w-3.5 text-ab-accent" />{client.phone_number}</a>}
+        {client.phone_number && <CallButton phone={client.phone_number} name={client.full_name} labels={callLabels()} className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1 hover:border-ab-accent"><Phone className="h-3.5 w-3.5 text-ab-accent" />{client.phone_number}</CallButton>}
         {client.email && <a href={`mailto:${client.email}`} className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1 hover:border-ab-accent"><Mail className="h-3.5 w-3.5 text-ab-accent" />{client.email}</a>}
         {client.location && <span className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1"><MapPin className="h-3.5 w-3.5 text-ab-accent" />{client.location}</span>}
       </div>
