@@ -243,3 +243,20 @@ def test_staff_login_failures_are_throttled(api):
     assert locked.status_code == 429
     _make_user("other", "Employee")
     assert login(api, "other")
+
+
+def test_public_site_never_shows_test_data(api, db):
+    from app.models.property_listing import PropertyListing
+
+    real = PropertyListing(title="Real House", status="AVAILABLE", price_total=1_000_000, sync_status="SYNCED")
+    test = PropertyListing(title="[Test data] House", status="AVAILABLE", price_total=1_000_000,
+                           sync_status="TEST_DATA")
+    sold = PropertyListing(title="[Test data] Sold", status="SOLD", price_total=1_000_000, sync_status="TEST_DATA")
+    db.add_all([real, test, sold])
+    db.commit()
+    titles = {p["title"] for p in api.get("/api/v1/public/properties?status=AVAILABLE,SOLD").json()}
+    assert titles == {"Real House"}
+    assert api.get(f"/api/v1/public/properties/{test.listing_id}").status_code == 404
+    home = api.get("/api/v1/public/home").json()
+    assert home["stats"]["available_properties"] == 1
+    assert [p["title"] for p in home["featured_properties"]] == ["Real House"]

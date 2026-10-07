@@ -10,9 +10,17 @@ What it adds, for the 12 complete months before the current one:
     active agents.
 
 Every row is titled "[Test data] …" and marked ``TEST_DATA`` (source and sync
-status). TEST_DATA rows are never pushed to Supabase (only PENDING rows are)
-and ``--remove`` deletes exactly these rows. It refuses to run against a
-database that isn't on this computer unless ``--allow-remote`` is given.
+status). TEST_DATA rows are never pushed to the central listings (only PENDING
+rows are), the public website never shows them, and ``--remove`` deletes
+exactly these rows.
+
+The live database: pass its connection string (Render → Environment →
+DATABASE_URL) for this one command, plus ``--allow-remote``; you are asked to
+type YES before anything changes:
+
+    $env:DATABASE_URL = "<live connection string>"      # PowerShell
+    python scripts/forecast_test_data.py --allow-remote
+    python scripts/forecast_test_data.py --allow-remote --remove
 """
 
 from __future__ import annotations
@@ -86,7 +94,7 @@ def add(db) -> None:
             listing = PropertyListing(
                 title=f"{PREFIX} {category} #{deal}", category=category, price_total=price,
                 initial_dp=(price * Decimal("0.2")).quantize(Decimal("1")), village_name=f"{PREFIX} Village",
-                status="SOLD" if sold else "AVAILABLE", external_listing_id=f"TESTDATA-{deal:03d}",
+                status="SOLD" if sold else "UNAVAILABLE", external_listing_id=f"TESTDATA-{deal:03d}",
                 sync_status=MARK,
             )
             db.add(listing)
@@ -144,9 +152,15 @@ def main() -> None:
                         help="allow a database that is not on this computer (not recommended)")
     args = parser.parse_args()
     url = make_url(settings.DATABASE_URL)
-    if url.host not in ("localhost", "127.0.0.1", "::1", None) and not args.allow_remote:
-        sys.exit(f"Refusing to change {url.host}/{url.database}: test data is for a local database only.")
+    remote = url.host not in ("localhost", "127.0.0.1", "::1", None)
+    if remote and not args.allow_remote:
+        sys.exit(f"Refusing to change {url.host}/{url.database}: add --allow-remote for a database "
+                 "that isn't on this computer.")
     print(f"Database: {url.host}/{url.database}")
+    if remote:
+        action = "REMOVE the test data from" if args.remove else "ADD test data to"
+        if input(f"This will {action} {url.host}/{url.database}. Type YES to continue: ").strip() != "YES":
+            sys.exit("Nothing changed.")
     with SessionLocal() as db:
         remove(db) if args.remove else add(db)
 

@@ -108,13 +108,23 @@ def _public_listing(listing: PropertyListing, media: list[str]) -> dict:
     }
 
 
+# Test data (scripts/forecast_test_data.py) is for staff testing only: it is
+# never shown on the public website.
+TEST_DATA = "TEST_DATA"
+NOT_TEST_DATA = PropertyListing.sync_status != TEST_DATA
+
+
+def _is_public(listing: PropertyListing | None) -> bool:
+    return listing is not None and listing.status in PUBLIC_STATUSES and listing.sync_status != TEST_DATA
+
+
 @router.get("/properties")
 def list_public_properties(status: str = "AVAILABLE", mapped_only: bool = False,
                            db: Session = Depends(get_db)):
     wanted = {part.strip().upper() for part in status.split(",")} & PUBLIC_STATUSES
     if not wanted:
         raise HTTPException(status_code=422, detail="status must be AVAILABLE, RESERVED or SOLD")
-    statement = select(PropertyListing).where(PropertyListing.status.in_(wanted))
+    statement = select(PropertyListing).where(PropertyListing.status.in_(wanted), NOT_TEST_DATA)
     if mapped_only:
         statement = statement.where(PropertyListing.lat.is_not(None), PropertyListing.lng.is_not(None))
     listings = db.execute(statement.order_by(PropertyListing.listing_id)).scalars().all()
@@ -125,7 +135,7 @@ def list_public_properties(status: str = "AVAILABLE", mapped_only: bool = False,
 @router.get("/properties/{listing_id}")
 def get_public_property(listing_id: int, db: Session = Depends(get_db)):
     listing = db.get(PropertyListing, listing_id)
-    if listing is None or listing.status not in PUBLIC_STATUSES:
+    if not _is_public(listing):
         raise HTTPException(status_code=404, detail="Property not found")
     return _public_listing(listing, _media_urls(db, [listing_id]).get(listing_id, []))
 
@@ -182,7 +192,7 @@ def get_public_agent(agent_id: str, limit: int = 10, offset: int = 0, db: Sessio
 @router.get("/home")
 def public_home(db: Session = Depends(get_db)):
     """Everything the home page shows, in one request, from live data only."""
-    available = PropertyListing.status == "AVAILABLE"
+    available = (PropertyListing.status == "AVAILABLE") & NOT_TEST_DATA
     # Listings with photos first: the home page is a showcase.
     with_photos = func.coalesce(func.cardinality(PropertyListing.photos), 0) > 0
     featured = db.execute(
@@ -231,7 +241,7 @@ def list_nearby_agents(listing_id: int, request: Request, limit: int = 5,
 
     _limit(request)
     listing = db.get(PropertyListing, listing_id)
-    if listing is None or listing.status not in PUBLIC_STATUSES:
+    if not _is_public(listing):
         raise HTTPException(status_code=404, detail="Property not found")
     limit = max(1, min(limit, 10))
     agents = db.execute(
@@ -286,8 +296,7 @@ def list_nearby_agents(listing_id: int, request: Request, limit: int = 5,
 def get_public_media(media_id: int, db: Session = Depends(get_db)):
     media = db.get(PropertyMedia, media_id)
     listing = db.get(PropertyListing, media.listing_id) if media else None
-    if media is None or media.quality_status not in MEDIA_OK or listing is None \
-            or listing.status not in PUBLIC_STATUSES:
+    if media is None or media.quality_status not in MEDIA_OK or not _is_public(listing):
         raise HTTPException(status_code=404, detail="Media not found")
     try:
         content = read_file(media.storage_bucket, media.storage_path)
