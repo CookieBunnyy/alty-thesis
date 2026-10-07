@@ -14,16 +14,36 @@ export const pesoShort = (value: unknown): string => {
   return n >= 1e9 ? `₱${+(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `₱${+(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `₱${Math.round(n / 1e3)}K` : `₱${n}`
 }
 
-export const date = (value: unknown): string => {
-  if (!value) return "—"
+// Times are shown in Philippine time with a 12-hour clock ("2:30 PM").
+const PH_ZONE = "Asia/Manila"
+const clock = (d: Date) =>
+  d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: PH_ZONE })
+const day = (d: Date, zone = PH_ZONE) =>
+  d.toLocaleDateString(locale(), { month: "short", day: "numeric", year: "numeric", timeZone: zone })
+const parse = (value: unknown) => {
+  if (!value) return null
   const d = new Date(String(value))
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString(locale(), { month: "short", day: "numeric", year: "numeric" })
+  return Number.isNaN(d.getTime()) ? null : d
 }
 
+export const date = (value: unknown): string => {
+  const d = parse(value)
+  return d ? day(d) : "—"
+}
+
+/** "Oct 7, 2026 · 2:30 PM" (record timestamps: uploads, sign-ins, edits). */
 export const dateTime = (value: unknown): string => {
-  if (!value) return "—"
-  const d = new Date(String(value))
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString(locale(), { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+  const d = parse(value)
+  return d ? `${day(d)} · ${clock(d)}` : "—"
+}
+
+/** A transaction's date and time. A date stated without a time is stored at
+ *  00:00 UTC; it shows as the date alone rather than a made-up time. */
+export const transactionDate = (value: unknown): string => {
+  const d = parse(value)
+  if (!d) return "—"
+  const dateOnly = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0
+  return dateOnly ? day(d, "UTC") : `${day(d)} · ${clock(d)}`
 }
 
 /** RESERVED -> Reserved, ON_HOLD -> On hold (in the chosen language). */

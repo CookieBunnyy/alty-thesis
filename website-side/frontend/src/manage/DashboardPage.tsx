@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react"
 import { AlertTriangle, ArrowLeftRight, Building2, FileWarning, RefreshCw, TrendingUp, UserRound, Users, type LucideIcon } from "lucide-react"
 import { Legend, ShareBar, StackedBarChart, TableToggle } from "./charts"
 import { useStaffAuth } from "./staffContext"
-import { statusLabel } from "./format"
+import { statusLabel, transactionDate } from "./format"
 import { locale, t } from "./i18n"
 
 // Every number below comes from the same API the desktop dashboard uses.
@@ -314,7 +314,7 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
                   </div>
                   <p className="truncate text-xs text-ab-muted">{tx.property_title ?? "—"}</p>
                   <p className="text-xs text-ab-faint">
-                    {new Date(tx.transaction_date).toLocaleDateString(locale(), { month: "short", day: "numeric", year: "numeric" })} · {peso(tx.amount)}
+                    {transactionDate(tx.transaction_date)} · {peso(tx.amount)}
                     {tx.agent_name && ` · ${tx.agent_name}`}
                   </p>
                 </li>

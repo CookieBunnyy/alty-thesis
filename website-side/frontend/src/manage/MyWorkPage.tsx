@@ -1,7 +1,7 @@
 import { useCallback } from "react"
 import { Star } from "lucide-react"
 import { Link } from "@/components/Link"
-import { date, peso, statusLabel, text } from "./format"
+import { date, peso, statusLabel, text, transactionDate } from "./format"
 import { Badge, LoadState, PageHeader, Section, Tiles } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
@@ -45,7 +45,7 @@ export function MyWorkPage() {
                     <li key={tx.transaction_id} className="rounded-xl border border-ab-border p-3 text-sm">
                       <p className="font-semibold">{text(tx.client_name)} · {peso(tx.amount)}</p>
                       <p className="text-xs text-ab-muted">
-                        <Link to={`/manage/properties?id=${tx.property_id}`} className="hover:underline">{text(tx.property_title)}</Link> · {t("reserved {date}", { date: date(tx.transaction_date) })}
+                        <Link to={`/manage/properties?id=${tx.property_id}`} className="hover:underline">{text(tx.property_title)}</Link> · {t("reserved {date}", { date: transactionDate(tx.transaction_date) })}
                       </p>
                     </li>
                   ))}
@@ -72,7 +72,7 @@ export function MyWorkPage() {
                   <li key={tx.transaction_id} className="flex items-start justify-between gap-2 rounded-xl border border-ab-border p-3 text-sm">
                     <span className="min-w-0">
                       <Link to={`/manage/transactions?id=${tx.transaction_id}`} className="font-semibold hover:underline">{statusLabel(tx.transaction_type)} · {peso(tx.amount)}</Link>
-                      <span className="block text-xs text-ab-muted">{date(tx.transaction_date)} · {text(tx.client_name)} · {text(tx.property_title)}</span>
+                      <span className="block text-xs text-ab-muted">{transactionDate(tx.transaction_date)} · {text(tx.client_name)} · {text(tx.property_title)}</span>
                     </span>
                     <Badge value={tx.status} />
                   </li>

@@ -35,9 +35,11 @@ from app.services.document_extraction import (
     ExtractionError,
     extract_labeled_fields,
     extract_text,
+    format_ph_datetime,
     jsonable_fields,
     normalize_fields,
     normalize_name,
+    ph_day,
 )
 from app.services.document_validation import validate
 from app.services.entity_matching import Match, MatchError
@@ -313,14 +315,25 @@ def _apply_client(ctx: Context, match: Match | None, listing: PropertyListing | 
 
 def apply_transaction(ctx: Context, transaction_type: str) -> None:
     db, fields = ctx.db, ctx.fields
+    # Match property and agent independently so one message names everything
+    # that is missing (e.g. both an unknown project and an unknown consultant).
+    found: dict[str, Any] = {}
+    problems: list[MatchError] = []
+    for entity, find in (("property", matching.match_property), ("agent", matching.match_agent)):
+        try:
+            found[entity] = find(db, fields)
+        except MatchError as exc:
+            problems.append(exc)
+    if problems:
+        raise ProcessingError(ENTITY_MATCHING, "; ".join(str(p) for p in problems),
+                              [name for p in problems for name in p.fields])
     try:
-        listing = matching.match_property(db, fields).record
-        agent = matching.match_agent(db, fields).record
         client_match = matching.match_client(db, fields)
     except MatchError as exc:
         raise ProcessingError(ENTITY_MATCHING, str(exc), exc.fields) from exc
-    ctx.result["matched_entities"]["property"] = {"id": str(listing.listing_id), "matched_by":
-                                                  "LISTING_ID" if fields.get("listing_id") else "TITLE"}
+    listing, agent = found["property"].record, found["agent"].record
+    ctx.result["matched_entities"]["property"] = {"id": str(listing.listing_id),
+                                                  "matched_by": found["property"].method}
     ctx.result["matched_entities"]["agent"] = {"id": agent.agent_id, "matched_by":
                                                "AGENT_ID" if fields.get("agent_id") else "AGENT_NAME"}
     if str(agent.status or "").upper() not in {"ACTIVE", ""}:
@@ -350,11 +363,12 @@ def apply_transaction(ctx: Context, transaction_type: str) -> None:
                     f"as {existing.transaction_type}",
                     ["transaction_id"],
                 )
-            if existing.amount != amount or existing.transaction_date.date() != date.date():
+            if existing.amount != amount or ph_day(existing.transaction_date) != ph_day(date):
                 raise ProcessingError(
                     DUPLICATE_CHECK,
                     f"Transaction {reference} already exists with amount {existing.amount} on "
-                    f"{existing.transaction_date.date()}; the document states {amount} on {date.date()}",
+                    f"{format_ph_datetime(existing.transaction_date)}; the document states {amount} on "
+                    f"{format_ph_datetime(date)}",
                     ["amount", "transaction_date"],
                 )
             ctx.result["matched_entities"]["client"] = {"id": client.client_id, "matched_by": "TRANSACTION"}

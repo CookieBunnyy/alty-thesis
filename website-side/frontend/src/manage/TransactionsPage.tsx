@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { Link } from "@/components/Link"
-import { contains, date, dateTime, isManagement, peso, pesoShort, statusLabel, text } from "./format"
+import { contains, dateTime, isManagement, peso, pesoShort, statusLabel, text, transactionDate } from "./format"
 import { SyncButton } from "./SyncButton"
 import { Badge, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
@@ -34,6 +34,7 @@ export function TransactionsPage() {
   const types = [...new Set(rows.map((t) => t.transaction_type))]
 
   const columns: Column<Transaction>[] = [
+    { key: "date", label: "When", sort: (t) => t.transaction_date, render: (t) => <span className="whitespace-nowrap">{transactionDate(t.transaction_date)}</span> },
     {
       key: "client", label: "Client", sort: (t) => t.client_name ?? "",
       render: (t) => (
@@ -46,7 +47,6 @@ export function TransactionsPage() {
     { key: "property", label: "Property", sort: (t) => t.property_title ?? "", render: (t) => <span className="line-clamp-2">{text(t.property_title)}</span> },
     { key: "agent", label: "Agent", sort: (t) => t.agent_name ?? "", render: (t) => text(t.agent_name), hideOnPhone: true },
     { key: "type", label: "Type", sort: (t) => t.transaction_type, render: (t) => statusLabel(t.transaction_type) },
-    { key: "date", label: "Date", sort: (t) => t.transaction_date, render: (t) => date(t.transaction_date) },
     { key: "amount", label: "Amount", align: "right", sort: (t) => Number(t.amount), render: (t) => peso(t.amount) },
     { key: "status", label: "Status", sort: (t) => t.status, render: (t) => <Badge value={t.status} /> },
   ]
@@ -92,7 +92,7 @@ function TransactionDrawer({ transaction: tx, related, onClose }: { transaction:
   return (
     <Drawer
       title={`${statusLabel(tx.transaction_type)} · ${peso(tx.amount)}`}
-      subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={tx.status} /> {date(tx.transaction_date)}</span>}
+      subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={tx.status} /> {transactionDate(tx.transaction_date)}</span>}
       onClose={onClose}
     >
       <Section title="Parties">
@@ -111,7 +111,7 @@ function TransactionDrawer({ transaction: tx, related, onClose }: { transaction:
               <p className={r.transaction_id === tx.transaction_id ? "font-semibold" : ""}>
                 {statusLabel(r.transaction_type)} · {peso(r.amount)} <span className="ml-1"><Badge value={r.status} /></span>
               </p>
-              <p className="text-xs text-ab-muted">{date(r.transaction_date)} · {statusLabel(r.source)}</p>
+              <p className="text-xs text-ab-muted">{transactionDate(r.transaction_date)} · {statusLabel(r.source)}</p>
             </li>
           ))}
         </ol>

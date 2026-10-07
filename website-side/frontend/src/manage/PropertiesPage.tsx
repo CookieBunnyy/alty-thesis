@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react"
 import { ExternalLink, MapPin, Pencil, Trash2 } from "lucide-react"
 import { Link } from "@/components/Link"
 import { CATEGORIES, categoryLabel, categoryOf } from "@/lib/categories"
-import { canEditListings, contains, date, dateTime, isManagement, peso, statusLabel, text } from "./format"
+import { canEditListings, contains, date, dateTime, isManagement, peso, statusLabel, text, transactionDate } from "./format"
 import { SubjectInsights } from "./Insights"
 import { PropertyEditForm, type Listing } from "./PropertyEditForm"
 import { SyncButton } from "./SyncButton"
@@ -250,7 +250,7 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
                       <Badge value={tx.status} />
                     </div>
                     <p className="mt-1 text-xs text-ab-muted">
-                      {date(tx.transaction_date)} · <Link to={`/manage/clients?id=${tx.client_id}`} className="hover:underline">{text(tx.client_name)}</Link>
+                      {transactionDate(tx.transaction_date)} · <Link to={`/manage/clients?id=${tx.client_id}`} className="hover:underline">{text(tx.client_name)}</Link>
                       {" · "}<Link to={`/manage/agents?id=${tx.agent_id}`} className="hover:underline">{text(tx.agent_name)}</Link> · {statusLabel(tx.source)}
                     </p>
                   </li>

@@ -30,6 +30,86 @@ import { PropertyGridSkeleton, Skeleton } from "@/components/Skeleton"
 import { categoryCounts } from "@/lib/categories"
 import type { HomeData } from "@/types"
 
+const ROUTE = "M40 60 H150 V120 H230 V190 H350"
+const TRIP_MS = 2200
+
+/** Decorative workplace → property route (not data). Hovering (or tapping on
+ *  touch screens) replays the trip: the route redraws, a marker drives from the
+ *  start pin to the property, and the two labels light up in turn. */
+function RoutePreview() {
+  const [trip, setTrip] = useState(0) // bumps to restart the animations
+  const [phase, setPhase] = useState<"idle" | "driving" | "arrived">("idle")
+  const timer = useRef<number | undefined>(undefined)
+  const still = prefersReducedMotion()
+
+  const start = () => {
+    if (phase === "driving") return
+    window.clearTimeout(timer.current)
+    setTrip((n) => n + 1)
+    setPhase("driving")
+    timer.current = window.setTimeout(() => setPhase("arrived"), still ? 0 : TRIP_MS)
+  }
+  const stop = () => {
+    window.clearTimeout(timer.current)
+    setPhase("idle")
+  }
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+
+  const active = phase !== "idle"
+  const chip = (lit: boolean) =>
+    `rounded-xl p-3 transition-colors duration-300 ${lit ? "bg-ab-accent-soft text-ab-text ring-1 ring-ab-accent/50" : "bg-ab-card-2"}`
+
+  return (
+    <div
+      className={`route-card relative overflow-hidden rounded-3xl border bg-ab-card p-6 shadow-xl transition duration-300 ${active ? "-translate-y-1 border-ab-accent/50 shadow-2xl" : "border-ab-border"}`}
+      aria-hidden="true"
+      onPointerEnter={(e) => e.pointerType === "mouse" && start()}
+      onPointerLeave={(e) => e.pointerType === "mouse" && stop()}
+      onClick={() => (phase === "idle" ? start() : stop())}
+    >
+      {/* key: each trip remounts the drawing, restarting its SVG clock and the route draw */}
+      <svg key={trip} viewBox="0 0 400 260" className="h-auto w-full">
+        <defs>
+          <pattern id="grid" width="26" height="26" patternUnits="userSpaceOnUse">
+            <path d="M26 0H0V26" fill="none" stroke="currentColor" strokeOpacity="0.08" />
+          </pattern>
+        </defs>
+        <rect width="400" height="260" fill="url(#grid)" className="text-ab-text" />
+        <path d={ROUTE} fill="none" stroke="var(--color-ab-route-casing)" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" />
+        <path className={trip ? "route-redraw" : "route-draw"} pathLength={trip ? 1 : undefined} d={ROUTE} fill="none" stroke="var(--color-ab-route)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+
+        {/* start pin, with a ring that pulses while the trip is on */}
+        {active && !still && (
+          <circle cx="40" cy="60" r="11" fill="none" stroke="var(--color-ab-accent)" strokeWidth="2">
+            <animate attributeName="r" values="11;24" dur="1.4s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.8;0" dur="1.4s" repeatCount="indefinite" />
+          </circle>
+        )}
+        <circle cx="40" cy="60" r="11" fill="var(--color-ab-text)" stroke="var(--color-ab-accent)" strokeWidth="3" />
+
+        {/* destination: grows a little when the marker arrives */}
+        <g className={`route-dest ${phase === "arrived" ? "is-arrived" : ""}`}>
+          <rect x="330" y="172" width="44" height="34" rx="10" fill="var(--color-ab-accent)" />
+          <path d="M343 192 L352 184 L361 192 V199 H343 Z" fill="var(--color-ab-ink)" opacity={phase === "arrived" ? 1 : 0} className="transition-opacity duration-300" />
+        </g>
+
+        {/* the moving marker (mounted per trip so the motion starts from the pin) */}
+        {phase === "driving" && !still && (
+          <g>
+            <circle r="8" fill="var(--color-ab-ink)" stroke="var(--color-ab-route)" strokeWidth="3">
+              <animateMotion dur={`${TRIP_MS}ms`} fill="freeze" path={ROUTE} keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.45 0 0.25 1" />
+            </circle>
+          </g>
+        )}
+      </svg>
+      <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+        <p className={chip(phase === "driving")}><span className="block text-xs text-ab-faint">Start</span>Your workplace</p>
+        <p className={chip(phase === "arrived")}><span className="block text-xs text-ab-faint">Destination</span>The property you choose</p>
+      </div>
+    </div>
+  )
+}
+
 function Reveal({ children, className = "", delay = 0, as: Tag = "div" }: {
   children: React.ReactNode
   className?: string
@@ -335,25 +415,7 @@ export function HomePage() {
                 </Link>
               </Reveal>
               <Reveal delay={120}>
-                <div className="relative overflow-hidden rounded-3xl border border-ab-border bg-ab-card p-6 shadow-xl" aria-hidden="true">
-                  {/* Decorative: a road-following route, not data. */}
-                  <svg viewBox="0 0 400 260" className="h-auto w-full">
-                    <defs>
-                      <pattern id="grid" width="26" height="26" patternUnits="userSpaceOnUse">
-                        <path d="M26 0H0V26" fill="none" stroke="currentColor" strokeOpacity="0.08" />
-                      </pattern>
-                    </defs>
-                    <rect width="400" height="260" fill="url(#grid)" className="text-ab-text" />
-                    <path d="M40 60 H150 V120 H230 V190 H350" fill="none" stroke="var(--color-ab-route-casing)" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" />
-                    <path className="route-draw" d="M40 60 H150 V120 H230 V190 H350" fill="none" stroke="var(--color-ab-route)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
-                    <circle cx="40" cy="60" r="11" fill="var(--color-ab-text)" stroke="var(--color-ab-accent)" strokeWidth="3" />
-                    <rect x="330" y="172" width="44" height="34" rx="10" fill="var(--color-ab-accent)" />
-                  </svg>
-                  <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
-                    <p className="rounded-xl bg-ab-card-2 p-3"><span className="block text-xs text-ab-faint">Start</span>Your workplace</p>
-                    <p className="rounded-xl bg-ab-card-2 p-3"><span className="block text-xs text-ab-faint">Destination</span>The property you choose</p>
-                  </div>
-                </div>
+                <RoutePreview />
               </Reveal>
             </div>
           </section>

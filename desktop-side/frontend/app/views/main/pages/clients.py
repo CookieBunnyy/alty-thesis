@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 import httpx
@@ -27,6 +26,7 @@ from PyQt6.QtWidgets import (
 
 from app.theme import badge_colors
 from app.api.client import ApiClient
+from app.views.main.pages._common import fmt_transaction_date
 
 STATUS_COLORS = {
     "PROSPECT": "#f3ecd6",
@@ -303,12 +303,7 @@ class ClientProfileDialog(QDialog):
 
     @staticmethod
     def _format_date(value: Any) -> str | None:
-        if not value:
-            return None
-        try:
-            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).strftime("%b %d, %Y")
-        except ValueError:
-            return str(value)
+        return fmt_transaction_date(value) if value else None
 
     @staticmethod
     def _format_currency(value: Any) -> str | None:
@@ -613,13 +608,7 @@ class ClientsPage(QWidget):
 
     @staticmethod
     def _format_date(value: Any) -> str:
-        if not value:
-            return "—"
-        try:
-            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-            return parsed.strftime("%b %d, %Y")
-        except ValueError:
-            return str(value)
+        return fmt_transaction_date(value)
 
     def open_client_profile(self, row: int, _column: int) -> None:
         item = self.table.item(row, 0)

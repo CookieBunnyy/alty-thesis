@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
 import qtawesome as qta
@@ -48,13 +48,46 @@ def kind_colors() -> dict[str, str]:
     return {"DATA": TOKENS["card_2"], "ANALYSIS": TOKENS["info_soft"], "RECOMMENDATION": TOKENS["accent_soft"]}
 
 
+# Times are shown in Philippine time with a 12-hour clock ("2:30 PM").
+PH_TIME = timezone(timedelta(hours=8))
+
+
+def _parse(value: Any) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _clock(moment: datetime) -> str:
+    return moment.strftime("%I:%M %p").lstrip("0")
+
+
 def fmt_date(value: Any) -> str:
+    """Record timestamps: 'Oct 07, 2026 · 2:30 PM'."""
     if not value:
         return "—"
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).strftime("%b %d, %Y %H:%M")
-    except ValueError:
+    parsed = _parse(value)
+    if parsed is None:
         return str(value)
+    local = parsed.astimezone(PH_TIME)
+    return f"{local.strftime('%b %d, %Y')} · {_clock(local)}"
+
+
+def fmt_transaction_date(value: Any) -> str:
+    """A transaction's date and time. A date stated without a time is stored
+    at 00:00 UTC and is shown as the date alone, not as a made-up time."""
+    if not value:
+        return "—"
+    parsed = _parse(value)
+    if parsed is None:
+        return str(value)
+    utc = parsed.astimezone(timezone.utc)
+    if (utc.hour, utc.minute, utc.second, utc.microsecond) == (0, 0, 0, 0):
+        return utc.strftime("%b %d, %Y")
+    local = parsed.astimezone(PH_TIME)
+    return f"{local.strftime('%b %d, %Y')} · {_clock(local)}"
 
 
 def fmt_money(value: Any) -> str:

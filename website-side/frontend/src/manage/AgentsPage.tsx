@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react"
 import { ExternalLink, Phone, Star } from "lucide-react"
 import { Link } from "@/components/Link"
-import { contains, date, dateTime, isManagement, peso, pesoShort, statusLabel, text } from "./format"
+import { contains, date, dateTime, isManagement, peso, pesoShort, statusLabel, text, transactionDate } from "./format"
 import { SubjectInsights } from "./Insights"
 import { SyncButton } from "./SyncButton"
 import { Badge, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
@@ -191,7 +191,7 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
                     <Badge value={tx.status} />
                   </div>
                   <p className="mt-1 text-xs text-ab-muted">
-                    {date(tx.transaction_date)} · {text(tx.client_name)} · <Link to={`/manage/properties?id=${tx.property_id}`} className="hover:underline">{text(tx.property_title)}</Link>
+                    {transactionDate(tx.transaction_date)} · {text(tx.client_name)} · <Link to={`/manage/properties?id=${tx.property_id}`} className="hover:underline">{text(tx.property_title)}</Link>
                   </p>
                 </li>
               ))}

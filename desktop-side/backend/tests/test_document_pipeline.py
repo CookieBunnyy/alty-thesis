@@ -82,7 +82,8 @@ def test_full_chain_property_buyer_reservation_sale_and_duplicate(api, admin, ag
     assert db.get(PropertyListing, listing.listing_id).status == "RESERVED"
 
     # TEST 4 — Sale -> same client, sale added, reservation preserved, SOLD
-    doc = upload(api, admin, "sale.docx", build.docx(build.SALE_LINES))
+    sale = build.docx(build.SALE_LINES)  # the same bytes are re-sent in TEST 5
+    doc = upload(api, admin, "sale.docx", sale)
     processing = assert_success(doc)
     assert doc["document_type"] == "SALE_AGREEMENT"
     db.expire_all()
@@ -94,7 +95,7 @@ def test_full_chain_property_buyer_reservation_sale_and_duplicate(api, admin, ag
 
     # TEST 5 — Same sale agreement again -> no duplicate transaction
     duplicate = api.post("/api/v1/documents/upload", headers=admin,
-                         files={"file": ("sale.docx", build.docx(build.SALE_LINES), DOCX)})
+                         files={"file": ("sale.docx", sale, DOCX)})
     assert duplicate.status_code == 409  # exact file already uploaded
     doc = upload(api, admin, "sale.docx", build.docx(build.SALE_LINES), allow_duplicate=True)
     processing = assert_success(doc)

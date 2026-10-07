@@ -20,13 +20,17 @@ type Doc = DocumentRecord & {
   uploaded_by_name: string | null; created_at: string; updated_at: string; archived_at: string | null
   extracted_fields: Record<string, unknown>
   processing: {
-    status?: string; error_reason?: string | null; validation_result?: { valid?: boolean; errors?: string[]; warnings?: string[] }
+    status?: string; error_reason?: string | null; validation_result?: { valid?: boolean; errors?: ValidationError[]; warnings?: string[] }
     // Older results store plain IDs; newer ones {id, matched_by}.
     matched_entities?: Record<string, Matched | string | number | null>
     created_records?: string[]; updated_records?: string[]; processed_at?: string; filed_to?: string
   }
 }
 type Matched = { id: string | number; matched_by?: string }
+// The server sends {field, message}; older results may hold plain text.
+type ValidationError = string | { field?: string; message?: string }
+const validationText = (e: ValidationError) =>
+  typeof e === "string" ? e : [e.field ? statusLabel(e.field) : "", e.message ?? ""].filter(Boolean).join(": ")
 type Summary = { total: number; success: number; failed: number; processing: number; archived: number; superseded: number }
 type AuditEvent = { id: number; version: number; event_type: string; actor: string | null; created_at: string; details: Record<string, unknown> }
 
@@ -290,7 +294,7 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
           <p className="text-sm font-extrabold uppercase tracking-wide text-ab-danger">{t("Failed")}{doc.processing_stage ? ` · ${t("{stage} stage", { stage: statusLabel(doc.processing_stage) })}` : ""}</p>
           <p className="mt-1 text-sm"><span className="font-semibold">{t("Reason:")}</span> {doc.processing_error ?? doc.processing?.error_reason ?? t("Not recorded")}</p>
           {doc.processing?.validation_result?.errors?.length ? (
-            <ul className="mt-2 list-disc pl-5 text-xs text-ab-muted">{doc.processing.validation_result.errors.map((e) => <li key={e}>{e}</li>)}</ul>
+            <ul className="mt-2 list-disc pl-5 text-xs text-ab-muted">{doc.processing.validation_result.errors.map((e, i) => <li key={i}>{validationText(e)}</li>)}</ul>
           ) : null}
         </div>
       )}

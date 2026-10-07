@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react"
 import { Mail, MapPin, Phone, Trash2 } from "lucide-react"
 import { Link } from "@/components/Link"
-import { contains, date, dateTime, isManagement, peso, statusLabel, text } from "./format"
+import { contains, date, dateTime, isManagement, peso, statusLabel, text, transactionDate } from "./format"
 import { SyncButton } from "./SyncButton"
 import { Badge, Button, Confirm, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
@@ -51,7 +51,7 @@ export function ClientsPage() {
     },
     { key: "property", label: "Property", sort: (c) => c.property_title ?? "", render: (c) => <span className="line-clamp-2">{text(c.property_title)}</span> },
     { key: "agent", label: "Agent", sort: (c) => c.agent_name ?? "", render: (c) => text(c.agent_name), hideOnPhone: true },
-    { key: "date", label: "Latest", sort: (c) => c.transaction_date ?? "", render: (c) => (c.transaction_type ? `${statusLabel(c.transaction_type)} · ${date(c.transaction_date)}` : "—") },
+    { key: "date", label: "Latest", sort: (c) => c.transaction_date ?? "", render: (c) => (c.transaction_type ? `${statusLabel(c.transaction_type)} · ${transactionDate(c.transaction_date)}` : "—") },
     { key: "count", label: "Transactions", align: "right", sort: (c) => c.transaction_count, render: (c) => c.transaction_count, hideOnPhone: true },
     { key: "status", label: "Status", sort: (c) => c.status, render: (c) => <Badge value={c.status} /> },
   ]
@@ -133,7 +133,7 @@ function ClientDrawer({ client, onClose, onDeleted }: { client: Client; onClose:
           ["Location", client.property_location],
           ["Price", client.property_price ? peso(client.property_price) : null],
           ["Agent", client.agent_id ? <Link to={`/manage/agents?id=${client.agent_id}`} className="hover:underline">{text(client.agent_name)} ({client.agent_id})</Link> : null],
-          ["Latest transaction", client.transaction_type ? `${statusLabel(client.transaction_type)} · ${date(client.transaction_date)}` : null],
+          ["Latest transaction", client.transaction_type ? `${statusLabel(client.transaction_type)} · ${transactionDate(client.transaction_date)}` : null],
           ["Amount", client.amount ? peso(client.amount) : null],
         ]} />
       </Section>
@@ -163,7 +163,7 @@ function ClientDrawer({ client, onClose, onDeleted }: { client: Client; onClose:
                   <Badge value={tx.status} />
                 </div>
                 <p className="text-xs text-ab-muted">
-                  {date(tx.transaction_date)} · <Link to={`/manage/properties?id=${tx.property_id}`} className="hover:underline">{text(tx.property_title)}</Link> ·{" "}
+                  {transactionDate(tx.transaction_date)} · <Link to={`/manage/properties?id=${tx.property_id}`} className="hover:underline">{text(tx.property_title)}</Link> ·{" "}
                   <Link to={`/manage/agents?id=${tx.agent_id}`} className="hover:underline">{text(tx.agent_name)}</Link> · {statusLabel(tx.source)}
                 </p>
               </li>

@@ -408,9 +408,18 @@
 .ab-pop { animation: ab-pop 0.22s ease-out both; }
 .ab-card-in { opacity: 0; animation: ab-fade-up 0.5s ease-out forwards; }
 .route-draw { stroke-dasharray: 700; animation: ab-draw 2.4s ease-in-out 0.3s both; }
+/* Home route card: draw when it scrolls into view, redraw on hover/tap. */
+.reveal:not(.is-visible) .route-draw { animation-play-state: paused; }
+/* pathLength=1 on the path, so the line reaches the property with the marker */
+@keyframes ab-redraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.route-redraw { stroke-dasharray: 1; animation: ab-redraw 2.2s cubic-bezier(0.45, 0, 0.25, 1) both; }
+.route-card { cursor: pointer; }
+.route-dest { transform-box: fill-box; transform-origin: center; transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.route-dest.is-arrived { transform: scale(1.12); }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-in, .ab-card-in, .ab-pop, .route-draw, .hero-slide.is-active { animation: none; opacity: 1; stroke-dasharray: none; }
+  .hero-in, .ab-card-in, .ab-pop, .route-draw, .route-redraw, .hero-slide.is-active { animation: none; opacity: 1; stroke-dasharray: none; }
+  .route-dest, .route-card { transition: none; }
   .reveal, .reveal.is-visible { opacity: 1; transform: none; transition: none; }
   .hero-slide { transition: none; }
 }

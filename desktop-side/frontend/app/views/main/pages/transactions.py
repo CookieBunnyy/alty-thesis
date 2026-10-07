@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -23,12 +23,37 @@ from PyQt6.QtWidgets import (
 
 from app.theme import badge_colors
 from app.api.client import ApiClient
+from app.views.main.pages._common import fmt_transaction_date
 
 TRANSACTION_STATUS_COLORS = {
     "RESERVED": "#e8f0dc",
     "COMPLETED": "#dcebf1",
     "CANCELLED": "#f2dfdc",
 }
+
+
+def _utc_key(value: Any) -> str:
+    """Sort key for an API date-time, comparable across UTC offsets."""
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc).isoformat()
+
+
+class _SortableItem(QTableWidgetItem):
+    """A table cell that sorts by a hidden key (ISO date-time) instead of its text."""
+
+    def __init__(self, text: str, key: str) -> None:
+        super().__init__(text)
+        self.key = key
+
+    def __lt__(self, other: QTableWidgetItem) -> bool:
+        if isinstance(other, _SortableItem):
+            return self.key < other.key
+        return super().__lt__(other)
 
 
 class TransactionsPage(QWidget):
@@ -113,11 +138,11 @@ class TransactionsPage(QWidget):
         self.table.setHorizontalHeaderLabels(
             [
                 "Transaction ID",
+                "When",
                 "Client",
                 "Property",
                 "Agent",
                 "Type",
-                "Transaction Date",
                 "Amount",
                 "Status",
             ]
@@ -142,7 +167,7 @@ class TransactionsPage(QWidget):
         )
         header_view = self.table.horizontalHeader()
         header_view.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        for column, width in enumerate([100, 150, 230, 140, 95, 125, 130, 110]):
+        for column, width in enumerate([100, 160, 150, 230, 140, 95, 130, 110]):
             self.table.setColumnWidth(column, width)
         layout.addWidget(self.table, 1)
 
@@ -240,16 +265,18 @@ class TransactionsPage(QWidget):
             status = str(transaction.get("status") or "").upper()
             values = [
                 transaction_id[:8],
+                self._format_date(transaction.get("transaction_date")),
                 str(transaction.get("client_name") or "—"),
                 str(transaction.get("property_title") or "—"),
                 str(transaction.get("agent_name") or "—"),
                 str(transaction.get("transaction_type") or "").title(),
-                self._format_date(transaction.get("transaction_date")),
                 self._format_currency(transaction.get("amount")),
                 status,
             ]
             for column, value in enumerate(values):
-                item = QTableWidgetItem(value)
+                # "When" sorts by the actual moment, not the displayed text.
+                item = (_SortableItem(value, _utc_key(transaction.get("transaction_date")))
+                        if column == 1 else QTableWidgetItem(value))
                 item.setToolTip(
                     transaction_id if column == 0 else value
                 )
@@ -270,14 +297,7 @@ class TransactionsPage(QWidget):
 
     @staticmethod
     def _format_date(value: Any) -> str:
-        if not value:
-            return "—"
-        try:
-            return datetime.fromisoformat(
-                str(value).replace("Z", "+00:00")
-            ).strftime("%b %d, %Y")
-        except ValueError:
-            return str(value)
+        return fmt_transaction_date(value)
 
     @staticmethod
     def _format_currency(value: Any) -> str:

@@ -11,6 +11,7 @@ Rules:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -93,9 +94,42 @@ def match_property(db: Session, fields: dict, *, required: bool = True) -> Match
                 "property", f"Property title '{title}' matches {len(candidates)} listings; "
                 "the document must state the Listing ID", ["listing_id"],
             )
+        project = _match_project(db, title, fields.get("block_lot"))
+        if project is not None:
+            return project
         raise MatchError("property", f"No property is titled '{title}'", ["property_title"])
     if required:
         raise MatchError("property", "The document does not identify a property", ["listing_id"])
+    return None
+
+
+def _match_project(db: Session, name: str, block_lot: str | None) -> Match | None:
+    """Forms often give the project (development) rather than the listing
+    title: "Project Name: Cedar Heights Residences". Accept the one listing in
+    that village or whose title contains the name; Block/Lot narrows several
+    down. Anything still ambiguous is not matched."""
+    wanted = normalize_name(name)
+    if len(wanted) < 4:
+        return None
+    candidates = [
+        listing for listing in db.execute(select(PropertyListing)).scalars()
+        if normalize_name(listing.village_name) == wanted or wanted in normalize_name(listing.title)
+    ]
+    if len(candidates) > 1 and block_lot:
+        numbers = re.findall(r"\d+", block_lot)
+        candidates = [
+            listing for listing in candidates
+            if numbers and all(
+                re.search(rf"\b{n}\b", f"{listing.title or ''} {listing.details or ''}") for n in numbers
+            )
+        ]
+    if len(candidates) == 1:
+        return Match(candidates[0], "PROJECT")
+    if len(candidates) > 1:
+        raise MatchError(
+            "property", f"Project '{name}' has {len(candidates)} listings; the document must "
+            "state the Listing ID or the exact property title", ["listing_id"],
+        )
     return None
 
 
