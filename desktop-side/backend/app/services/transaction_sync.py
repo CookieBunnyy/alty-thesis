@@ -95,8 +95,9 @@ def sync_transactions(db: Session) -> dict[str, Any]:
         savepoint = db.begin_nested()
         try:
             if existing is None:
-                db.add(PropertyTransaction(transaction_id=transaction_id, created_at=synced_at,
-                                           source="SYNC", **values))
+                existing = PropertyTransaction(transaction_id=transaction_id, created_at=synced_at,
+                                               source="SYNC", **values)
+                db.add(existing)
                 inserted += 1
             elif existing.sync_status == "PENDING":
                 skipped += 1  # local change not yet pushed: never overwrite it
@@ -104,6 +105,12 @@ def sync_transactions(db: Session) -> dict[str, Any]:
                 for field, value in values.items():
                     setattr(existing, field, value)
                 updated += 1
+            if existing.status == "CANCELLED" and not existing.cancellation_reason \
+                    and existing.sync_status != "PENDING":
+                # The central database only carries the status, not why.
+                existing.cancellation_reason = "Cancelled in the central database (no reason recorded there)."
+                existing.cancelled_at = existing.cancelled_at or synced_at
+                existing.cancelled_by = existing.cancelled_by or "Central database sync"
             db.flush()  # later rows in this batch see this one
             savepoint.commit()
         except IntegrityError as exc:

@@ -193,7 +193,8 @@ def get_agent_activity(
             {"transaction_id": t.transaction_id, "client_name": t.client.full_name,
              "property_id": t.property_id, "property_title": t.property_listing.title,
              "transaction_type": t.transaction_type, "transaction_date": t.transaction_date,
-             "amount": float(t.amount), "status": t.status}
+             "amount": float(t.amount), "status": t.status,
+             "cancellation_reason": t.cancellation_reason}
             for t in transactions
         ],
     }

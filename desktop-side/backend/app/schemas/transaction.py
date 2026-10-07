@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TransactionResponse(BaseModel):
@@ -19,11 +19,18 @@ class TransactionResponse(BaseModel):
     amount: Decimal
     status: str
     notes: str | None = None
+    cancellation_reason: str | None = None
+    cancelled_at: datetime | None = None
+    cancelled_by: str | None = None
     source: str | None = None
     source_document_id: str | None = None
     sync_status: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class TransactionCancel(BaseModel):
+    reason: str = Field(min_length=3, max_length=1000)
 
 
 class TransactionSummary(BaseModel):

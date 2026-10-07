@@ -42,12 +42,31 @@ def _datetime_value(value: Any, fallback: datetime | None = None) -> datetime | 
         raise ValueError("Invalid client timestamp") from exc
 
 
-def reconcile_property_status(db: Session, listing: PropertyListing, old_status: str | None) -> list[str]:
+def cancel_reservation(reservation: PropertyTransaction, reason: str, cancelled_by: str) -> None:
+    """Cancel one open reservation and record why, by whom and when.
+
+    The reserving client's summary status follows (when it points at this
+    property). The caller decides what happens to the property itself."""
+    reservation.status = "CANCELLED"
+    reservation.cancellation_reason = reason
+    reservation.cancelled_at = _utcnow()
+    reservation.cancelled_by = cancelled_by
+    reservation.sync_status = "PENDING"
+    client = reservation.client
+    if client.property_id == reservation.property_id and client.status == "RESERVED":
+        client.status = "CANCELLED"
+        client.sync_status = "PENDING"
+
+
+def reconcile_property_status(db: Session, listing: PropertyListing, old_status: str | None,
+                              reason: str | None = None, cancelled_by: str | None = None) -> list[str]:
     """Apply the consequences of a property status change that did not come
     from a transaction (manual management edit or cloud pull).
 
     RESERVED -> AVAILABLE/ON_HOLD/UNAVAILABLE cancels the live reservation(s)
     and the reserving clients' summary status. Sales are never undone here.
+    The reason is recorded on each cancelled reservation; without one, the
+    status change itself is recorded as the reason.
     Returns human-readable notes describing what changed.
     """
     new_status = _normalized_status(listing.status)
@@ -63,14 +82,11 @@ def reconcile_property_status(db: Session, listing: PropertyListing, old_status:
                 PropertyTransaction.status == "RESERVED",
             )
         ).scalars().all()
+        label = new_status.replace("_", " ").lower()
+        why = (reason or "").strip() or f"The property was changed from reserved to {label}."
         for reservation in reservations:
-            reservation.status = "CANCELLED"
-            reservation.sync_status = "PENDING"
-            client = reservation.client
-            if client.property_id == listing.listing_id and client.status == "RESERVED":
-                client.status = "CANCELLED"
-                client.sync_status = "PENDING"
-            notes.append(f"reservation {reservation.transaction_id} cancelled")
+            cancel_reservation(reservation, why, cancelled_by or "System")
+            notes.append(f"reservation {reservation.transaction_id} cancelled: {why}")
     return notes
 
 

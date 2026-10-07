@@ -71,7 +71,7 @@ export function UsersPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <PageHeader
-        title="Users & Access"
+        title="Who can sign in, and what they can open"
         subtitle="Staff accounts for the desktop app and the web Management System — one account works in both. Each role opens only its permitted pages."
         actions={isAdmin && <Button variant="primary" onClick={() => setEditing("new")}><UserPlus className="h-4 w-4" /> {t("New user")}</Button>}
       />

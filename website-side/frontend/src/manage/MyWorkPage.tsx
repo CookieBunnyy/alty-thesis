@@ -6,13 +6,14 @@ import { Badge, LoadState, PageHeader, Section, Tiles } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
 import { t } from "./i18n"
+import { CancelReason } from "./cancellation"
 
 type Work = {
   agent: { agent_id: string; full_name: string; agent_location: string | null; status: string; transactions_count: number; completed_sales: number; total_sales: string | null; performance_score: string | null; client_rating: number | null; review_count: number }
   activity: {
     recorded: { clients: number; transactions: number; active_reservations: number; completed_sales: number; sales_value: number; properties: number }
     clients: { client_id: string; full_name: string; status: string; property_id: number | null }[]
-    transactions: { transaction_id: string; client_name: string | null; property_id: number; property_title: string | null; transaction_type: string; transaction_date: string; amount: number; status: string }[]
+    transactions: { transaction_id: string; client_name: string | null; property_id: number; property_title: string | null; transaction_type: string; transaction_date: string; amount: number; status: string; cancellation_reason?: string | null }[]
   }
   reviews: { client_rating: number | null; review_count: number; reviews: { id: number; rating: number; review: string | null; reviewer: string; property_title: string | null; created_at: string }[] }
 }
@@ -26,7 +27,7 @@ export function MyWorkPage() {
   const open = data?.activity.transactions.filter((tx) => tx.status === "RESERVED") ?? []
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <PageHeader title="My Work" subtitle={data ? `${data.agent.full_name} · ${data.agent.agent_id}${data.agent.agent_location ? ` · ${data.agent.agent_location}` : ""}` : t("Your clients, transactions and client reviews.")} />
+      <PageHeader title="Your clients, reservations and sales" subtitle={data ? `${data.agent.full_name} · ${data.agent.agent_id}${data.agent.agent_location ? ` · ${data.agent.agent_location}` : ""}` : t("Your clients, transactions and client reviews.")} />
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
@@ -73,6 +74,7 @@ export function MyWorkPage() {
                     <span className="min-w-0">
                       <Link to={`/manage/transactions?id=${tx.transaction_id}`} className="font-semibold hover:underline">{statusLabel(tx.transaction_type)} · {peso(tx.amount)}</Link>
                       <span className="block text-xs text-ab-muted">{transactionDate(tx.transaction_date)} · {text(tx.client_name)} · {text(tx.property_title)}</span>
+                      <CancelReason status={tx.status} reason={tx.cancellation_reason} />
                     </span>
                     <Badge value={tx.status} />
                   </li>

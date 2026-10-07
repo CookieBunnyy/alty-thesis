@@ -11,13 +11,14 @@ import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
+import { CancelReason } from "./cancellation"
 
 type PartnerOption = { id: number; name: string; status: string }
 type Summary = { available: number; reserved: number; sold: number; on_hold: number; unavailable: number; total: number }
 type History = {
   status: string
   status_changed_at: string | null
-  transactions: { transaction_id: string; client_id: string; client_name: string | null; agent_id: string; agent_name: string | null; transaction_type: string; transaction_date: string; amount: number; status: string; source: string }[]
+  transactions: { transaction_id: string; client_id: string; client_name: string | null; agent_id: string; agent_name: string | null; transaction_type: string; transaction_date: string; amount: number; status: string; cancellation_reason?: string | null; source: string }[]
   documents: { document_id?: string; id?: number; document_name?: string; document_type?: string; status?: string; created_at?: string }[]
 }
 
@@ -78,7 +79,7 @@ export function PropertiesPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
-        title="Properties"
+        title="All listings and where each one stands"
         subtitle="Listings from Supabase and from processed documents. Reserved and sold statuses come from reservation and sale documents."
         actions={isManagement(user?.role) && <SyncButton path="/property-listings/sync" what="Listings" onDone={reload} />}
       />
@@ -253,6 +254,7 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
                       {transactionDate(tx.transaction_date)} · <Link to={`/manage/clients?id=${tx.client_id}`} className="hover:underline">{text(tx.client_name)}</Link>
                       {" · "}<Link to={`/manage/agents?id=${tx.agent_id}`} className="hover:underline">{text(tx.agent_name)}</Link> · {statusLabel(tx.source)}
                     </p>
+                    <CancelReason status={tx.status} reason={tx.cancellation_reason} />
                   </li>
                 ))}
               </ul>

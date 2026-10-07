@@ -111,6 +111,9 @@ class PropertyListingUpdate(BaseModel):
     price_total: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
     initial_dp: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
     monthly_rate: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    # Why an open reservation is being cancelled when a RESERVED property is
+    # set back to AVAILABLE / ON_HOLD / UNAVAILABLE (not a listing field).
+    cancellation_reason: str | None = Field(default=None, max_length=1000)
     num_bedrooms: int | None = Field(default=None, ge=0)
     num_bathrooms: int | None = Field(default=None, ge=0)
     layout_type: str | None = Field(default=None, max_length=255)

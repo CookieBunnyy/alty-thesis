@@ -8,6 +8,7 @@ import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
+import { CancelReason } from "./cancellation"
 
 type Client = {
   client_id: string; external_client_id: string | null; full_name: string; location: string | null
@@ -20,7 +21,7 @@ type Client = {
 }
 type Summary = { total: number; prospect: number; reserved: number; sold: number; cancelled: number }
 type Profile = {
-  transactions: { transaction_id: string; property_id: number; property_title: string | null; agent_id: string; agent_name: string | null; transaction_type: string; transaction_date: string; amount: number; status: string; source: string; source_document_id: string | null }[]
+  transactions: { transaction_id: string; property_id: number; property_title: string | null; agent_id: string; agent_name: string | null; transaction_type: string; transaction_date: string; amount: number; status: string; cancellation_reason?: string | null; source: string; source_document_id: string | null }[]
   documents: { document_id: string; document_name: string; document_type: string; status: string; version: number; created_at: string }[]
 }
 
@@ -59,7 +60,7 @@ export function ClientsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
-        title="Buyers & Sellers"
+        title="Everyone buying or selling with Abellar Realty"
         subtitle="Clients are created automatically from buyer, reservation and sale documents and from website client accounts — there's no manual “Add client”."
         actions={isManagement(user?.role) && <SyncButton path="/clients/sync" what="Clients" onDone={reload} />}
       />
@@ -166,6 +167,7 @@ function ClientDrawer({ client, onClose, onDeleted }: { client: Client; onClose:
                   {transactionDate(tx.transaction_date)} · <Link to={`/manage/properties?id=${tx.property_id}`} className="hover:underline">{text(tx.property_title)}</Link> ·{" "}
                   <Link to={`/manage/agents?id=${tx.agent_id}`} className="hover:underline">{text(tx.agent_name)}</Link> · {statusLabel(tx.source)}
                 </p>
+                <CancelReason status={tx.status} reason={tx.cancellation_reason} />
               </li>
             ))}
           </ol>

@@ -82,6 +82,7 @@ def get_dashboard_recent_transactions(limit: int = Query(default=6, ge=1, le=20)
             "transaction_date": t.transaction_date,
             "amount": float(t.amount),
             "status": t.status,
+            "cancellation_reason": t.cancellation_reason,
         }
         for t in rows
     ]

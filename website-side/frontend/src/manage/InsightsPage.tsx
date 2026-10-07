@@ -30,7 +30,7 @@ export function InsightsPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <PageHeader
-        title="Recommendations"
+        title="What needs attention, and what to do next"
         subtitle="Everything ALTY's analysis currently flags, highest priority first. Each item shows the finding, a suggested action, the supporting data and the rule behind it — management makes the decision."
         actions={<Button onClick={reload}>{t("Refresh")}</Button>}
       />

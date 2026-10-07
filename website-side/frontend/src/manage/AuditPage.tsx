@@ -75,7 +75,7 @@ export function AuditPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
-        title="Audit Logs"
+        title="A record of every action taken in ALTY"
         subtitle="Every sign-in, record change, document action and sync, from the desktop app and the website. Entries can't be edited or deleted."
         actions={<Button onClick={exportCsv} disabled={exporting || !page.total}><Download className="h-4 w-4" /> {exporting ? t("Exporting…") : t("Export CSV")}</Button>}
       />

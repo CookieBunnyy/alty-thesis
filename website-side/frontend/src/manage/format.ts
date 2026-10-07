@@ -22,7 +22,11 @@ const day = (d: Date, zone = PH_ZONE) =>
   d.toLocaleDateString(locale(), { month: "short", day: "numeric", year: "numeric", timeZone: zone })
 const parse = (value: unknown) => {
   if (!value) return null
-  const d = new Date(String(value))
+  let text = String(value)
+  // The API stores record timestamps in UTC without a zone ("2026-10-07T13:29:00");
+  // a browser would read those as local time, so mark them as UTC.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(text)) text += "Z"
+  const d = new Date(text)
   return Number.isNaN(d.getTime()) ? null : d
 }
 

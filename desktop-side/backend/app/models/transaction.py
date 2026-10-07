@@ -81,6 +81,10 @@ class PropertyTransaction(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Why it was cancelled, by whom and when (ALTY only; not synced).
+    cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancelled_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
     source: Mapped[str] = mapped_column(
         String(24), nullable=False, default="DOCUMENT", server_default="SYNC"
     )

@@ -56,7 +56,11 @@ def sync_property_listings(db: Session) -> dict[str, Any]:
                     setattr(existing, field, value)
                 if cloud_status is not None and cloud_status != old_status:
                     existing.status = cloud_status
-                    reconcile_property_status(db, existing, old_status)
+                    reconcile_property_status(
+                        db, existing, old_status,
+                        reason=f"The central database changed the property's status to {cloud_status.lower()}.",
+                        cancelled_by="Central database sync",
+                    )
                 updated += 1
         except Exception as exc:
             errors += 1

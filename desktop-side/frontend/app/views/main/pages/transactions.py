@@ -285,6 +285,12 @@ class TransactionsPage(QWidget):
                 )
                 if column == 0:
                     item.setData(Qt.ItemDataRole.UserRole, transaction_id)
+                if column == 7 and status == "CANCELLED":
+                    # Why it was cancelled (recorded by ALTY), shown on hover.
+                    reason = transaction.get("cancellation_reason") or (
+                        "No reason was recorded (cancelled before reasons were tracked).")
+                    by = transaction.get("cancelled_by")
+                    item.setToolTip(f"Cancelled: {reason}" + (f"\nBy {by}" if by else ""))
                 if column == 7:
                     _text, _bg = badge_colors(status)
                     item.setForeground(_text)

@@ -8,6 +8,7 @@ import { Badge, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Sect
 import { useStaffAuth } from "./staffContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
+import { CancelReason } from "./cancellation"
 
 type Agent = {
   agent_id: string; full_name: string; phone_number: string | null; agent_location: string | null
@@ -23,7 +24,7 @@ type Agent = {
 type Activity = {
   recorded: { clients: number; transactions: number; active_reservations: number; completed_sales: number; sales_value: number; properties: number }
   clients: { client_id: string; full_name: string; status: string; property_id: number | null }[]
-  transactions: { transaction_id: string; client_name: string | null; property_id: number; property_title: string | null; transaction_type: string; transaction_date: string; amount: number; status: string }[]
+  transactions: { transaction_id: string; client_name: string | null; property_id: number; property_title: string | null; transaction_type: string; transaction_date: string; amount: number; status: string; cancellation_reason?: string | null }[]
 }
 type Reviews = {
   client_rating: number | null; review_count: number; distribution: Record<string, number>
@@ -82,7 +83,7 @@ export function AgentsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
-        title="Agents"
+        title="Your agents and the work recorded for each"
         subtitle="Agents and the clients, reservations and sales recorded for each one in ALTY, with verified client reviews."
         actions={isManagement(user?.role) && <SyncButton path="/agents/sync" what="Agents" onDone={reload} />}
       />
@@ -196,6 +197,7 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
                   <p className="mt-1 text-xs text-ab-muted">
                     {transactionDate(tx.transaction_date)} · {text(tx.client_name)} · <Link to={`/manage/properties?id=${tx.property_id}`} className="hover:underline">{text(tx.property_title)}</Link>
                   </p>
+                  <CancelReason status={tx.status} reason={tx.cancellation_reason} />
                 </li>
               ))}
             </ul>

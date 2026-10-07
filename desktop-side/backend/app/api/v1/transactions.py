@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -6,8 +8,15 @@ from app.core.database import get_db
 from app.core.security import get_current_user, require_management
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
-from app.schemas.transaction import TransactionResponse, TransactionSummary, TransactionSyncResult
+from app.schemas.transaction import (
+    TransactionCancel,
+    TransactionResponse,
+    TransactionSummary,
+    TransactionSyncResult,
+)
 from app.services.audit import record_audit
+from app.services.client_sync import cancel_reservation
+from app.services.cloud_sync import try_push_pending
 from app.services.entity_matching import (
     find_client_by_external_reference,
     find_transaction_by_reference,
@@ -40,6 +49,9 @@ def _response(transaction: PropertyTransaction) -> dict:
         "amount": transaction.amount,
         "status": transaction.status,
         "notes": transaction.notes,
+        "cancellation_reason": transaction.cancellation_reason,
+        "cancelled_at": transaction.cancelled_at,
+        "cancelled_by": transaction.cancelled_by,
         "source": transaction.source,
         "source_document_id": transaction.source_document_id,
         "sync_status": transaction.sync_status,
@@ -108,6 +120,44 @@ def get_transaction(transaction_id: str, db: Session = Depends(get_db),
     transaction = find_transaction_by_reference(db, transaction_id)
     if transaction is None:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    return _response(transaction)
+
+
+@router.post("/{transaction_id}/cancel", response_model=TransactionResponse)
+def cancel_transaction(transaction_id: str, payload: TransactionCancel, db: Session = Depends(get_db),
+                       user: User = Depends(require_management)):
+    """Cancel an open reservation, with the reason. The property returns to
+    AVAILABLE when no other open reservation holds it. Sales can't be cancelled
+    here; completed records keep their history."""
+    transaction = find_transaction_by_reference(db, transaction_id)
+    if transaction is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    if transaction.transaction_type != "RESERVED" or transaction.status != "RESERVED":
+        raise HTTPException(status_code=409, detail="Only an open reservation can be cancelled")
+    reason = payload.reason.strip()
+    if len(reason) < 3:
+        raise HTTPException(status_code=422, detail="Please give the reason for cancelling")
+    cancel_reservation(transaction, reason, user.full_name or user.username)
+    listing = transaction.property_listing
+    still_reserved = db.scalar(select(func.count()).select_from(PropertyTransaction).where(
+        PropertyTransaction.property_id == listing.listing_id,
+        PropertyTransaction.transaction_type == "RESERVED",
+        PropertyTransaction.status == "RESERVED",
+        PropertyTransaction.transaction_id != transaction.transaction_id,
+    ))
+    property_note = None
+    if listing.status == "RESERVED" and not still_reserved:
+        listing.status = "AVAILABLE"
+        listing.status_changed_at = datetime.utcnow()
+        listing.sync_status = "PENDING"
+        property_note = "property returned to AVAILABLE"
+    record_audit(db, "TRANSACTION_CANCELLED", actor=user, entity_type="transactions",
+                 entity_id=str(transaction.transaction_id),
+                 details={"reason": reason, "client": transaction.client.full_name,
+                          "property": listing.title, "consequence": property_note})
+    db.commit()
+    try_push_pending(db)
+    db.refresh(transaction)
     return _response(transaction)
 
 

@@ -64,7 +64,7 @@ export function AnalyticsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
-        title="Analytics"
+        title="How sales and listings are performing"
         subtitle="Historical and current performance computed from recorded properties, transactions and agents. ALTY interprets the results below the charts."
         actions={<Select label="Period" value={months} onChange={setMonths} options={[{ value: "6", label: "Last 6 months" }, { value: "12", label: "Last 12 months" }, { value: "24", label: "Last 24 months" }]} />}
       />

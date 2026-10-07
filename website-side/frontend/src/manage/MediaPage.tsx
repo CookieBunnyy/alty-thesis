@@ -85,7 +85,7 @@ export function MediaPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
-        title="Digital Preview"
+        title="Property photos and their quality checks"
         subtitle="Property photos uploaded to ALTY. Each image is checked for resolution, sharpness, brightness and contrast; only photos that pass are shown on the website."
         actions={editable && (
           <>

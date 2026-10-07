@@ -38,7 +38,7 @@ export function WorkforcePage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
-      <PageHeader title="Workforce" subtitle="Staff accounts by role and how client work is spread across agents, from the records in ALTY." />
+      <PageHeader title="Who is on the team and how work is shared" subtitle="Staff accounts by role and how client work is spread across agents, from the records in ALTY." />
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {workforce && (
         <>

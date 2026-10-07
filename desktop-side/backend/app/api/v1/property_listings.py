@@ -111,6 +111,7 @@ def get_property_history(listing_id: int, db: Session = Depends(get_db),
                 "transaction_date": t.transaction_date,
                 "amount": float(t.amount),
                 "status": t.status,
+                "cancellation_reason": t.cancellation_reason,
                 "source": t.source,
             }
             for t in transactions
@@ -128,6 +129,7 @@ def update_property_listing(listing_id: int, payload: PropertyListingUpdate,
                             db: Session = Depends(get_db), user: User = Depends(require_editor)):
     listing = _listing_or_404(db, listing_id)
     values = payload.model_dump(exclude_unset=True)
+    cancellation_reason = (values.pop("cancellation_reason", None) or "").strip() or None
     if values.get("partner_id") is not None and db.get(Partner, values["partner_id"]) is None:
         raise HTTPException(status_code=422, detail="Unknown partner / developer")
     for field in ("layout_type", "village_name", "details"):
@@ -159,7 +161,8 @@ def update_property_listing(listing_id: int, payload: PropertyListingUpdate,
     if new_status != old_status:
         listing.status = new_status
         changes["status"] = {"old": old_status, "new": new_status}
-        notes = reconcile_property_status(db, listing, old_status)
+        notes = reconcile_property_status(db, listing, old_status, reason=cancellation_reason,
+                                          cancelled_by=user.full_name or user.username)
     if changes:
         listing.sync_status = "PENDING"
         record_audit(db, "PROPERTY_UPDATED", actor=user, entity_type="property_listings",

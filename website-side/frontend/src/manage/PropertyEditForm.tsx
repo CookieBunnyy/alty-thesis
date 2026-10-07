@@ -83,12 +83,15 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
     garage_spaces: String(listing.garage_spaces ?? 0),
     status: listing.status,
     partner_id: listing.partner_id == null ? "" : String(listing.partner_id),
+    cancellation_reason: "",
   })
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }))
   const locked = listing.status === "SOLD"
   const statusOptions = [...new Set([listing.status, ...MANUAL])]
+  // Moving a reserved property back cancels its open reservation: ask why.
+  const cancelsReservation = listing.status === "RESERVED" && form.status !== "RESERVED"
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -100,6 +103,7 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
     const lng = num(form.lng)
     if ((lat === null) !== (lng === null)) return setError(t("Enter both latitude and longitude, or neither."))
     if (lat !== null && (lat < -90 || lat > 90 || lng! < -180 || lng! > 180)) return setError(t("Latitude must be −90 to 90 and longitude −180 to 180."))
+    if (cancelsReservation && form.cancellation_reason.trim().length < 3) return setError(t("Please give the reason for cancelling the reservation."))
 
     const next: Record<string, unknown> = {
       title: form.title.trim(),
@@ -121,11 +125,12 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
         && !(typeof value === "number" && Number(current[key]) === value)),
     )
     if (!Object.keys(changes).length) return onClose()
+    if (cancelsReservation) changes.cancellation_reason = form.cancellation_reason.trim()
     setBusy(true)
     try {
       onSaved(await api<Listing>(`/property-listings/${listing.listing_id}`, { method: "PUT", body: JSON.stringify(changes) }))
     } catch (saveError) {
-      setError((saveError as Error).message)
+      setError(t((saveError as Error).message))
       setBusy(false)
     }
   }
@@ -152,6 +157,14 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
               {locked ? t("A sold property's status can't be changed.") : t("Reserved and Sold are set by reservation and sale documents.")}
             </span>
           </Field>
+          {cancelsReservation && (
+            <label className="block rounded-xl border border-ab-danger/40 bg-ab-danger/5 p-3 text-sm font-medium sm:col-span-2">
+              {t("This cancels the open reservation. Why is it being cancelled? *")}
+              <textarea className={`${field} min-h-16`} value={form.cancellation_reason} maxLength={1000}
+                onChange={(e) => set("cancellation_reason", e.target.value)} placeholder={t("e.g. The buyer's bank loan was not approved")} />
+              <span className="mt-1 block text-xs font-normal text-ab-faint">{t("Saved on the cancelled reservation so everyone can see why.")}</span>
+            </label>
+          )}
           <Field label="Developer / partner">
             <select className={field} value={form.partner_id} onChange={(e) => set("partner_id", e.target.value)}>
               <option value="">{t("Not set")}</option>

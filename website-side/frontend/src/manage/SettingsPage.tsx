@@ -21,7 +21,7 @@ export function SettingsPage() {
   const isAdmin = user?.role === "Administrator"
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <PageHeader title="Settings" subtitle={isAdmin ? "Appearance, language, system configuration and synchronization." : "Choose how the Management System looks and which language it uses."} />
+      <PageHeader title="How ALTY looks and works for you" subtitle={isAdmin ? "Appearance, language, system configuration and synchronization." : "Choose how the Management System looks and which language it uses."} />
       <Section title="Appearance">
         <div className="flex flex-wrap items-center gap-2">
           {([["dark", "Dark mode", Moon], ["light", "Light mode", Sun]] as const).map(([mode, label, Icon]) => (

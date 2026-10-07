@@ -135,7 +135,7 @@ export function DocumentsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
-        title="Document Repository"
+        title="Every uploaded document, processed and filed"
         subtitle="Upload documents and ALTY processes them automatically: it reads, classifies and matches each one, then records the property, client, agent and transaction it describes. Failed documents show the stage and reason."
         actions={
           <>

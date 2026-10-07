@@ -145,6 +145,7 @@ def get_client_profile(client_id: str, db: Session = Depends(get_db),
                 "transaction_date": t.transaction_date,
                 "amount": float(t.amount),
                 "status": t.status,
+                "cancellation_reason": t.cancellation_reason,
                 "source": t.source,
                 "source_document_id": t.source_document_id,
             }

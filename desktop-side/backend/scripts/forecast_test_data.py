@@ -34,7 +34,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sqlalchemy import delete, func, select  # noqa: E402
+from sqlalchemy import delete, func, select, text  # noqa: E402
 from sqlalchemy.engine import make_url  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
@@ -74,7 +74,40 @@ def _at(year: int, month: int, day: int, rng: random.Random) -> datetime:
     return local.astimezone(timezone.utc)
 
 
+def repair_id_counters(db) -> None:
+    """Move each table's ID counter (sequence) past the highest ID in use.
+
+    Rows imported with their own IDs leave the counter behind, so the next
+    insert fails with "duplicate key ... _pkey". Counters only move forward;
+    no existing row changes."""
+    columns = db.execute(text("""
+        SELECT table_name, column_name,
+               pg_get_serial_sequence(format('%I.%I', table_schema, table_name), column_name) AS seq
+        FROM information_schema.columns
+        WHERE table_schema = current_schema() AND column_default LIKE 'nextval(%'
+    """)).all()
+    for table, column, sequence in columns:
+        if not sequence:
+            continue
+        highest = db.execute(text(f'SELECT max("{column}") FROM "{table}"')).scalar()
+        if highest is None:
+            continue
+        last, called = db.execute(text(f"SELECT last_value, is_called FROM {sequence}")).one()
+        next_id = last + 1 if called else last
+        if highest >= next_id:
+            try:
+                db.execute(text("SELECT setval(:seq, :value, true)"), {"seq": sequence, "value": highest})
+                db.commit()
+            except Exception as exc:  # e.g. the database account may not change sequences
+                db.rollback()
+                sys.exit(f"The ID counter for {table} is behind ({next_id} <= {highest}) and could not be "
+                         f"fixed with this account ({type(exc).__name__}). Run this once in the Supabase SQL "
+                         f"editor, then try again:\n\n    SELECT setval('{sequence}', {highest}, true);\n")
+            print(f"Fixed the ID counter for {table}: new rows now start after {highest} (it was at {next_id}).")
+
+
 def add(db) -> None:
+    repair_id_counters(db)
     if db.scalar(select(func.count()).select_from(PropertyTransaction).where(PropertyTransaction.source == MARK)):
         sys.exit("Test data is already there. Run with --remove first to add it again.")
     agents = db.execute(select(Agent.agent_id).where(func.upper(Agent.status) == "ACTIVE")

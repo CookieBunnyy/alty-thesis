@@ -5,6 +5,7 @@ import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
 import { statusLabel, transactionDate } from "./format"
 import { locale, t } from "./i18n"
+import { CancelReason } from "./cancellation"
 
 // Every number below comes from the same API the desktop dashboard uses.
 type Summary = {
@@ -17,7 +18,7 @@ type PropertyStatus = { available: number; reserved: number; sold: number; on_ho
 type TxTrend = { months: string[]; counts: number[]; reservations: number[]; sales: number[]; has_data: boolean }
 type RevenueTrend = { months: string[]; revenue: number[]; has_data: boolean }
 type TxSummary = { total: number; reserved: number; completed: number; cancelled: number; amount_total: string }
-type Recent = { transaction_id: string; client_name: string | null; property_title: string | null; agent_name: string | null; transaction_type: string; transaction_date: string; amount: number; status: string }
+type Recent = { transaction_id: string; client_name: string | null; property_title: string | null; agent_name: string | null; transaction_type: string; transaction_date: string; amount: number; status: string; cancellation_reason?: string | null }
 type Overview = {
   absorption_rate: number | null
   transactions: { average_sale_value: number | null }
@@ -307,6 +308,7 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
                     {transactionDate(tx.transaction_date)} · {peso(tx.amount)}
                     {tx.agent_name && ` · ${tx.agent_name}`}
                   </p>
+                  <CancelReason status={tx.status} reason={tx.cancellation_reason} compact />
                 </li>
               ))}
             </ul>

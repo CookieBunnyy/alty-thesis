@@ -59,7 +59,7 @@ export function PartnersPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
-        title="Partners / Developers"
+        title="Developers and companies you work with"
         subtitle="Developers and partner companies Abellar Realty works with. Link a listing to its developer from the Properties page."
         actions={canManage && <Button variant="primary" onClick={() => setEditing("new")}><Plus className="h-4 w-4" /> {t("New partner")}</Button>}
       />

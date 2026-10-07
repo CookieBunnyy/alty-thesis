@@ -39,7 +39,7 @@ export function ForecastingPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
-        title="Forecasting"
+        title="What the coming months may bring"
         subtitle="Projections from the recorded monthly history (linear trend over complete months). A forecast is only shown when there is enough real history; ALTY then interprets it."
         actions={
           <>
