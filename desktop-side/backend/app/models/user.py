@@ -27,6 +27,10 @@ class User(Base):
         String(32), ForeignKey("agents.agent_id", ondelete="SET NULL"), nullable=True, unique=True,
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # The account's own profile photo (shown to signed-in staff only).
+    photo_bucket: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    photo_path: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    photo_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,

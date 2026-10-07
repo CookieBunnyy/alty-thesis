@@ -54,3 +54,19 @@ def get_agent_insights(agent_id: str, db: Session = Depends(get_db), _user: User
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
     return {"insights": intelligence.agent_insights(db, agent)}
+
+
+@router.get("/agent-forecasts")
+def get_agent_forecasts(horizon: int = Query(default=3, ge=1, le=12), db: Session = Depends(get_db),
+                        _user: User = Depends(require_insight)):
+    """Each active agent's expected completed sales for the coming months,
+    from the agent's own monthly history (or why it can't be estimated)."""
+    return {"horizon": horizon, "agents": analytics.agent_forecasts(db, horizon)}
+
+
+@router.get("/agents/{agent_id}/forecast")
+def get_agent_forecast(agent_id: str, horizon: int = Query(default=3, ge=1, le=12),
+                       db: Session = Depends(get_db), _user: User = Depends(require_insight)):
+    if db.get(Agent, agent_id) is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return analytics.agent_forecasts(db, horizon, agent_id=agent_id)[0]

@@ -8,6 +8,8 @@ import { useToast } from "./toastContext"
 import { useApiData } from "./useApiData"
 import { useLanguage } from "./languageContext"
 import { LANGUAGES, t, type Lang } from "./i18n"
+import { photoBody } from "./photoBody"
+import { PhotoControls, StaffAvatar } from "./avatars"
 
 type Sync = { enabled: boolean; counts: Record<string, Record<string, number>> }
 type PushReport = { reason?: string; tables?: Record<string, { pushed: number; failed: number; errors: string[] }>; warnings?: string[] }
@@ -15,13 +17,42 @@ type PushReport = { reason?: string; tables?: Record<string, { pushed: number; f
 /** Everyone: appearance and language. Administrator: system configuration and
  *  pushing pending records to the central database (same rules as the desktop). */
 export function SettingsPage() {
-  const { user } = useStaffAuth()
+  const { user, api, reloadUser } = useStaffAuth()
+  const toast = useToast()
   const { theme, setTheme } = useTheme()
   const { lang, setLang } = useLanguage()
   const isAdmin = user?.role === "Administrator"
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <PageHeader title="How ALTY looks and works for you" subtitle={isAdmin ? "Appearance, language, system configuration and synchronization." : "Choose how the Management System looks and which language it uses."} />
+      {user && (
+        <Section title="Profile picture">
+          <div className="flex flex-wrap items-center gap-4">
+            <StaffAvatar userId={user.id} name={user.full_name} version={user.photo_version} size="lg" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">{user.full_name}</p>
+              <p className="mb-2 text-xs text-ab-faint">{t("Shown in the top bar and to other staff. JPG, PNG or WEBP; it's cropped to a square.")}</p>
+              <PhotoControls
+                hasPhoto={Boolean(user.photo_version)}
+                onUpload={async (file) => {
+                  try {
+                    await api("/users/me/photo", { method: "PUT", body: photoBody(file) })
+                    await reloadUser()
+                    toast(t("Profile picture updated."))
+                  } catch (uploadError) { toast(t((uploadError as Error).message), "error") }
+                }}
+                onRemove={async () => {
+                  try {
+                    await api("/users/me/photo", { method: "DELETE" })
+                    await reloadUser()
+                    toast(t("Profile picture removed."))
+                  } catch (removeError) { toast(t((removeError as Error).message), "error") }
+                }}
+              />
+            </div>
+          </div>
+        </Section>
+      )}
       <Section title="Appearance">
         <div className="flex flex-wrap items-center gap-2">
           {([["dark", "Dark mode", Moon], ["light", "Light mode", Sun]] as const).map(([mode, label, Icon]) => (

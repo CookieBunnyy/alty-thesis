@@ -7,10 +7,13 @@ import { SyncButton } from "./SyncButton"
 import { Badge, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData, useOpenRecord } from "./useApiData"
-import { t } from "./i18n"
+import { locale, t } from "./i18n"
 import { CancelReason } from "./cancellation"
 import { callLabels } from "./callLabels"
 import { CallButton } from "@/components/CallButton"
+import { useToast } from "./toastContext"
+import { AgentAvatar, PhotoControls } from "./avatars"
+import { photoBody } from "./photoBody"
 
 type Agent = {
   agent_id: string; full_name: string; phone_number: string | null; agent_location: string | null
@@ -21,6 +24,7 @@ type Agent = {
   // counted from the clients and transactions recorded in ALTY
   assigned_clients: number; recorded_transactions: number; open_reservations: number
   recorded_completed_sales: number; recorded_sales_value: number
+  recorded_deals: number; performance_rate: number | null; photo_version: number | null
   last_synced_at: string | null; created_at: string | null; updated_at: string | null
 }
 type Activity = {
@@ -63,9 +67,7 @@ export function AgentsPage() {
       key: "name", label: "Agent", sort: (a) => a.full_name,
       render: (a) => (
         <span className="flex items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ab-accent-soft text-xs font-extrabold text-ab-accent">
-            {a.full_name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
-          </span>
+          <AgentAvatar agentId={a.agent_id} name={a.full_name} version={a.photo_version} />
           <span className="min-w-0">
             <span className="block truncate font-semibold">{a.full_name}</span>
             <span className="block truncate text-xs text-ab-faint">{a.agent_id} · {text(a.agent_location)}</span>
@@ -80,6 +82,10 @@ export function AgentsPage() {
     { key: "transactions", label: "Transactions", align: "right", sort: (a) => a.recorded_transactions, render: (a) => a.recorded_transactions, hideOnPhone: true },
     { key: "sales", label: "Completed sales", align: "right", sort: (a) => a.recorded_completed_sales, render: (a) => a.recorded_completed_sales },
     { key: "value", label: "Sales value", align: "right", sort: (a) => a.recorded_sales_value, render: (a) => (a.recorded_sales_value ? pesoShort(a.recorded_sales_value) : "—") },
+    {
+      key: "performance", label: "Performance", align: "right", sort: (a) => a.performance_rate ?? -1,
+      render: (a) => <Performance rate={a.performance_rate} deals={a.recorded_deals} />,
+    },
   ]
 
   return (
@@ -110,13 +116,69 @@ export function AgentsPage() {
           <DataTable rows={shown} columns={columns} rowKey={(a) => a.agent_id} onOpen={(a) => open(a.agent_id)} empty="No agents match these filters." initialSort={{ key: "value", dir: "desc" }} />
         </>
       )}
-      {selected && <AgentDrawer agent={selected} onClose={close} />}
+      {selected && <AgentDrawer agent={selected} onClose={close} onChanged={reload} />}
     </div>
   )
 }
 
-function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+/** Completed sales ÷ recorded deals; "—" when the agent has no deals yet. */
+function Performance({ rate, deals }: { rate: number | null; deals: number }) {
+  if (rate == null) return <span className="text-ab-faint">—</span>
+  return (
+    <span title={t("{sales}% of {deals} recorded deals became completed sales", { sales: rate.toFixed(1), deals })} className="tabular-nums">
+      {rate.toFixed(1)}%
+    </span>
+  )
+}
+
+type AgentOutlook = {
+  status: string; observations: number; nonzero_months: number; minimum_required: number
+  recent_sales: number; expected_sales: number | null; trend_per_month: number | null
+  forecast: { month: string; value: number; lower: number; upper: number }[]
+}
+
+/** Expected completed sales for the next 3 months, from the agent's own history. */
+function AgentForecast({ agentId }: { agentId: string }) {
+  const { api } = useStaffAuth()
+  const load = useCallback(() => api<AgentOutlook>(`/intelligence/agents/${encodeURIComponent(agentId)}/forecast`), [api, agentId])
+  const { data, error, loading, reload } = useApiData(load)
+  return (
+    <Section title="Performance forecast">
+      <LoadState loading={loading && !data} error={error} onRetry={reload} />
+      {data && (data.status === "estimated" ? (
+        <>
+          <p className="text-sm">
+            {t("Expected completed sales in the next 3 months:")} <span className="text-lg font-extrabold tabular-nums">{data.expected_sales?.toFixed(1)}</span>
+            <span className="ml-2 text-xs text-ab-faint">{t("({n} in the last 3 months)", { n: data.recent_sales })}</span>
+          </p>
+          <ul className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
+            {data.forecast.map((point) => (
+              <li key={point.month} className="rounded-xl border border-ab-border p-2">
+                <span className="block text-ab-faint">{new Date(`${point.month}-01T00:00:00`).toLocaleDateString(locale(), { month: "short", year: "numeric" })}</span>
+                <span className="block text-base font-bold tabular-nums">{point.value.toFixed(1)}</span>
+                <span className="block text-ab-faint">{point.lower.toFixed(1)}–{point.upper.toFixed(1)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-ab-faint">
+            {t("Linear trend over this agent's {n} complete months; the small numbers are the likely range.", { n: data.observations })}
+          </p>
+        </>
+      ) : (
+        <p className="text-sm text-ab-muted">
+          {t("Not enough history to forecast this agent yet: needs {min} complete months with sales in 3 or more. Recorded: {n} month(s), {s} with sales.", {
+            min: data.minimum_required, n: data.observations, s: data.nonzero_months,
+          })}
+        </p>
+      ))}
+    </Section>
+  )
+}
+
+function AgentDrawer({ agent, onClose, onChanged }: { agent: Agent; onClose: () => void; onChanged: () => Promise<void> }) {
   const { api, user } = useStaffAuth()
+  const toast = useToast()
+  const canManage = isManagement(user?.role)
   const loadActivity = useCallback(() => api<Activity>(`/agents/${encodeURIComponent(agent.agent_id)}/activity`), [api, agent.agent_id])
   const loadReviews = useCallback(() => api<Reviews>(`/agents/${encodeURIComponent(agent.agent_id)}/reviews`), [api, agent.agent_id])
   const activity = useApiData(loadActivity)
@@ -137,6 +199,37 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
         </CallButton>
       )}
     >
+      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-ab-border bg-ab-card p-4">
+        <AgentAvatar agentId={agent.agent_id} name={agent.full_name} version={agent.photo_version} size="lg" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-lg font-extrabold">{agent.full_name}</p>
+          <p className="text-sm text-ab-muted">
+            {t("Performance")}: <span className="font-bold text-ab-text"><Performance rate={agent.performance_rate} deals={agent.recorded_deals} /></span>
+            <span className="text-xs text-ab-faint"> · {t("{n} recorded deal(s)", { n: agent.recorded_deals })}</span>
+          </p>
+          {canManage && (
+            <div className="mt-2">
+              <PhotoControls
+                hasPhoto={Boolean(agent.photo_version)}
+                onUpload={async (file) => {
+                  try {
+                    await api(`/agents/${encodeURIComponent(agent.agent_id)}/photo`, { method: "PUT", body: photoBody(file) })
+                    toast(t("Photo updated. It also shows on the website's agent pages."))
+                    await onChanged()
+                  } catch (uploadError) { toast(t((uploadError as Error).message), "error") }
+                }}
+                onRemove={async () => {
+                  try {
+                    await api(`/agents/${encodeURIComponent(agent.agent_id)}/photo`, { method: "DELETE" })
+                    toast(t("Photo removed."))
+                    await onChanged()
+                  } catch (removeError) { toast(t((removeError as Error).message), "error") }
+                }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {([
           ["Assigned clients", agent.assigned_clients],
@@ -152,9 +245,10 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
           </div>
         ))}
       </div>
-      <p className="text-xs text-ab-faint">{t("Counted from the clients, reservations and sales recorded in ALTY; cancelled transactions are left out. Client rating comes only from verified client reviews.")}</p>
+      <p className="text-xs text-ab-faint">{t("Counted from the clients, reservations and sales recorded in ALTY; cancelled transactions are left out. Client rating comes only from verified client reviews. Performance is the share of recorded deals (one client and one property) that became completed sales.")}</p>
 
-      {isManagement(user?.role) && (
+      {canManage && <AgentForecast agentId={agent.agent_id} />}
+      {canManage && (
         <SubjectInsights path={`/intelligence/agents/${encodeURIComponent(agent.agent_id)}`} empty={t("Nothing needs attention for this agent right now.")} />
       )}
 

@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { API_URL } from "@/config"
 import { requestJson } from "@/lib/auth"
+import { AgentPhoto } from "@/components/AgentPhoto"
 import { Link } from "@/components/Link"
 import { navigate } from "@/lib/router"
 import { sizedImage } from "@/lib/media"
@@ -478,9 +479,7 @@ export function HomePage() {
                   {data.agents.map((agent, index) => (
                     <Reveal key={agent.agent_id} delay={(index % 3) * 80}>
                       <div className="flex h-full items-start gap-4 rounded-2xl border border-ab-border bg-ab-card p-5 transition hover:-translate-y-1 hover:shadow-lg">
-                        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-ab-accent text-xl font-black text-ab-ink">
-                          {agent.full_name.split(" ").map((part) => part[0]).slice(0, 2).join("")}
-                        </span>
+                        <AgentPhoto name={agent.full_name} photoUrl={agent.photo_url} className="h-14 w-14 rounded-2xl text-xl" />
                         <div className="min-w-0 flex-1">
                           <h3 className="font-bold text-ab-text">{agent.full_name}</h3>
                           <p className="text-sm text-ab-muted">{agent.agent_location ?? "Abellar Realty"}</p>

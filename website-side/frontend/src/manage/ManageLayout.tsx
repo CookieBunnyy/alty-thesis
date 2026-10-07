@@ -29,6 +29,7 @@ import { ErrorBoundary } from "./ErrorBoundary"
 import { GlobalSearch, NotificationBell } from "./HeaderTools"
 import { useStaffAuth } from "./staffContext"
 import { t } from "./i18n"
+import { StaffAvatar } from "./avatars"
 
 type NavItem = { key: string; label: string; icon: LucideIcon; path?: string }
 
@@ -110,7 +111,7 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
   // Phones: the menu closes when a page opens (e.g. from search inside it).
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMenuOpen(false), [pathname])
-  const initials = (user?.full_name ?? "?").split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()
+  const me = user ? <StaffAvatar userId={user.id} name={user.full_name} version={user.photo_version} /> : null
 
   const sidebar = (
     <nav aria-label={t("Management")} className="flex h-full flex-col gap-5 overflow-y-auto p-4">
@@ -176,7 +177,7 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
             <div className="min-h-0 flex-1">{sidebar}</div>
             <div className="border-t border-ab-border p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ab-accent-soft text-sm font-extrabold text-ab-accent">{initials}</span>
+                {user && <StaffAvatar userId={user.id} name={user.full_name} version={user.photo_version} size="md" />}
                 <span className="min-w-0 flex-1 leading-tight">
                   <span className="block truncate text-sm font-bold">{user?.full_name}</span>
                   <span className="block truncate text-xs text-ab-faint">{t(user?.role ?? "")}</span>
@@ -203,10 +204,10 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
           <span className="hidden lg:block"><ThemeToggle theme={theme} onToggle={toggleTheme} /></span>
           <button type="button" onClick={() => setMenuOpen(true)} aria-label={t("Account")}
             className="flex shrink-0 items-center rounded-full lg:hidden">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-ab-accent-soft text-xs font-extrabold text-ab-accent">{initials}</span>
+            {me}
           </button>
           <div className="hidden items-center gap-2.5 rounded-xl border border-ab-border bg-ab-card px-2 py-1.5 lg:flex">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ab-accent-soft text-xs font-extrabold text-ab-accent">{initials}</span>
+            {me}
             <span className="hidden leading-tight sm:block">
               <span className="block text-xs font-bold">{user?.full_name}</span>
               <span className="block text-[11px] text-ab-faint">{t(user?.role ?? "")}</span>

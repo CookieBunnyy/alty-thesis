@@ -13,6 +13,8 @@ export interface StaffUser {
   last_login_at: string | null
   /** The agent record this account belongs to (agent accounts), if linked. */
   agent_id?: string | null
+  /** Changes when the profile photo changes; null without a photo. */
+  photo_version?: number | null
 }
 
 export type StaffAuthValue = {
@@ -26,7 +28,12 @@ export type StaffAuthValue = {
   /** A file from /api/v1/<path> (downloads, previews, photos), with the staff token. */
   apiBlob: (path: string) => Promise<Blob>
   can: (page: string) => boolean
+  /** Re-read the signed-in account (e.g. after changing your own photo). */
+  reloadUser: () => Promise<void>
 }
+
+/** Set when a session ended on its own, so the sign-in page can say why. */
+export const EXPIRED_KEY = "alty-staff-session-expired"
 
 export const StaffAuthContext = createContext<StaffAuthValue | null>(null)
 

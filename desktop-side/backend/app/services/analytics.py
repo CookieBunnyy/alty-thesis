@@ -54,29 +54,35 @@ def _shift_month(key: str, delta: int) -> str:
     return f"{index // 12:04d}-{index % 12 + 1:02d}"
 
 
-def monthly_series(db: Session, months: int | None = None) -> list[dict]:
+def monthly_series(db: Session, months: int | None = None, agent_id: str | None = None) -> list[dict]:
     """Per-month transaction counts and sales revenue. ``months`` limits the
-    window to the last N months (including the current one)."""
+    window to the last N months (including the current one). With ``agent_id``
+    only that agent's transactions are counted, over the company's full
+    history (months with nothing for the agent count as zero)."""
     month = func.to_char(func.timezone("UTC", PropertyTransaction.transaction_date), "YYYY-MM")
-    rows = db.execute(
-        select(
-            month,
-            func.count(PropertyTransaction.transaction_id),
-            func.coalesce(func.sum(case((PropertyTransaction.transaction_type == "RESERVED", 1), else_=0)), 0),
-            func.coalesce(func.sum(case((SALE, 1), else_=0)), 0),
-            func.coalesce(func.sum(case((SALE, PropertyTransaction.amount), else_=0)), 0),
-        ).where(LIVE).group_by(month)
-    ).all()
+    statement = select(
+        month,
+        func.count(PropertyTransaction.transaction_id),
+        func.coalesce(func.sum(case((PropertyTransaction.transaction_type == "RESERVED", 1), else_=0)), 0),
+        func.coalesce(func.sum(case((SALE, 1), else_=0)), 0),
+        func.coalesce(func.sum(case((SALE, PropertyTransaction.amount), else_=0)), 0),
+    ).where(LIVE)
+    if agent_id is not None:
+        statement = statement.where(PropertyTransaction.agent_id == agent_id)
+    rows = db.execute(statement.group_by(month)).all()
     data = {
         str(key): {"transactions": int(count), "reservations": int(reservations),
                    "sales": int(sales), "revenue": float(revenue or 0)}
         for key, count, reservations, sales, revenue in rows
     }
     current = _month_key(_now())
+    first = min(data) if data else None
+    if agent_id is not None and not months:
+        first = db.scalar(select(func.min(month)).where(LIVE))
     if months:
         keys = _month_range(_shift_month(current, -(months - 1)), current)
-    elif data:
-        keys = _month_range(min(data), current)
+    elif first:
+        keys = _month_range(str(first), current)
     else:
         keys = []
     empty = {"transactions": 0, "reservations": 0, "sales": 0, "revenue": 0.0}
@@ -154,12 +160,13 @@ def overview(db: Session) -> dict:
     }
 
 
-def forecast(db: Session, metric: str = "revenue", horizon: int = 3) -> dict:
-    """Linear-trend forecast over complete months, only with enough history."""
+def forecast(db: Session, metric: str = "revenue", horizon: int = 3, agent_id: str | None = None) -> dict:
+    """Linear-trend forecast over complete months, only with enough history.
+    With ``agent_id``, the forecast is for that agent's own activity."""
     if metric not in {"revenue", "transactions", "sales"}:
         raise ValueError("metric must be revenue, transactions or sales")
     current = _month_key(_now())
-    history = [row for row in monthly_series(db) if row["month"] != current]  # complete months
+    history = [row for row in monthly_series(db, agent_id=agent_id) if row["month"] != current]  # complete months
     values = [float(row[metric]) for row in history]
     nonzero = sum(1 for value in values if value > 0)
     base = {"metric": metric, "observations": len(values), "nonzero_months": nonzero,
@@ -344,7 +351,7 @@ def dss_insights(db: Session) -> dict:
 
 
 RECORDED_AGENT_FIELDS = ("assigned_clients", "recorded_transactions", "open_reservations",
-                         "recorded_completed_sales", "recorded_sales_value")
+                         "recorded_completed_sales", "recorded_sales_value", "recorded_deals")
 
 
 def agent_recorded_stats(db: Session, agent_ids: list[str] | None = None) -> dict[str, dict]:
@@ -361,9 +368,14 @@ def agent_recorded_stats(db: Session, agent_ids: list[str] | None = None) -> dic
         func.coalesce(func.sum(case((SALE, 1), else_=0)), 0),
         func.coalesce(func.sum(case((SALE, PropertyTransaction.amount), else_=0)), 0),
     ).where(LIVE).group_by(PropertyTransaction.agent_id)
+    # A deal is one client and one property: a reservation and its sale are
+    # one deal; a cancelled reservation is a deal that didn't become a sale.
+    deal = func.concat(PropertyTransaction.client_id, ":", PropertyTransaction.property_id)
+    deals = select(PropertyTransaction.agent_id, func.count(func.distinct(deal))).group_by(PropertyTransaction.agent_id)
     if agent_ids is not None:
         clients = clients.where(Client.agent_id.in_(agent_ids))
         activity = activity.where(PropertyTransaction.agent_id.in_(agent_ids))
+        deals = deals.where(PropertyTransaction.agent_id.in_(agent_ids))
     stats: dict[str, dict] = {}
     for agent_id, count in db.execute(clients).all():
         stats.setdefault(agent_id, dict.fromkeys(RECORDED_AGENT_FIELDS, 0))["assigned_clients"] = int(count)
@@ -371,7 +383,35 @@ def agent_recorded_stats(db: Session, agent_ids: list[str] | None = None) -> dic
         entry = stats.setdefault(agent_id, dict.fromkeys(RECORDED_AGENT_FIELDS, 0))
         entry.update(recorded_transactions=int(total), open_reservations=int(reservations),
                      recorded_completed_sales=int(sales), recorded_sales_value=float(value or 0))
+    for agent_id, count in db.execute(deals).all():
+        stats.setdefault(agent_id, dict.fromkeys(RECORDED_AGENT_FIELDS, 0))["recorded_deals"] = int(count)
+    for entry in stats.values():
+        # Performance: share of recorded deals that became completed sales.
+        entry["performance_rate"] = (round(entry["recorded_completed_sales"] / entry["recorded_deals"] * 100, 1)
+                                     if entry["recorded_deals"] else None)
     return stats
+
+
+def agent_forecasts(db: Session, horizon: int = 3, agent_id: str | None = None) -> list[dict]:
+    """Each active agent's expected completed sales for the coming months,
+    from that agent's own monthly history (same method as the company
+    forecast). Agents without enough history get no numbers, only the reason."""
+    statement = select(Agent).where(func.upper(Agent.status) == "ACTIVE").order_by(Agent.full_name)
+    if agent_id is not None:
+        statement = select(Agent).where(Agent.agent_id == agent_id)
+    results = []
+    for agent in db.execute(statement).scalars():
+        result = forecast(db, "sales", horizon, agent_id=agent.agent_id)
+        results.append({
+            "agent_id": agent.agent_id, "full_name": agent.full_name, "status": result["status"],
+            "observations": result["observations"], "nonzero_months": result["nonzero_months"],
+            "minimum_required": result["minimum_required"],
+            "recent_sales": sum(point["value"] for point in result["history"][-3:]),
+            "expected_sales": round(sum(point["value"] for point in result["forecast"]), 1) if result["forecast"] else None,
+            "trend_per_month": result.get("slope_per_month"),
+            "forecast": result["forecast"],
+        })
+    return results
 
 
 def workforce(db: Session) -> dict:

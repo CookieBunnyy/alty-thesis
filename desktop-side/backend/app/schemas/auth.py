@@ -31,3 +31,4 @@ class CurrentUser(BaseModel):
     is_active: bool
     last_login_at: datetime | None = None
     agent_id: str | None = None
+    photo_version: int | None = None

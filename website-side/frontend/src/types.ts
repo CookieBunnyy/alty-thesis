@@ -147,6 +147,8 @@ export interface PlaceResult {
 export interface NearbyAgent {
   agent_id: string;
   full_name: string;
+  /** The agent's profile photo (API path), when one has been set. */
+  photo_url?: string | null;
   agent_location: string | null;
   phone_number: string | null; // only sent to signed-in clients
   has_phone?: boolean;
@@ -243,6 +245,8 @@ export interface PublicAgent {
   client_rating: number | null;
   review_count: number;
   star_rating: number | null;
+  /** The agent's profile photo (API path), when one has been set. */
+  photo_url?: string | null;
 }
 
 /** A client review as anyone may see it: no contact details or client ID. */

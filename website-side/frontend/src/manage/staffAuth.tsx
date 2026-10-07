@@ -6,10 +6,20 @@ import { t } from "./i18n"
 import { clearApiCache } from "./useApiData"
 import { API_URL } from "@/config"
 import { ApiError, requestJson } from "@/lib/auth"
-import { StaffAuthContext, type StaffUser } from "./staffContext"
+import { EXPIRED_KEY, StaffAuthContext, type StaffUser } from "./staffContext"
 
 const AUTH_URL = `${API_URL}/api/v1/auth`
 const TOKEN_KEY = "alty-staff-token"
+
+/** When the token stops working (ms since epoch), from its "exp" claim. */
+function expiresAt(token: string | null): number | null {
+  try {
+    const payload = JSON.parse(atob(token!.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")))
+    return typeof payload.exp === "number" ? payload.exp * 1000 : null
+  } catch {
+    return null
+  }
+}
 
 
 // "Stay signed in" keeps the token in localStorage; otherwise it lasts for
@@ -37,18 +47,32 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<StaffUser | null>(null)
   const [isReady, setIsReady] = useState(!readToken())
 
-  const signOut = useCallback(() => {
+  const signOut = useCallback((reason?: "expired") => {
     clearApiCache() // the next person must not see this account's data
     const current = readToken()
-    if (current) {
+    const stillValid = current && (expiresAt(current) ?? Infinity) > Date.now()
+    if (current && stillValid && reason !== "expired") {
       // Records LOGOUT in the audit log; signing out locally never waits for it.
+      // (An expired session can't be logged out on the server — it already ended.)
       void fetch(`${AUTH_URL}/logout`, { method: "POST", headers: { Authorization: `Bearer ${current}` } }).catch(() => {})
+    }
+    if (reason === "expired") {
+      try { window.sessionStorage.setItem(EXPIRED_KEY, "1") } catch { /* storage blocked */ }
     }
     storeToken(null)
     setToken(null)
     setUser(null)
     setIsReady(true)
   }, [])
+
+  // Sign out the moment the session expires, so nothing keeps calling the API
+  // with a token the server will refuse (that was the source of 401 errors).
+  useEffect(() => {
+    const expiry = expiresAt(token)
+    if (!token || expiry === null) return
+    const timer = window.setTimeout(() => signOut("expired"), Math.max(0, expiry - Date.now()))
+    return () => window.clearTimeout(timer)
+  }, [token, signOut])
 
   // Restore a saved session; drop it when expired or not a staff account.
   useEffect(() => {
@@ -79,6 +103,7 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
     })
     const me = await requestJson<StaffUser>(`${AUTH_URL}/me`, {}, session.access_token)
     storeToken(session.access_token, remember)
+    try { window.sessionStorage.removeItem(EXPIRED_KEY) } catch { /* storage blocked */ }
     setToken(session.access_token)
     setUser(me)
     setIsReady(true)
@@ -89,7 +114,7 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
       try {
         return await requestJson<T>(`${API_URL}/api/v1${path}`, init, token)
       } catch (error) {
-        if (error instanceof ApiError && error.status === 401) signOut() // expired: back to sign-in
+        if (error instanceof ApiError && error.status === 401) signOut("expired") // back to sign-in
         throw error
       }
     },
@@ -104,7 +129,7 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
       } catch {
         throw new ApiError(t("Can't reach the server. Check your connection and try again."), 0)
       }
-      if (response.status === 401) signOut()
+      if (response.status === 401) signOut("expired")
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
         const detail = (payload as { detail?: unknown }).detail
@@ -117,9 +142,14 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
 
   const can = useCallback((page: string) => Boolean(user?.permissions.includes(page)), [user])
 
+  /** Re-read the signed-in account (e.g. after changing your own photo). */
+  const reloadUser = useCallback(async () => {
+    if (token) setUser(await requestJson<StaffUser>(`${AUTH_URL}/me`, {}, token))
+  }, [token])
+
   const value = useMemo(
-    () => ({ token, user, isReady, signIn, signOut, api, apiBlob, can }),
-    [token, user, isReady, signIn, signOut, api, apiBlob, can],
+    () => ({ token, user, isReady, signIn, signOut: () => signOut(), api, apiBlob, can, reloadUser }),
+    [token, user, isReady, signIn, signOut, api, apiBlob, can, reloadUser],
   )
   return <StaffAuthContext.Provider value={value}>{children}</StaffAuthContext.Provider>
 }

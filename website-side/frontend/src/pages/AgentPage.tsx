@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { ArrowLeft, LogIn, MapPin, MessageSquareText, Phone } from "lucide-react"
 import { API_URL } from "@/config"
 import { requestJson, useAuth } from "@/lib/auth"
+import { AgentPhoto } from "@/components/AgentPhoto"
 import { Link } from "@/components/Link"
 import { SiteHeader } from "@/components/SiteHeader"
 import { SiteFooter } from "@/components/SiteFooter"
@@ -83,9 +84,7 @@ export function AgentPage({ agentId }: { agentId: string }) {
         {agent && (
           <>
             <section className="ab-pop mt-4 flex flex-col gap-5 rounded-3xl border border-ab-border bg-ab-card p-6 md:flex-row md:items-center">
-              <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-ab-accent text-3xl font-black text-ab-ink">
-                {agent.full_name.split(" ").map((part) => part[0]).slice(0, 2).join("")}
-              </span>
+              <AgentPhoto name={agent.full_name} photoUrl={agent.photo_url} className="h-20 w-20 rounded-3xl text-3xl" />
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold uppercase tracking-[0.22em] text-ab-accent">Abellar Realty agent</p>
                 <h1 className="text-3xl font-extrabold">{agent.full_name}</h1>

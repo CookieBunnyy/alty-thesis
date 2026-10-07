@@ -6,8 +6,10 @@ import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData } from "./useApiData"
 import { t } from "./i18n"
+import { photoBody } from "./photoBody"
+import { PhotoControls, StaffAvatar } from "./avatars"
 
-type StaffUser = { id: number; username: string; full_name: string; role: string; is_active: boolean; last_login_at: string | null; created_at: string; agent_id: string | null; agent_name: string | null }
+type StaffUser = { id: number; username: string; full_name: string; role: string; is_active: boolean; last_login_at: string | null; created_at: string; agent_id: string | null; agent_name: string | null; photo_version: number | null }
 type AgentOption = { agent_id: string; full_name: string; status: string }
 type Role = { name: string; description?: string | null; permissions?: string[] } | string
 
@@ -22,7 +24,7 @@ const field = "mt-1 block w-full rounded-xl border border-ab-border bg-ab-input 
 /** Staff accounts (same users and roles as the desktop). Management roles can
  *  view; only the Administrator can add, edit or reset passwords. */
 export function UsersPage() {
-  const { api, user: me, signOut } = useStaffAuth()
+  const { api, user: me, signOut, reloadUser } = useStaffAuth()
   const toast = useToast()
   const isAdmin = me?.role === "Administrator"
   const [search, setSearch] = useState("")
@@ -40,9 +42,12 @@ export function UsersPage() {
     {
       key: "name", label: "User", sort: (u) => u.full_name,
       render: (u) => (
-        <span className="min-w-0">
-          <span className="block truncate font-semibold">{u.full_name}{u.id === me?.id && <span className="ml-1.5 text-xs font-normal text-ab-faint">({t("you")})</span>}</span>
-          <span className="block truncate text-xs text-ab-faint">@{u.username}</span>
+        <span className="flex min-w-0 items-center gap-3">
+          <StaffAvatar userId={u.id} name={u.full_name} version={u.photo_version} />
+          <span className="min-w-0">
+            <span className="block truncate font-semibold">{u.full_name}{u.id === me?.id && <span className="ml-1.5 text-xs font-normal text-ab-faint">({t("you")})</span>}</span>
+            <span className="block truncate text-xs text-ab-faint">@{u.username}</span>
+          </span>
         </span>
       ),
     },
@@ -115,6 +120,7 @@ export function UsersPage() {
           agents={agents}
           takenAgents={new Map(users.filter((u) => u.agent_id && (editing === "new" || u.id !== editing.id)).map((u) => [u.agent_id!, u.username]))}
           onClose={() => setEditing(null)}
+          onPhotoChanged={(saved) => { setEditing(saved); void reload(); if (saved.id === me?.id) void reloadUser() }}
           onSaved={(saved, changedOwnAccess) => {
             setEditing(null)
             toast(t(editing === "new" ? "Created {name}." : "Updated {name}.", { name: saved.full_name }))
@@ -129,10 +135,12 @@ export function UsersPage() {
   )
 }
 
-function UserForm({ user, roles, agents, takenAgents, onClose, onSaved }: {
+function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoChanged }: {
   user: StaffUser | null; roles: string[]; agents: AgentOption[]; takenAgents: Map<string, string>
   onClose: () => void; onSaved: (u: StaffUser, changedOwnAccess: boolean) => void
+  onPhotoChanged: (u: StaffUser) => void
 }) {
+  const toast = useToast()
   const { api, user: me } = useStaffAuth()
   const [form, setForm] = useState({ username: "", full_name: user?.full_name ?? "", role: user?.role ?? roles.find((r) => r === "Employee") ?? roles[0] ?? "", is_active: user?.is_active ?? true, password: "", confirm: "", agent_id: user?.agent_id ?? "" })
   const [error, setError] = useState("")
@@ -169,6 +177,26 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved }: {
           <button type="button" onClick={onClose} aria-label={t("Close")} className="rounded-lg p-2 text-ab-muted hover:bg-ab-hover"><X className="h-4 w-4" /></button>
         </header>
         <div className="space-y-3 p-5">
+          {user && (
+            <div className="flex items-center gap-3">
+              <StaffAvatar userId={user.id} name={user.full_name} version={user.photo_version} size="md" />
+              <PhotoControls
+                hasPhoto={Boolean(user.photo_version)}
+                onUpload={async (file) => {
+                  try {
+                    onPhotoChanged(await api<StaffUser>(`/users/${user.id}/photo`, { method: "PUT", body: photoBody(file) }))
+                    toast(t("Profile picture updated."))
+                  } catch (uploadError) { toast(t((uploadError as Error).message), "error") }
+                }}
+                onRemove={async () => {
+                  try {
+                    onPhotoChanged(await api<StaffUser>(`/users/${user.id}/photo`, { method: "DELETE" }))
+                    toast(t("Profile picture removed."))
+                  } catch (removeError) { toast(t((removeError as Error).message), "error") }
+                }}
+              />
+            </div>
+          )}
           {user ? <p className="text-sm text-ab-muted">{t("Username:")} <span className="font-semibold text-ab-text">@{user.username}</span></p> : (
             <label className="block text-sm font-medium">{t("Username")}<input className={field} autoComplete="off" value={form.username} onChange={(e) => set("username", e.target.value)} /></label>
           )}

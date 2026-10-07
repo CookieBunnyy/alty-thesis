@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_optional_client
 from app.models.agent import Agent
+from app.services.profile_photos import photo_bytes, photo_version
 from app.services import reviews as review_service
 from app.models.media import PropertyMedia
 from app.models.property_listing import PropertyListing
@@ -162,6 +163,9 @@ def _public_agent(agent: Agent, stats: dict, viewer: User | None = None) -> dict
         **review_service.stats_for(stats, agent.agent_id),
         # Legacy/system rating synced from Supabase (not client reviews).
         "star_rating": float(agent.star_rating) if agent.star_rating is not None else None,
+        # Same form as media URLs; the version makes browsers fetch a new photo.
+        "photo_url": (f"/api/v1/public/agents/{agent.agent_id}/photo?v={photo_version(agent)}"
+                      if photo_version(agent) else None),
     }
 
 
@@ -290,6 +294,16 @@ def list_nearby_agents(listing_id: int, request: Request, limit: int = 5,
     return {"property_id": listing.listing_id, "property_status": listing.status,
             "ranking": "Geographic (straight-line) proximity to the property",
             "routing": routing_status, "agents": results}
+
+
+@router.get("/agents/{agent_id}/photo")
+def get_agent_photo(agent_id: str, db: Session = Depends(get_db)):
+    """An agent's profile photo (agents' photos are meant for clients)."""
+    agent = db.get(Agent, agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="No photo")
+    return Response(content=photo_bytes(agent), media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/media/{media_id}")

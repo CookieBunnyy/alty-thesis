@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.services import reviews as review_service
 from app.services.agent_sync import sync_agents
 from app.services.analytics import agent_recorded_stats
 from app.services.audit import record_audit
+from app.services.profile_photos import photo_version, remove_photo, save_photo
 
 
 router = APIRouter(
@@ -48,6 +49,7 @@ def _with_reviews(agent: Agent, stats: dict, recorded: dict) -> AgentResponse:
     return response.model_copy(update={
         **review_service.stats_for(stats, agent.agent_id),
         **recorded.get(agent.agent_id, {}),
+        "photo_version": photo_version(agent),
     })
 
 
@@ -217,3 +219,33 @@ def sync_agent_records(
                  details={key: value for key, value in result.items() if key != "last_synced_at"})
     db.commit()
     return result
+
+# =========================================================
+# PROFILE PHOTO (management roles)
+# =========================================================
+
+@router.put("/{agent_id}/photo", response_model=AgentResponse)
+async def upload_agent_photo(agent_id: str, file: UploadFile = File(...), db: Session = Depends(get_db),
+                             user: User = Depends(require_management)):
+    """Set the agent's profile photo (cropped to a square). It is shown to staff
+    and on the public website's agent cards and agent page."""
+    agent = db.get(Agent, agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    await save_photo(agent, "agents", agent_id, file)
+    record_audit(db, "AGENT_PHOTO_UPDATED", actor=user, entity_type="agents", entity_id=agent_id)
+    db.commit()
+    db.refresh(agent)
+    return _with_reviews(agent, review_service.review_stats(db, [agent_id]), agent_recorded_stats(db, [agent_id]))
+
+
+@router.delete("/{agent_id}/photo", response_model=AgentResponse)
+def delete_agent_photo(agent_id: str, db: Session = Depends(get_db), user: User = Depends(require_management)):
+    agent = db.get(Agent, agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    remove_photo(agent)
+    record_audit(db, "AGENT_PHOTO_REMOVED", actor=user, entity_type="agents", entity_id=agent_id)
+    db.commit()
+    db.refresh(agent)
+    return _with_reviews(agent, review_service.review_stats(db, [agent_id]), agent_recorded_stats(db, [agent_id]))

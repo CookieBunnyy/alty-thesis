@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { AgentPhoto } from "@/components/AgentPhoto"
 import { CheckCircle2, ExternalLink, LoaderCircle, LogIn, MapPin, MessageSquareText, Phone, UserRound } from "lucide-react"
 import { getNearbyAgents } from "@/lib/mapApi"
 import { useAuth } from "@/lib/auth"
@@ -70,9 +71,13 @@ export function NearbyAgents({ listingId, selectedAgentId, onSelect, onLoaded }:
                 className={`rounded-xl border p-3 transition ${isSelected ? "border-ab-accent bg-ab-accent-soft" : "border-ab-border bg-ab-card-2"}`}
               >
                 <div className="flex items-start gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ab-hover text-ab-accent">
-                    <UserRound className="h-5 w-5" />
-                  </span>
+                  {agent.photo_url
+                    ? <AgentPhoto name={agent.full_name} photoUrl={agent.photo_url} className="h-10 w-10 rounded-full" />
+                    : (
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ab-hover text-ab-accent">
+                        <UserRound className="h-5 w-5" />
+                      </span>
+                    )}
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-x-2 text-sm font-semibold text-ab-text">
                       {agent.full_name}

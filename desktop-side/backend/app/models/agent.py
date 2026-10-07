@@ -36,6 +36,10 @@ class Agent(Base):
         String(24), default="PENDING", nullable=False
     )
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Profile photo (ALTY only; not part of the Supabase agent record).
+    photo_bucket: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    photo_path: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    photo_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

@@ -44,6 +44,7 @@ class UserResponse(BaseModel):
     last_login_at: datetime | None = None
     agent_id: str | None = None
     agent_name: str | None = None
+    photo_version: int | None = None
     created_at: datetime
     updated_at: datetime
 

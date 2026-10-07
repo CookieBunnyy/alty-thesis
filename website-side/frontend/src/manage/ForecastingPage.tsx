@@ -6,6 +6,7 @@ import { LoadState, PageHeader, Section, Select } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
 import { locale, t } from "./i18n"
+import { Link } from "@/components/Link"
 
 type Forecast = {
   metric: string; status: "estimated" | "insufficient_data"; message?: string
@@ -25,6 +26,49 @@ type Metric = keyof typeof METRICS
 const monthName = (key: string) => {
   const [year, month] = key.split("-").map(Number)
   return new Date(year, month - 1, 1).toLocaleDateString(locale(), { month: "long", year: "numeric" })
+}
+
+type Outlook = {
+  agent_id: string; full_name: string; status: string; observations: number; nonzero_months: number
+  minimum_required: number; recent_sales: number; expected_sales: number | null; trend_per_month: number | null
+}
+
+/** Each active agent's expected completed sales for the next 3 months. */
+function AgentOutlook() {
+  const { api } = useStaffAuth()
+  const load = useCallback(() => api<{ horizon: number; agents: Outlook[] }>("/intelligence/agent-forecasts?horizon=3"), [api])
+  const { data, error, loading, reload } = useApiData(load, "agent-forecasts")
+  const rows = [...(data?.agents ?? [])].sort((a, b) => (b.expected_sales ?? -1) - (a.expected_sales ?? -1))
+  return (
+    <Section title="Agent performance outlook">
+      <p className="mb-3 text-xs text-ab-faint">
+        {t("Expected completed sales per agent for the next 3 months, from each agent's own monthly history (same method as above). Agents without enough history show why.")}
+      </p>
+      <LoadState loading={loading && !data} error={error} onRetry={reload} />
+      {data && (rows.length === 0 ? <p className="text-sm italic text-ab-faint">{t("No active agents.")}</p> : (
+        <ul className="divide-y divide-ab-border text-sm">
+          {rows.map((row) => (
+            <li key={row.agent_id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2.5">
+              <Link to={`/manage/agents?id=${encodeURIComponent(row.agent_id)}`} className="min-w-40 flex-1 font-semibold hover:underline">{row.full_name}</Link>
+              {row.status === "estimated" ? (
+                <>
+                  <span className="tabular-nums"><span className="text-lg font-extrabold">{row.expected_sales?.toFixed(1)}</span> <span className="text-xs text-ab-faint">{t("expected sales")}</span></span>
+                  <span className="text-xs text-ab-muted">
+                    {t("{n} in the last 3 months", { n: row.recent_sales })}
+                    {row.trend_per_month != null && ` · ${row.trend_per_month >= 0 ? "▲" : "▼"} ${Math.abs(row.trend_per_month).toFixed(2)} ${t("per month")}`}
+                  </span>
+                </>
+              ) : (
+                <span className="text-xs text-ab-faint">
+                  {t("Not enough history ({n} month(s), {s} with sales)", { n: row.observations, s: row.nonzero_months })}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ))}
+    </Section>
+  )
 }
 
 export function ForecastingPage() {
@@ -117,6 +161,7 @@ export function ForecastingPage() {
             </div>
           )}
 
+          <AgentOutlook />
           <InsightPanel insights={data!.insights} />
         </>
       )}

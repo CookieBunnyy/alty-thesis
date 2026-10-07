@@ -20,6 +20,7 @@ from app.core.security import (
 )
 from app.models.user import User
 from app.schemas.auth import CurrentUser, Token, UserRegister
+from app.services.profile_photos import photo_version
 from app.services.audit import record_audit, record_audit_now
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -37,6 +38,7 @@ def current_user_payload(user: User) -> dict:
         "is_active": user.is_active,
         "last_login_at": user.last_login_at,
         "agent_id": user.agent_id,
+        "photo_version": photo_version(user),
     }
 
 

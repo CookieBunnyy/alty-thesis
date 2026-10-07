@@ -1,6 +1,6 @@
 """User administration (administrators) and read access (management)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,7 @@ from app.core.security import (
     ADMINISTRATOR,
     ROLES,
     canonical_role,
+    get_current_user,
     get_password_hash,
     permissions_for,
     require_admin,
@@ -19,6 +20,7 @@ from app.models.role import Role
 from app.models.user import User
 from app.schemas.user import PasswordReset, UserCreate, UserResponse, UserUpdate
 from app.services.audit import record_audit
+from app.services.profile_photos import photo_bytes, photo_version, remove_photo, save_photo
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -35,6 +37,7 @@ def _serialize(user: User, db: Session | None = None) -> dict:
     data["role"] = canonical_role(user.role)
     agent = db.get(Agent, user.agent_id) if db is not None and user.agent_id else None
     data["agent_name"] = agent.full_name if agent else None
+    data["photo_version"] = photo_version(user)
     return data
 
 
@@ -54,6 +57,73 @@ def _active_admins(db: Session) -> int:
     return int(db.scalar(select(func.count(User.id)).where(
         func.lower(User.role) == ADMINISTRATOR.casefold(), User.is_active.is_(True)
     )) or 0)
+
+
+# ---- profile photos ---------------------------------------------------------
+# Declared before the /{user_id} routes so "me" isn't read as an id.
+
+def _staff(user: User) -> User:
+    if canonical_role(user.role) == "Client":
+        raise HTTPException(status_code=403, detail="Staff accounts only")
+    return user
+
+
+@router.put("/me/photo", response_model=UserResponse)
+async def upload_my_photo(file: UploadFile = File(...), db: Session = Depends(get_db),
+                          user: User = Depends(get_current_user)):
+    """Set your own profile photo (cropped to a square)."""
+    _staff(user)
+    await save_photo(user, "users", user.id, file)
+    record_audit(db, "USER_PHOTO_UPDATED", actor=user, entity_type="users", entity_id=user.id)
+    db.commit()
+    db.refresh(user)
+    return _serialize(user, db)
+
+
+@router.delete("/me/photo", response_model=UserResponse)
+def delete_my_photo(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    _staff(user)
+    remove_photo(user)
+    record_audit(db, "USER_PHOTO_REMOVED", actor=user, entity_type="users", entity_id=user.id)
+    db.commit()
+    db.refresh(user)
+    return _serialize(user, db)
+
+
+@router.get("/{user_id}/photo")
+def get_user_photo(user_id: int, db: Session = Depends(get_db), viewer: User = Depends(get_current_user)):
+    """A staff member's photo, for signed-in staff only."""
+    _staff(viewer)
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="No photo")
+    return Response(content=photo_bytes(user), media_type="image/jpeg",
+                    headers={"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"})
+
+
+@router.put("/{user_id}/photo", response_model=UserResponse)
+async def upload_user_photo(user_id: int, file: UploadFile = File(...), db: Session = Depends(get_db),
+                            actor: User = Depends(require_admin)):
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    await save_photo(user, "users", user.id, file)
+    record_audit(db, "USER_PHOTO_UPDATED", actor=actor, entity_type="users", entity_id=user.id)
+    db.commit()
+    db.refresh(user)
+    return _serialize(user, db)
+
+
+@router.delete("/{user_id}/photo", response_model=UserResponse)
+def delete_user_photo(user_id: int, db: Session = Depends(get_db), actor: User = Depends(require_admin)):
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    remove_photo(user)
+    record_audit(db, "USER_PHOTO_REMOVED", actor=actor, entity_type="users", entity_id=user.id)
+    db.commit()
+    db.refresh(user)
+    return _serialize(user, db)
 
 
 @router.get("/roles")

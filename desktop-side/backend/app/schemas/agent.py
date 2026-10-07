@@ -29,6 +29,11 @@ class AgentResponse(BaseModel):
     open_reservations: int = 0
     recorded_completed_sales: int = 0
     recorded_sales_value: float = 0
+    recorded_deals: int = 0
+    # Completed sales ÷ recorded deals, in percent (None without any deal).
+    performance_rate: float | None = None
+    # Changes whenever the profile photo changes; None when there is no photo.
+    photo_version: int | None = None
     status: str
     sync_status: str
     last_synced_at: datetime | None = None
