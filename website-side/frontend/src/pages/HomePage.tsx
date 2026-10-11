@@ -214,7 +214,7 @@ export function HomePage() {
   const reviewStats = data?.stats.client_reviews
 
   return (
-    <div className="min-h-dvh bg-ab-bg text-ab-text">
+    <div className="min-h-dvh overflow-x-clip bg-ab-bg text-ab-text">
       {/* ---------------- HERO ---------------- */}
       <section className="relative isolate flex min-h-[92dvh] flex-col overflow-hidden bg-[#242424]">
         <div className="absolute inset-0 -z-10" aria-hidden="true">

@@ -6,7 +6,7 @@ export const prefersReducedMotion = () =>
 /** Adds `is-visible` when the element scrolls into view and removes it once
  *  it is fully out of view again, so the animation replays each time the
  *  section is reached (CSS does the animation; see .reveal in index.css).
- *  `onChange` hears each enter/leave. Reduced motion shows it at once. */
+ *  `onChange` hears each enter/leave. Reduced motion only fades (index.css). */
 export function useReveal<T extends HTMLElement>(onChange?: (visible: boolean) => void) {
   const ref = useRef<T | null>(null)
   const changed = useRef(onChange)
@@ -16,7 +16,8 @@ export function useReveal<T extends HTMLElement>(onChange?: (visible: boolean) =
   useEffect(() => {
     const element = ref.current
     if (!element) return
-    if (prefersReducedMotion() || !("IntersectionObserver" in window)) {
+    // Reduced motion still fades (CSS drops the movement), so it observes too.
+    if (!("IntersectionObserver" in window)) {
       element.classList.add("is-visible")
       changed.current?.(true)
       return
