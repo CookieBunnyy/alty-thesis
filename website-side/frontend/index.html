@@ -2,9 +2,29 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Alty Real Estate</title>
+    <meta name="description" content="Abellar Realty: property listings, an interactive property map and chat assistance." />
+    <link rel="icon" type="image/png" href="/icons/site-favicon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/site-180.png" />
+    <meta name="theme-color" content="#11160A" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Abellar Realty" />
+    <script>
+      // The Management System (/manage) installs as its own app, "Alty MSA".
+      // Choose its manifest before the browser reads it (src/lib/pwa.ts keeps
+      // this in step when moving between the two parts of the site).
+      if (/^\/manage(\/|$)/.test(location.pathname)) {
+        document.querySelector('link[rel="manifest"]').href = "/manage.webmanifest"
+        document.querySelector('link[rel="icon"]').href = "/icons/manage-favicon.png"
+        document.querySelector('link[rel="apple-touch-icon"]').href = "/icons/manage-180.png"
+        document.querySelector('meta[name="theme-color"]').content = "#1D2116"
+        document.querySelector('meta[name="apple-mobile-web-app-title"]').content = "Alty MSA"
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -5,6 +5,7 @@ import { Link } from "@/components/Link"
 import { navigate, useLocation } from "@/lib/router"
 import { useTheme } from "@/hooks/useTheme"
 import { ThemeToggle } from "./ThemeToggle"
+import { InstallAppButton } from "./InstallAppButton"
 
 const NAV = [
   { to: "/", label: "Home" },
@@ -85,6 +86,7 @@ export function SiteHeader({ overlay = false }: { overlay?: boolean }) {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
+          <InstallAppButton area="site" overlay={overlay} />
           <ThemeToggle theme={theme} onToggle={toggleTheme} overlay={overlay} />
 
           {client ? (

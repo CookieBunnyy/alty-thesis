@@ -30,6 +30,7 @@ import { GlobalSearch, NotificationBell } from "./HeaderTools"
 import { useStaffAuth } from "./staffContext"
 import { t } from "./i18n"
 import { StaffAvatar } from "./avatars"
+import { InstallAppButton } from "@/components/InstallAppButton"
 
 type NavItem = { key: string; label: string; icon: LucideIcon; path?: string }
 
@@ -72,10 +73,11 @@ const NAV: { group: string; items: NavItem[] }[] = [
 ]
 
 // Phones and tablets: a bottom bar with the most used pages (in this order,
-// only those the role can open) and "More" for the full menu.
+// only those the role can open) and the account's own profile. The full menu
+// is the button at the top left.
 const QUICK = ["dashboard", "properties", "transactions", "documents", "clients", "agents", "analytics"]
 
-function BottomNav({ pathname, can, onMore }: { pathname: string; can: (key: string) => boolean; onMore: () => void }) {
+function BottomNav({ pathname, can, me }: { pathname: string; can: (key: string) => boolean; me: ReactNode }) {
   const items = NAV.flatMap((group) => group.items)
   const quick = QUICK.map((key) => items.find((item) => item.key === key)).filter((item): item is NavItem => Boolean(item?.path && can(item.key))).slice(0, 4)
   const cell = "flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 px-1 text-[10px] font-semibold"
@@ -92,10 +94,11 @@ function BottomNav({ pathname, can, onMore }: { pathname: string; can: (key: str
           </Link>
         )
       })}
-      <button type="button" onClick={onMore} className={`${cell} text-ab-muted hover:text-ab-text`}>
-        <Menu className="h-5 w-5" />
-        <span>{t("More")}</span>
-      </button>
+      <Link to="/manage/profile" aria-current={pathname === "/manage/profile" ? "page" : undefined}
+        className={`${cell} ${pathname === "/manage/profile" ? "text-ab-accent" : "text-ab-muted hover:text-ab-text"}`}>
+        <span className={`rounded-full ${pathname === "/manage/profile" ? "ring-2 ring-ab-accent" : ""}`}>{me}</span>
+        <span>{t("Profile")}</span>
+      </Link>
     </nav>
   )
 }
@@ -200,19 +203,21 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
           </button>
           <h1 className="min-w-0 flex-1 truncate text-base font-bold sm:text-lg md:flex-none md:shrink-0">{title}</h1>
           <div className="hidden min-w-0 flex-1 justify-center px-2 md:flex"><GlobalSearch /></div>
+          <InstallAppButton area="manage" translate={t} />
           <NotificationBell />
           <span className="hidden lg:block"><ThemeToggle theme={theme} onToggle={toggleTheme} /></span>
-          <button type="button" onClick={() => setMenuOpen(true)} aria-label={t("Account")}
+          <Link to="/manage/profile" aria-label={t("My profile")}
             className="flex shrink-0 items-center rounded-full lg:hidden">
             {me}
-          </button>
-          <div className="hidden items-center gap-2.5 rounded-xl border border-ab-border bg-ab-card px-2 py-1.5 lg:flex">
+          </Link>
+          <Link to="/manage/profile" title={t("My profile")}
+            className="hidden items-center gap-2.5 rounded-xl border border-ab-border bg-ab-card px-2 py-1.5 transition hover:border-ab-border-strong lg:flex">
             {me}
             <span className="hidden leading-tight sm:block">
               <span className="block text-xs font-bold">{user?.full_name}</span>
               <span className="block text-[11px] text-ab-faint">{t(user?.role ?? "")}</span>
             </span>
-          </div>
+          </Link>
           <button type="button" onClick={signOut} title={t("Sign out")} aria-label={t("Sign out")} className="hidden rounded-lg border border-ab-border-strong p-2 text-ab-muted hover:bg-ab-hover hover:text-ab-danger lg:block">
             <LogOut className="h-4 w-4" />
           </button>
@@ -221,7 +226,8 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
           <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
         </main>
       </div>
-      <BottomNav pathname={pathname} can={can} onMore={() => setMenuOpen(true)} />
+      <BottomNav pathname={pathname} can={can}
+        me={user ? <StaffAvatar userId={user.id} name={user.full_name} version={user.photo_version} size="xs" /> : null} />
     </div>
   )
 }

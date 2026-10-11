@@ -657,9 +657,12 @@ export default function App() {
 
       <div className="relative flex h-full min-h-0 w-full flex-1 overflow-hidden">
         <aside
+          // Phones: the Chat Assistance tab uses the whole screen, so the listings
+          // panel steps aside while it is open (and comes back on the Map tab).
           className={`flex h-full shrink-0 flex-col border-r border-ab-border bg-ab-card shadow-[8px_0_20px_rgba(12,53,41,0.12)] transition-all duration-300 ease-in-out ${
-            isListingsOpen ? "w-full md:w-[360px] lg:w-[400px]" : "w-0 overflow-hidden border-r-0"
+            isListingsOpen && !(isMobileView && activeTab === "chat") ? "w-full md:w-[360px] lg:w-[400px]" : "w-0 overflow-hidden border-r-0"
           }`}
+          hidden={isMobileView && activeTab === "chat"}
         >
           {isListingsOpen && !isMobileView && selectedProperty ? (
             <div className="flex h-full min-h-0 flex-col bg-ab-card">

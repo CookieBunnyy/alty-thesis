@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>You're offline</title>
+<style>
+  :root { color-scheme: light dark; --bg: #F4F6F2; --card: #FFFFFF; --text: #11160A; --muted: #5B6152; --accent: #5E7E00; --ink: #FFFFFF; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #242424; --card: #2E2E2E; --text: #F2F4EE; --muted: #B4B9AC; --accent: #C7F000; --ink: #0B0F10; } }
+  body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; padding: 16px; box-sizing: border-box; }
+  main { max-width: 360px; background: var(--card); border-radius: 20px; padding: 28px; text-align: center; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  p { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0 0 20px; }
+  button { border: 0; border-radius: 12px; padding: 12px 20px; font-weight: 600; background: var(--accent); color: var(--ink); cursor: pointer; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>You're offline</h1>
+  <p>Abellar Realty needs an internet connection to load listings and records. Check your connection and try again.</p>
+  <button type="button" onclick="location.reload()">Try again</button>
+</main>
+</body>
+</html>

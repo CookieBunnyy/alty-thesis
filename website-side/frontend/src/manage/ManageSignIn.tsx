@@ -10,6 +10,7 @@ import { navigate, safeNext, useLocation } from "@/lib/router"
 import type { HomeData } from "@/types"
 import { EXPIRED_KEY, useStaffAuth } from "./staffContext"
 import { t } from "./i18n"
+import { InstallAppButton } from "@/components/InstallAppButton"
 
 const field =
   "mt-1.5 block w-full rounded-xl border border-ab-border bg-ab-input px-4 py-3 text-sm text-ab-text placeholder:text-ab-faint focus:border-ab-accent focus:outline-none"
@@ -178,7 +179,10 @@ export function ManageSignIn() {
           {picture}
           <div className="relative flex items-start justify-between p-5">
             <Link to="/"><Wordmark light /></Link>
-            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            <div className="flex items-center gap-2">
+              <InstallAppButton area="manage" translate={t} overlay />
+              <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            </div>
           </div>
         </div>
         <main className="relative -mt-8 flex-1 rounded-t-[2rem] bg-ab-card px-6 pb-10 pt-8 shadow-[0_-12px_30px_rgba(0,0,0,0.12)]">
@@ -199,7 +203,10 @@ export function ManageSignIn() {
         <div className="flex flex-col">
           <div className="flex items-center justify-between px-4 pt-2">
             <Link to="/"><Wordmark /></Link>
-            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            <div className="flex items-center gap-2">
+              <InstallAppButton area="manage" translate={t} />
+              <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            </div>
           </div>
           <main className="flex flex-1 items-center justify-center px-6 py-10">
             <div className="w-full max-w-sm">

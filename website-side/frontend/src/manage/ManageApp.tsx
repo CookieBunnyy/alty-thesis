@@ -27,6 +27,7 @@ import { ManageLayout } from "./ManageLayout"
 import { ManageSignIn } from "./ManageSignIn"
 import { StaffAuthProvider } from "./staffAuth"
 import { useStaffAuth } from "./staffContext"
+import { ProfilePage } from "./ProfilePage"
 
 // path -> [permission key, title, page]
 const PAGES: Record<string, [string, string, () => React.ReactNode]> = {
@@ -83,6 +84,10 @@ function ManageRoutes() {
     )
   }
 
+  // "My profile": every signed-in staff member.
+  if (path === "/manage/profile") {
+    return <ManageLayout title={t("My profile")}><ProfilePage /></ManageLayout>
+  }
   // "My Work": any account linked to an agent record.
   if (path === "/manage/my-work" && user.agent_id) {
     return <ManageLayout title={t("My Work")}><MyWorkPage /></ManageLayout>

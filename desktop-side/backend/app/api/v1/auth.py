@@ -19,7 +19,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import User
-from app.schemas.auth import CurrentUser, Token, UserRegister
+from app.schemas.auth import CurrentUser, PasswordChange, Token, UserRegister
 from app.services.profile_photos import photo_version
 from app.services.audit import record_audit, record_audit_now
 
@@ -95,6 +95,20 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
 @router.get("/me", response_model=CurrentUser)
 def me(user: User = Depends(get_current_user)):
     return current_user_payload(user)
+
+
+@router.post("/change-password", status_code=204)
+def change_password(payload: PasswordChange, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Change your own password (the current one is required)."""
+    if not verify_password(payload.current_password, user.password_hash):
+        record_audit(db, "PASSWORD_CHANGE_FAILED", actor=user, entity_type="users", entity_id=user.id, result="FAILED")
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The current password is incorrect")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(status_code=422, detail="Choose a password different from the current one")
+    user.password_hash = get_password_hash(payload.new_password)
+    record_audit(db, "PASSWORD_CHANGED", actor=user, entity_type="users", entity_id=user.id)
+    db.commit()
 
 
 @router.post("/logout", status_code=204)

@@ -1,0 +1,24 @@
+{
+  "id": "/",
+  "name": "Abellar Realty",
+  "short_name": "Abellar Realty",
+  "description": "Find properties from Abellar Realty: listings, an interactive property map, chat assistance and agents.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#11160A",
+  "background_color": "#11160A",
+  "lang": "en",
+  "categories": ["business", "lifestyle"],
+  "icons": [
+    { "src": "/icons/site-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/site-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/site-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/site-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Properties", "url": "/properties", "icons": [{ "src": "/icons/site-192.png", "sizes": "192x192" }] },
+    { "name": "Property Map", "url": "/map", "icons": [{ "src": "/icons/site-192.png", "sizes": "192x192" }] }
+  ]
+}

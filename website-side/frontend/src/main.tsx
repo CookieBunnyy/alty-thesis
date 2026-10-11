@@ -8,9 +8,12 @@ import { ThemeProvider } from "./hooks/useTheme"
 import { AuthProvider } from "./components/AuthProvider"
 import { TopProgressBar } from "./components/TopProgressBar"
 import { installFetchTracking } from "./lib/loading"
+import { setupPwa } from "./lib/pwa"
 
 // Count API requests for the loading bar before anything fetches.
 installFetchTracking()
+// Installable app: service worker + the browser's install prompt.
+setupPwa()
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

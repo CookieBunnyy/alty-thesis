@@ -9,6 +9,7 @@ import { AuthPage } from "./pages/AuthPage"
 import { AccountPage } from "./pages/AccountPage"
 import { AgentPage } from "./pages/AgentPage"
 import { SiteHeader } from "./components/SiteHeader"
+import { applyManifest, areaOf } from "@/lib/pwa"
 
 // Management System: its own bundle, downloaded only by staff who open /manage.
 const ManageApp = lazy(() => import("./manage/ManageApp"))
@@ -37,7 +38,10 @@ function NotFound() {
 
 export function AppRoutes() {
   const { pathname } = useLocation()
-  if (pathname === "/manage" || pathname.startsWith("/manage/")) {
+  const area = areaOf(pathname)
+  // Install as "Alty MSA" inside /manage, as "Abellar Realty" elsewhere.
+  useEffect(() => applyManifest(area), [area])
+  if (area === "manage") {
     return (
       <Suspense
         fallback={

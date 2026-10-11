@@ -97,3 +97,19 @@ def test_performance_rate_and_agent_forecast(api, admin, db):
     assert outlook["AGT-Q"]["status"] == "insufficient_data" and outlook["AGT-Q"]["expected_sales"] is None
     single = api.get("/api/v1/intelligence/agents/AGT-F/forecast", headers=admin).json()
     assert single["agent_id"] == "AGT-F" and single["status"] == "estimated"
+
+
+def test_staff_change_their_own_password(api, employee):
+    wrong = api.post("/api/v1/auth/change-password", headers=employee,
+                     json={"current_password": "not-it", "new_password": "Brand-New-Pass-1"})
+    assert wrong.status_code == 400
+    short = api.post("/api/v1/auth/change-password", headers=employee,
+                     json={"current_password": "x", "new_password": "short"})
+    assert short.status_code == 422
+    assert api.post("/api/v1/auth/change-password",
+                    json={"current_password": "a", "new_password": "Brand-New-Pass-1"}).status_code == 401
+    changed = api.post("/api/v1/auth/change-password", headers=employee,
+                       json={"current_password": "password123", "new_password": "Brand-New-Pass-1"})
+    assert changed.status_code == 204, changed.text
+    assert api.post("/api/v1/auth/login", data={"username": "employee", "password": "password123"}).status_code == 401
+    assert api.post("/api/v1/auth/login", data={"username": "employee", "password": "Brand-New-Pass-1"}).status_code == 200
