@@ -11,6 +11,7 @@ import type { HomeData } from "@/types"
 import { EXPIRED_KEY, useStaffAuth } from "./staffContext"
 import { t } from "./i18n"
 import { InstallAppButton } from "@/components/InstallAppButton"
+import { SystemShowcase } from "./SystemShowcase"
 import { ForgotPasswordForm, ResetPasswordForm } from "./AccountRecovery"
 import { formatWait, useCountdown, useSecurityConfig } from "./authRequests"
 import { ApiError } from "@/lib/auth"
@@ -21,9 +22,10 @@ const field =
 
 /** A real listing photo for the picture panel (the public home page's
  *  featured listings); null until loaded, or when none has a photo. */
-function useShowcasePhoto(width: number) {
+function useShowcasePhoto(width: number, enabled = true) {
   const [photo, setPhoto] = useState<string | null>(null)
   useEffect(() => {
+    if (!enabled) return
     let alive = true
     requestJson<HomeData>(`${API_URL}/api/v1/public/home`)
       .then((home) => {
@@ -32,7 +34,7 @@ function useShowcasePhoto(width: number) {
       })
       .catch(() => {})
     return () => { alive = false }
-  }, [width])
+  }, [width, enabled])
   return photo
 }
 
@@ -82,7 +84,7 @@ export function ManageSignIn({ view = "signin" }: { view?: "signin" | "forgot" |
     try { return window.sessionStorage.getItem(EXPIRED_KEY) === "1" } catch { return false }
   })
   const desktop = useIsDesktop()
-  const photo = useShowcasePhoto(desktop ? 1400 : 900)
+  const photo = useShowcasePhoto(900, !desktop)
 
   useEffect(() => {
     if (user && view === "signin") navigate(next?.startsWith("/manage") ? next : "/manage", { replace: true })
@@ -246,13 +248,7 @@ export function ManageSignIn({ view = "signin" }: { view?: "signin" | "forgot" |
             </div>
           </main>
         </div>
-        <aside className="relative min-h-[560px] overflow-hidden rounded-[2.5rem] rounded-tl-[5rem] rounded-br-[5rem]" aria-hidden>
-          {picture}
-          <p className="absolute right-8 top-8 max-w-sm text-right text-xl font-bold leading-snug text-white drop-shadow">
-            {t("Listings, clients, documents and deals — managed in one place.")}
-          </p>
-          <p className="absolute bottom-8 left-8 text-sm font-semibold text-white/90 drop-shadow">ALTY · Abellar Realty</p>
-        </aside>
+        <SystemShowcase />
       </div>
       )}
     </div>

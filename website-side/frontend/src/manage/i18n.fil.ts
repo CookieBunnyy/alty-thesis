@@ -1001,6 +1001,7 @@ export const FILIPINO: Record<string, string> = {
   "Try again in {time}": "Subukan muli sa loob ng {time}",
   "Used for “Forgot password”: reset links go only to this address. One email per account.": "Para sa “Nakalimutan ang password”: dito lang ipinapadala ang mga reset link. Isang email bawat account.",
   "Your password was changed. Every device signed in to your account was signed out.": "Napalitan ang iyong password. Na-sign out ang lahat ng device na naka-sign in sa iyong account.",
+  "A look at the Management System": "Isang silip sa Management System",
   // ---- My Work ----
   "Your clients, transactions and client reviews.": "Ang iyong mga kliyente, transaksyon at review ng kliyente.",
   "My clients": "Aking mga kliyente",
