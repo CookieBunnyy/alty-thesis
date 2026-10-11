@@ -1,6 +1,6 @@
 """User administration (administrators) and read access (management)."""
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from app.models.role import Role
 from app.models.user import User
 from app.schemas.user import PasswordReset, UserCreate, UserResponse, UserUpdate
 from app.services.audit import record_audit
+from app.services.password_reset import send_password_changed_notice, set_password
 from app.services.profile_photos import photo_bytes, photo_version, remove_photo, save_photo
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -51,6 +52,18 @@ def _valid_agent_link(db: Session, agent_id: str | None, user_id: int | None = N
     if other is not None and other.id != user_id:
         raise HTTPException(status_code=409, detail=f"Agent {agent_id} is already linked to @{other.username}")
     return agent_id
+
+
+def _unused_email(db: Session, email: str | None, user_id: int | None = None) -> str | None:
+    """A staff email must belong to one account only (any letter case)."""
+    if not email:
+        return None
+    query = select(User.id).where(func.lower(User.email) == email.lower())
+    if user_id is not None:
+        query = query.where(User.id != user_id)
+    if db.scalar(query):
+        raise HTTPException(status_code=409, detail="This email is already used by another account")
+    return email.lower()
 
 
 def _active_admins(db: Session) -> int:
@@ -146,12 +159,12 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), actor: User 
         raise HTTPException(status_code=409, detail="Username already exists")
     user = User(username=payload.username, full_name=payload.full_name, role=_valid_role(payload.role),
                 password_hash=get_password_hash(payload.password), is_active=payload.is_active,
-                agent_id=_valid_agent_link(db, payload.agent_id))
+                agent_id=_valid_agent_link(db, payload.agent_id), email=_unused_email(db, payload.email))
     db.add(user)
     db.flush()
     record_audit(db, "USER_CREATED", actor=actor, entity_type="users", entity_id=user.id,
                  details={"username": user.username, "role": user.role, "is_active": user.is_active,
-                          "agent_id": user.agent_id})
+                          "agent_id": user.agent_id, "email": user.email})
     db.commit()
     db.refresh(user)
     return _serialize(user, db)
@@ -168,6 +181,8 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
         changes["role"] = _valid_role(changes["role"])
     if "agent_id" in changes:
         changes["agent_id"] = _valid_agent_link(db, changes["agent_id"], user.id)
+    if "email" in changes:
+        changes["email"] = _unused_email(db, changes["email"], user.id)
     was_admin = canonical_role(user.role) == ADMINISTRATOR and user.is_active
     stays_admin = (
         changes.get("role", canonical_role(user.role)) == ADMINISTRATOR
@@ -193,12 +208,14 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
 
 
 @router.post("/{user_id}/reset-password", status_code=204)
-def reset_password(user_id: int, payload: PasswordReset, db: Session = Depends(get_db),
+def reset_password(user_id: int, payload: PasswordReset, background: BackgroundTasks, db: Session = Depends(get_db),
                    actor: User = Depends(require_admin)):
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    user.password_hash = get_password_hash(payload.password)
+    # Ends every session of the account; the person is told by email.
+    set_password(user, payload.password)
     record_audit(db, "USER_PASSWORD_RESET", actor=actor, entity_type="users", entity_id=user.id,
                  details={"username": user.username})
     db.commit()
+    background.add_task(send_password_changed_notice, user.email, user.full_name)

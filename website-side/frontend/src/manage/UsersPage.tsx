@@ -9,7 +9,7 @@ import { t } from "./i18n"
 import { photoBody } from "./photoBody"
 import { PhotoControls, StaffAvatar } from "./avatars"
 
-type StaffUser = { id: number; username: string; full_name: string; role: string; is_active: boolean; last_login_at: string | null; created_at: string; agent_id: string | null; agent_name: string | null; photo_version: number | null }
+type StaffUser = { id: number; username: string; full_name: string; role: string; is_active: boolean; last_login_at: string | null; created_at: string; agent_id: string | null; agent_name: string | null; photo_version: number | null; email: string | null }
 type AgentOption = { agent_id: string; full_name: string; status: string }
 type Role = { name: string; description?: string | null; permissions?: string[] } | string
 
@@ -142,7 +142,7 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
 }) {
   const toast = useToast()
   const { api, user: me } = useStaffAuth()
-  const [form, setForm] = useState({ username: "", full_name: user?.full_name ?? "", role: user?.role ?? roles.find((r) => r === "Employee") ?? roles[0] ?? "", is_active: user?.is_active ?? true, password: "", confirm: "", agent_id: user?.agent_id ?? "" })
+  const [form, setForm] = useState({ username: "", full_name: user?.full_name ?? "", role: user?.role ?? roles.find((r) => r === "Employee") ?? roles[0] ?? "", is_active: user?.is_active ?? true, password: "", confirm: "", agent_id: user?.agent_id ?? "", email: user?.email ?? "" })
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }))
@@ -151,6 +151,9 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
     event.preventDefault()
     setError("")
     if (!form.full_name.trim()) return setError(t("Enter the full name."))
+    const email = form.email.trim()
+    if (!user && !email) return setError(t("Enter the email address."))
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return setError(t("Enter a valid email address."))
     if (!user) {
       if (form.username.trim().length < 3) return setError(t("Username must be at least 3 characters."))
       if (form.password.length < 8) return setError(t("Password must be at least 8 characters."))
@@ -159,8 +162,8 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
     setBusy(true)
     try {
       const saved = user
-        ? await api<StaffUser>(`/users/${user.id}`, { method: "PUT", body: JSON.stringify({ full_name: form.full_name.trim(), role: form.role, is_active: form.is_active, agent_id: form.agent_id || null }) })
-        : await api<StaffUser>("/users", { method: "POST", body: JSON.stringify({ username: form.username.trim(), full_name: form.full_name.trim(), role: form.role, is_active: form.is_active, password: form.password, agent_id: form.agent_id || null }) })
+        ? await api<StaffUser>(`/users/${user.id}`, { method: "PUT", body: JSON.stringify({ full_name: form.full_name.trim(), role: form.role, is_active: form.is_active, agent_id: form.agent_id || null, ...(email || user.email ? { email: email || null } : {}) }) })
+        : await api<StaffUser>("/users", { method: "POST", body: JSON.stringify({ username: form.username.trim(), full_name: form.full_name.trim(), role: form.role, is_active: form.is_active, password: form.password, agent_id: form.agent_id || null, email }) })
       onSaved(saved, Boolean(user && user.id === me?.id && (user.role !== saved.role || !saved.is_active)))
     } catch (saveError) {
       setError((saveError as Error).message)
@@ -201,6 +204,10 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
             <label className="block text-sm font-medium">{t("Username")}<input className={field} autoComplete="off" value={form.username} onChange={(e) => set("username", e.target.value)} /></label>
           )}
           <label className="block text-sm font-medium">{t("Full name")}<input className={field} value={form.full_name} onChange={(e) => set("full_name", e.target.value)} /></label>
+          <label className="block text-sm font-medium">{t("Email")}{!user && <span className="text-ab-danger"> *</span>}
+            <input type="email" inputMode="email" autoComplete="off" className={field} value={form.email} placeholder="name@example.com" onChange={(e) => set("email", e.target.value)} />
+            <span className="mt-1 block text-xs font-normal text-ab-faint">{t("Used for “Forgot password”: reset links go only to this address. One email per account.")}</span>
+          </label>
           <label className="block text-sm font-medium">{t("Role")}
             <select className={field} value={form.role} onChange={(e) => set("role", e.target.value)}>
               {roles.map((r) => <option key={r} value={r}>{t(r)}</option>)}

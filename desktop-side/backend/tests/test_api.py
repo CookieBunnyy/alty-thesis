@@ -65,13 +65,14 @@ def test_audit_and_system_settings_are_administrator_only(api, admin, employee):
     assert api.get("/api/v1/system/settings", headers=admin).status_code == 200
 
 
-def test_failed_login_is_audited_and_register_is_least_privilege(api, admin):
+def test_failed_login_is_audited_and_staff_self_registration_is_closed(api, admin):
     assert api.post("/api/v1/auth/login", data={"username": "admin", "password": "wrong"}).status_code == 401
     response = api.post("/api/v1/auth/register",
                         json={"username": "newbie", "password": "longpassword", "full_name": "New Person"})
-    assert response.status_code == 201 and response.json()["user"]["role"] == "Employee"
+    assert response.status_code == 403
+    assert api.post("/api/v1/auth/login", data={"username": "newbie", "password": "longpassword"}).status_code == 401
     actions = [item["action"] for item in api.get("/api/v1/audit", headers=admin).json()["items"]]
-    assert "LOGIN_FAILED" in actions and "LOGIN" in actions and "USER_REGISTERED" in actions
+    assert "LOGIN_FAILED" in actions and "LOGIN" in actions and "STAFF_SELF_REGISTRATION_BLOCKED" in actions
 
 
 def test_user_management_and_last_admin_protection(api, admin):
@@ -235,12 +236,12 @@ def test_global_search_spans_entities(api, admin, agents):
 
 def test_staff_login_failures_are_throttled(api):
     _make_user("throttled", "Employee")
-    for _ in range(10):
+    for _ in range(5):
         bad = api.post("/api/v1/auth/login", data={"username": "throttled", "password": "wrong"})
         assert bad.status_code == 401
-    # Locked for this username, even with the right password; other accounts still work.
+    # Cooling down for this username, even with the right password; other accounts still work.
     locked = api.post("/api/v1/auth/login", data={"username": "throttled", "password": "password123"})
-    assert locked.status_code == 429
+    assert locked.status_code == 429 and int(locked.headers["Retry-After"]) > 0
     _make_user("other", "Employee")
     assert login(api, "other")
 

@@ -13,11 +13,12 @@ services:
     region: singapore
     rootDir: desktop-side/backend
     buildCommand: pip install -r requirements.txt
-    # Apply database migrations, then serve. --proxy-headers makes the real
-    # visitor IP visible behind Render's proxy (used by the rate limits).
+    # Apply database migrations, then serve. Forwarded headers are NOT
+    # trusted wholesale (X-Forwarded-For can be forged by the visitor); the
+    # rate limits read the visitor IP from CLIENT_IP_HEADER below.
     startCommand: >-
       alembic upgrade head &&
-      uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+      uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -41,6 +42,18 @@ services:
         sync: false
       - key: SECRET_KEY            # signs login tokens; Render generates it
         generateValue: true
+      # Staff password-reset emails (HTTPS API: Render's free plan blocks SMTP).
+      - key: RESEND_API_KEY        # Resend → API Keys (sending access)
+        sync: false
+      - key: EMAIL_FROM            # an address on the domain verified in Resend
+        sync: false
+      - key: STAFF_APP_URL         # e.g. https://alty-msa.vercel.app (reset links)
+        sync: false
+      # Cloudflare Turnstile security check (optional; both or neither).
+      - key: TURNSTILE_SITE_KEY
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
 
       # ---- Non-secret settings -------------------------------------------
       - key: APP_NAME
@@ -56,3 +69,11 @@ services:
         value: tomtom
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "60"
+      # Render runs behind Cloudflare, which sets CF-Connecting-IP itself.
+      # Check with GET /api/v1/system/security-check (Administrator).
+      - key: CLIENT_IP_HEADER
+        value: cf-connecting-ip
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: PASSWORD_RESET_TTL_MINUTES
+        value: "20"

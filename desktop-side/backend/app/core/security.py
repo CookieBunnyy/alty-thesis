@@ -85,13 +85,34 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(subject: str, expires_delta: timedelta | None = None) -> str:
+_dummy_hash: str | None = None
+
+
+def verify_password_or_dummy(plain_password: str, user: User | None) -> bool:
+    """Check ``plain_password``; for an unknown account still run one bcrypt
+    check, so the response time doesn't reveal whether the account exists."""
+    global _dummy_hash
+    if user is None:
+        if _dummy_hash is None:
+            _dummy_hash = get_password_hash("alty-timing-equalizer")
+        verify_password(plain_password, _dummy_hash)
+        return False
+    return verify_password(plain_password, user.password_hash)
+
+
+def create_access_token(subject: str, expires_delta: timedelta | None = None, session_version: int = 0) -> str:
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    expire = datetime.now(timezone.utc) + expires_delta
-    payload = {"sub": subject, "exp": expire}
+    now = datetime.now(timezone.utc)
+    # "sv": the account's session version; a password change bumps it, which
+    # ends every session started before the change.
+    payload = {"sub": subject, "exp": now + expires_delta, "iat": now, "sv": session_version}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def create_session_token(user: User) -> str:
+    return create_access_token(subject=user.username, session_version=user.session_version or 0)
 
 
 def decode_access_token(token: str) -> dict:
@@ -108,13 +129,19 @@ def _user_from_token(token: str, db: Session) -> User:
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        username = decode_access_token(token).get("sub")
+        payload = decode_access_token(token)
     except ValueError as exc:
         raise credentials_error from exc
 
-    user = db.query(User).filter(User.username == username).first()
+    user = db.query(User).filter(User.username == payload.get("sub")).first()
     if user is None or not user.is_active:
         raise credentials_error
+    try:
+        version = int(payload.get("sv", 0))
+    except (TypeError, ValueError):
+        raise credentials_error from None
+    if version != (user.session_version or 0):
+        raise credentials_error  # signed out by a password change
     return user
 
 

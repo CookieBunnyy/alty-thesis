@@ -76,6 +76,8 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
+    # Read by the sign-in page: security check needed, and cooldown length.
+    expose_headers=["X-Captcha-Required", "Retry-After"],
 )
 
 for router in (

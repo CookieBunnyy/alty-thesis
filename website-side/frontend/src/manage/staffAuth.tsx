@@ -7,6 +7,7 @@ import { clearApiCache } from "./useApiData"
 import { API_URL } from "@/config"
 import { ApiError, requestJson } from "@/lib/auth"
 import { EXPIRED_KEY, StaffAuthContext, type StaffUser } from "./staffContext"
+import { authRequest } from "./authRequests"
 
 const AUTH_URL = `${API_URL}/api/v1/auth`
 const TOKEN_KEY = "alty-staff-token"
@@ -93,14 +94,19 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
     }
   }, [token, user])
 
-  const signIn = useCallback(async (username: string, password: string, remember: boolean) => {
-    // OAuth2 password form, as the desktop sends it.
+  const signIn = useCallback(async (username: string, password: string, remember: boolean, captchaToken?: string | null) => {
+    // OAuth2 password form, as the desktop sends it (+ the security check when asked).
     const body = new URLSearchParams({ username, password })
-    const session = await requestJson<{ access_token: string }>(`${AUTH_URL}/login`, {
+    if (captchaToken) body.set("captcha_token", captchaToken)
+    const reply = await authRequest<{ access_token: string }>("/login", {
       method: "POST",
       body,
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     })
+    if (!reply.ok || !reply.data) {
+      throw new ApiError(reply.message, reply.status, { captchaRequired: reply.captchaRequired, retryAfter: reply.retryAfter })
+    }
+    const session = reply.data
     const me = await requestJson<StaffUser>(`${AUTH_URL}/me`, {}, session.access_token)
     storeToken(session.access_token, remember)
     try { window.sessionStorage.removeItem(EXPIRED_KEY) } catch { /* storage blocked */ }
@@ -147,9 +153,16 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
     if (token) setUser(await requestJson<StaffUser>(`${AUTH_URL}/me`, {}, token))
   }, [token])
 
+  const replaceToken = useCallback((next: string) => {
+    let remembered = false
+    try { remembered = window.localStorage.getItem(TOKEN_KEY) !== null } catch { /* storage blocked */ }
+    storeToken(next, remembered)
+    setToken(next)
+  }, [])
+
   const value = useMemo(
-    () => ({ token, user, isReady, signIn, signOut: () => signOut(), api, apiBlob, can, reloadUser }),
-    [token, user, isReady, signIn, signOut, api, apiBlob, can, reloadUser],
+    () => ({ token, user, isReady, signIn, signOut: () => signOut(), api, apiBlob, can, reloadUser, replaceToken }),
+    [token, user, isReady, signIn, signOut, api, apiBlob, can, reloadUser, replaceToken],
   )
   return <StaffAuthContext.Provider value={value}>{children}</StaffAuthContext.Provider>
 }

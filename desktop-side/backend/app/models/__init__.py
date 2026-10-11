@@ -12,6 +12,7 @@ from app.models.media import PropertyMedia
 from app.models.review import AgentReview
 from app.models.notification import NotificationRead
 from app.models.partner import Partner
+from app.models.auth_security import AuthAttempt, PasswordResetToken
 
 __all__ = [
 	"Branch",
@@ -30,4 +31,6 @@ __all__ = [
 	"AgentReview",
 	"NotificationRead",
 	"Partner",
+	"AuthAttempt",
+	"PasswordResetToken",
 ]

@@ -75,6 +75,52 @@ class Settings(BaseSettings):
     # Public map requests (routes, place search) per client IP per minute.
     MAP_REQUESTS_PER_MINUTE: int = 60
 
+    # ---- Staff sign-in protection -------------------------------------------
+    # Where the visitor's IP comes from. Behind Render (which runs behind
+    # Cloudflare) set CLIENT_IP_HEADER=cf-connecting-ip: Cloudflare sets it
+    # itself, whereas X-Forwarded-For keeps whatever the visitor sent. With
+    # CLIENT_IP_HEADER empty, TRUSTED_PROXY_HOPS>0 reads X-Forwarded-For from
+    # the right (the entries added by that many trusted proxies); 0 uses the
+    # direct connection (local development).
+    CLIENT_IP_HEADER: str = ""
+    TRUSTED_PROXY_HOPS: int = 0
+    # Failed sign-ins per account inside the window -> temporary cooldowns
+    # ("failures:seconds", progressive). Never a permanent lockout.
+    LOGIN_FAILURE_WINDOW_MINUTES: int = 30
+    LOGIN_COOLDOWN_STEPS: str = "5:60,10:300,15:900"
+    LOGIN_MAX_ATTEMPTS_PER_IP: int = 60          # per 15 minutes
+    # The security check (Cloudflare Turnstile) is required after this many
+    # failures for the account, or 2x this many from one IP.
+    LOGIN_CAPTCHA_AFTER_FAILURES: int = 3
+    # Cloudflare Turnstile. The site key is public (sent to the browser); the
+    # secret key stays on the server. Both empty = no security check.
+    TURNSTILE_SITE_KEY: str = ""
+    TURNSTILE_SECRET_KEY: str = ""
+
+    # ---- Staff password recovery ---------------------------------------------
+    # Reset links are built from this trusted address (the Management System's
+    # site, e.g. https://alty-msa.vercel.app), never from the request's Host.
+    # Empty = password recovery is switched off.
+    STAFF_APP_URL: str = ""
+    PASSWORD_RESET_TTL_MINUTES: int = 20         # clamped to 15-30
+    PASSWORD_RESET_PER_EMAIL_PER_HOUR: int = 3
+    PASSWORD_RESET_MIN_EMAIL_INTERVAL_SECONDS: int = 120
+    PASSWORD_RESET_PER_IP_PER_HOUR: int = 10
+
+    # ---- Email (password reset and password-changed notices) -----------------
+    # "brevo" or "resend" (HTTPS APIs), "smtp", or "none". Render's free plan
+    # blocks outbound SMTP ports, so use an HTTPS provider there.
+    EMAIL_PROVIDER: str = "none"
+    EMAIL_FROM: str = ""
+    EMAIL_FROM_NAME: str = "Abellar Realty"
+    BREVO_API_KEY: str = ""
+    RESEND_API_KEY: str = ""
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    EMAIL_TIMEOUT_SECONDS: float = 10.0
+
     # Only used to create the first administrator on an empty users table.
     INITIAL_ADMIN_USERNAME: str = "admin"
     INITIAL_ADMIN_PASSWORD: str = ""
@@ -113,6 +159,28 @@ class Settings(BaseSettings):
         if backend == "auto":
             return "supabase" if self.cloud_configured else "local"
         return backend
+
+    @property
+    def captcha_enabled(self) -> bool:
+        return bool(self.TURNSTILE_SITE_KEY.strip() and self.TURNSTILE_SECRET_KEY.strip())
+
+    @property
+    def password_reset_enabled(self) -> bool:
+        return bool(self.STAFF_APP_URL.strip() and self.EMAIL_PROVIDER.strip().casefold() != "none")
+
+    @property
+    def password_reset_ttl_minutes(self) -> int:
+        return min(30, max(15, self.PASSWORD_RESET_TTL_MINUTES))
+
+    @property
+    def login_cooldown_steps(self) -> list[tuple[int, int]]:
+        """[(failures, seconds)] from LOGIN_COOLDOWN_STEPS, smallest first."""
+        steps = []
+        for part in self.LOGIN_COOLDOWN_STEPS.split(","):
+            failures, _, seconds = part.strip().partition(":")
+            if failures.strip().isdigit() and seconds.strip().isdigit():
+                steps.append((int(failures), int(seconds)))
+        return sorted(steps)
 
     @property
     def cors_origins(self) -> list[str]:

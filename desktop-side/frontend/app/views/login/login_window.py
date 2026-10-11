@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QToolButton,
@@ -22,7 +23,6 @@ from PyQt6.QtWidgets import (
 from app.api.client import ApiClient
 from app.theme import TOKENS as T
 from app.theme import current_mode as theme_mode
-from app.views.login.signup_window import SignUpWindow
 from app.i18n import tr
 from app.views.loading import Spinner
 from app.views.theme_toggle import ThemeToggleButton
@@ -615,17 +615,16 @@ class LoginWindow(QWidget):
         super().mouseDoubleClickEvent(event)
 
     def open_signup_window(self) -> None:
-        """Open the basic account registration window."""
-        if self.signup_window is None:
-            self.signup_window = SignUpWindow(
-                api=self.api,
-                login_window=self,
-            )
-
-        self.hide()
-        self.signup_window.show()
-        self.signup_window.raise_()
-        self.signup_window.activateWindow()
+        """Help for people who can't sign in. Staff accounts are created only
+        by the Administrator (self-registration is closed on the server)."""
+        QMessageBox.information(
+            self,
+            tr("Can't sign in?"),
+            tr("Staff accounts are created by the Administrator.") + "\n\n"
+            + tr("Forgot your password? Open the Staff Sign In page on the Abellar Realty website and "
+                 "choose \"Forgot password?\" to get a reset link at your registered email, "
+                 "or ask the Administrator to reset it."),
+        )
 
     def toggle_password_visibility(self) -> None:
         self.password_input._toggle_visibility()

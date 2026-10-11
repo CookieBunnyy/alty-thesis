@@ -1,10 +1,11 @@
 """Non-secret system configuration, health and synchronization control."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
+from app.core.client_ip import client_ip
 from app.core.config import DEFAULT_SECRET_KEY, settings
 from app.core.database import get_db
 from app.core.security import get_current_user, require_admin
@@ -75,3 +76,27 @@ def push_sync(db: Session = Depends(get_db), user: User = Depends(require_admin)
                  result="FAILED" if failed else "SUCCESS", details=report)
     db.commit()
     return report
+
+
+@router.get("/security-check")
+def security_check(request: Request, _user: User = Depends(require_admin)):
+    """Administrator check after deploying: which visitor IP the API sees (the
+    rate limits use it) and whether sign-in protection is configured. Shows
+    no secrets, only whether each one is set."""
+    peer = request.scope.get("client")
+    return {
+        "detected_client_ip": client_ip(request),
+        "connection_peer": peer[0] if peer else None,
+        "headers": {name: request.headers.get(name) for name in
+                    ("x-forwarded-for", "cf-connecting-ip", "true-client-ip", "x-real-ip")},
+        "client_ip_header": settings.CLIENT_IP_HEADER or None,
+        "trusted_proxy_hops": settings.TRUSTED_PROXY_HOPS,
+        "captcha_enabled": settings.captcha_enabled,
+        "password_reset_enabled": settings.password_reset_enabled,
+        "staff_app_url": settings.STAFF_APP_URL or None,
+        "email_provider": settings.EMAIL_PROVIDER,
+        "email_sender_set": bool(settings.EMAIL_FROM.strip()),
+        "cors_origins": settings.cors_origins,
+        "cors_origin_regex": settings.CORS_ORIGIN_REGEX or None,
+        "secret_key_is_default": settings.SECRET_KEY == DEFAULT_SECRET_KEY,
+    }

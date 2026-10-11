@@ -76,7 +76,7 @@ from app.models.user import User  # noqa: E402
 from main import app  # noqa: E402
 
 BUSINESS_TABLES = (
-    "notification_reads", "agent_reviews", "audit_events", "document_audit_events", "property_media", "transactions", "clients",
+    "auth_attempts", "password_reset_tokens", "notification_reads", "agent_reviews", "audit_events", "document_audit_events", "property_media", "transactions", "clients",
     "documents", "document_folders", "property_listings", "partners", "agents", "users",
 )
 
@@ -97,9 +97,6 @@ def clean_database():
 
     maps.map_limiter._hits.clear()
     client_portal.auth_limiter._hits.clear()
-    from app.api.v1 import auth as staff_auth
-
-    staff_auth.login_limiter._hits.clear()
     yield
 
 

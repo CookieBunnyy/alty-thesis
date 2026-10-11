@@ -110,6 +110,10 @@ def test_staff_change_their_own_password(api, employee):
                     json={"current_password": "a", "new_password": "Brand-New-Pass-1"}).status_code == 401
     changed = api.post("/api/v1/auth/change-password", headers=employee,
                        json={"current_password": "password123", "new_password": "Brand-New-Pass-1"})
-    assert changed.status_code == 204, changed.text
+    assert changed.status_code == 200, changed.text
+    # The old session ends; the response's token continues this one.
+    assert api.get("/api/v1/auth/me", headers=employee).status_code == 401
+    fresh = {"Authorization": f"Bearer {changed.json()['access_token']}"}
+    assert api.get("/api/v1/auth/me", headers=fresh).status_code == 200
     assert api.post("/api/v1/auth/login", data={"username": "employee", "password": "password123"}).status_code == 401
     assert api.post("/api/v1/auth/login", data={"username": "employee", "password": "Brand-New-Pass-1"}).status_code == 200

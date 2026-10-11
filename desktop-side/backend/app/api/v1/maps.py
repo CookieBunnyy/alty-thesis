@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from app.api.v1.public import _RateLimiter
+from app.core.client_ip import client_ip
 from app.core.config import settings
 from app.services import geocoding, routing
 from app.services.routing import MODE_LABELS, MODES, Point, RoutingError
@@ -23,7 +24,7 @@ BUSY = "Too many map requests; please wait a moment."
 
 
 def _limit(request: Request) -> None:
-    map_limiter.check(request.client.host if request.client else "unknown",
+    map_limiter.check(client_ip(request),
                       settings.MAP_REQUESTS_PER_MINUTE, window=60.0, detail=BUSY)
 
 

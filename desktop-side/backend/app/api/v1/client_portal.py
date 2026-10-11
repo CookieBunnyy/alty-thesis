@@ -22,8 +22,9 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.public import _RateLimiter
 from app.core.database import get_db
-from app.core.security import CLIENT, create_access_token, get_current_client, get_password_hash, \
-    is_client, verify_password
+from app.core.security import CLIENT, create_session_token, get_current_client, get_password_hash, \
+    is_client, verify_password_or_dummy
+from app.core.client_ip import client_ip
 from app.models.client import Client
 from app.models.review import AgentReview
 from app.models.transaction import PropertyTransaction
@@ -95,7 +96,7 @@ class ReviewCreate(ReviewIn):
 
 
 def _limit(request: Request, bucket: str, limit: int) -> None:
-    host = request.client.host if request.client else "unknown"
+    host = client_ip(request)
     auth_limiter.check(f"{bucket}:{host}", limit, window=900.0,
                        detail="Too many attempts; please wait a few minutes and try again.")
 
@@ -111,7 +112,7 @@ def _profile(user: User, client: Client) -> dict:
 
 
 def _session(user: User, client: Client) -> dict:
-    return {"access_token": create_access_token(subject=user.username), "token_type": "bearer",
+    return {"access_token": create_session_token(user), "token_type": "bearer",
             "client": _profile(user, client)}
 
 
@@ -158,7 +159,7 @@ def login_client(payload: ClientLogin, request: Request, db: Session = Depends(g
     _limit(request, "login", 20)
     email = payload.email.strip().casefold()
     user = db.execute(select(User).where(func.lower(User.username) == email)).scalar_one_or_none()
-    if user is None or not verify_password(payload.password, user.password_hash):
+    if not verify_password_or_dummy(payload.password, user):
         record_audit_now(db, "CLIENT_LOGIN_FAILED", actor=email[:120] or "UNKNOWN", entity_type="users",
                          result="FAILED", details={"reason": "invalid credentials"})
         raise HTTPException(status_code=401, detail="Incorrect email or password")

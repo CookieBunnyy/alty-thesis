@@ -206,10 +206,6 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
           <InstallAppButton area="manage" translate={t} />
           <NotificationBell />
           <span className="hidden lg:block"><ThemeToggle theme={theme} onToggle={toggleTheme} /></span>
-          <Link to="/manage/profile" aria-label={t("My profile")}
-            className="flex shrink-0 items-center rounded-full lg:hidden">
-            {me}
-          </Link>
           <Link to="/manage/profile" title={t("My profile")}
             className="hidden items-center gap-2.5 rounded-xl border border-ab-border bg-ab-card px-2 py-1.5 transition hover:border-ab-border-strong lg:flex">
             {me}

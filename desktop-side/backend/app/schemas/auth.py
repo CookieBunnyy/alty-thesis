@@ -21,6 +21,24 @@ class PasswordChange(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=128)
 
 
+EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+
+
+class PasswordResetRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=254, pattern=EMAIL_PATTERN)
+    captcha_token: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def strip_email(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(..., min_length=1, max_length=200)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -37,3 +55,4 @@ class CurrentUser(BaseModel):
     last_login_at: datetime | None = None
     agent_id: str | None = None
     photo_version: int | None = None
+    email: str | None = None

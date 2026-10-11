@@ -15,13 +15,18 @@ export interface StaffUser {
   agent_id?: string | null
   /** Changes when the profile photo changes; null without a photo. */
   photo_version?: number | null
+  /** Registered email (password recovery). */
+  email?: string | null
 }
 
 export type StaffAuthValue = {
   token: string | null
   user: StaffUser | null
   isReady: boolean
-  signIn: (username: string, password: string, remember: boolean) => Promise<void>
+  /** Throws ApiError; its detail is {captchaRequired, retryAfter}. */
+  signIn: (username: string, password: string, remember: boolean, captchaToken?: string | null) => Promise<void>
+  /** Continue with a new token (after changing your own password). */
+  replaceToken: (token: string) => void
   signOut: () => void
   /** GET/POST to /api/v1/<path> as the signed-in staff user. */
   api: <T>(path: string, init?: RequestInit) => Promise<T>

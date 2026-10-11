@@ -71,6 +71,38 @@ Then **Redeploy** — Vite bakes these in at build time, so changing them
 requires a new build. `vercel.json` makes page links like `/properties`
 work on refresh.
 
+### Staff password recovery and sign-in protection (Render → Environment)
+
+Secrets go only in Render's Environment tab (never in `VITE_*` variables):
+
+| Variable | Value |
+| --- | --- |
+| `STAFF_APP_URL` | the Management System's address, e.g. `https://alty-msa.vercel.app` — reset links are built from this, never from the request |
+| `EMAIL_PROVIDER` | `resend` (HTTPS API; Render's free plan blocks SMTP ports) |
+| `RESEND_API_KEY` | Resend → **API Keys** → create one with *Sending access* (secret) |
+| `EMAIL_FROM` | an address on your domain verified in Resend, e.g. `no-reply@yourdomain.com` |
+| `CLIENT_IP_HEADER` | `cf-connecting-ip` (Render runs behind Cloudflare; `X-Forwarded-For` can be forged) |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | optional Cloudflare Turnstile keys (dashboard → Turnstile → add the Vercel domains). The site key is public; the secret is not |
+
+**Resend setup:** Resend → **Domains** → add your domain and create the DNS
+records it shows (SPF/DKIM) at your domain registrar, then wait for
+"Verified". Until a domain is verified Resend only sends from
+`onboarding@resend.dev` *to your own Resend account address*, so reset emails
+to other staff would be refused.
+
+Optional tuning: `PASSWORD_RESET_TTL_MINUTES` (15–30, default 20),
+`LOGIN_COOLDOWN_STEPS` (default `5:60,10:300,15:900` = failures:seconds),
+`LOGIN_CAPTCHA_AFTER_FAILURES` (3), `LOGIN_MAX_ATTEMPTS_PER_IP` (60 per 15 min),
+`PASSWORD_RESET_PER_EMAIL_PER_HOUR` (3), `PASSWORD_RESET_MIN_EMAIL_INTERVAL_SECONDS` (120),
+`PASSWORD_RESET_PER_IP_PER_HOUR` (10).
+
+After deploying, sign in as the Administrator and open
+`https://<api>/api/v1/system/security-check`: `detected_client_ip` must be your
+own public IP (not a Render/Cloudflare address), and it shows whether email,
+the reset link address, Turnstile and CORS are configured (no secret values).
+Every staff member needs an **email** (Users & Access → edit) to use
+"Forgot password?".
+
 ### Separate app for the Management System (Alty MSA)
 
 The public site and the Management System install as two separate apps

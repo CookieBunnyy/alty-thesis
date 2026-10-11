@@ -61,6 +61,7 @@ export function ProfilePage() {
       <Section title="Account">
         <Facts items={[
           ["Username", `@${user.username}`],
+          ["Email", user.email ?? t("Not set — ask the Administrator (needed for “Forgot password”)")],
           ["Role", t(user.role)],
           ["Linked agent record", user.agent_id ? <Link to="/manage/my-work" className="hover:underline">{user.agent_id} · {t("My Work")}</Link> : null],
           ["Last sign-in", user.last_login_at ? dateTime(user.last_login_at) : null],
@@ -94,7 +95,7 @@ export function ProfilePage() {
 }
 
 function ChangePassword() {
-  const { api } = useStaffAuth()
+  const { api, replaceToken } = useStaffAuth()
   const toast = useToast()
   const [form, setForm] = useState({ current: "", next: "", confirm: "" })
   const [error, setError] = useState("")
@@ -108,9 +109,10 @@ function ChangePassword() {
     if (form.next !== form.confirm) return setError(t("The passwords don't match."))
     setBusy(true)
     try {
-      await api("/auth/change-password", { method: "POST", body: JSON.stringify({ current_password: form.current, new_password: form.next }) })
+      const session = await api<{ access_token: string }>("/auth/change-password", { method: "POST", body: JSON.stringify({ current_password: form.current, new_password: form.next }) })
+      replaceToken(session.access_token) // this session continues; every other one ends
       setForm({ current: "", next: "", confirm: "" })
-      toast(t("Password changed. Use the new one next time you sign in."))
+      toast(t("Password changed. Other devices signed in to your account were signed out."))
     } catch (changeError) {
       setError(t((changeError as Error).message))
     } finally {

@@ -66,16 +66,20 @@ function ManageRoutes() {
   const path = pathname.replace(/\/+$/, "") || "/manage"
 
   useEffect(() => {
-    document.title = `${t(path === "/manage/signin" ? "Management sign in" : PAGES[path]?.[1] ?? "Management")} · ALTY`
+    const titles: Record<string, string> = { "/manage/signin": "Management sign in", "/manage/forgot-password": "Forgot password", "/manage/reset-password": "Reset password" }
+    document.title = `${t(titles[path] ?? PAGES[path]?.[1] ?? "Management")} · ALTY`
   }, [path])
 
-  // Every page except sign-in needs a staff session.
-  const needsSignIn = path !== "/manage/signin" && isReady && !user
+  // Every page except sign-in and password recovery needs a staff session.
+  const open = path === "/manage/signin" || path === "/manage/forgot-password" || path === "/manage/reset-password"
+  const needsSignIn = !open && isReady && !user
   useEffect(() => {
     if (needsSignIn) navigate(`/manage/signin?next=${encodeURIComponent(href)}`, { replace: true })
   }, [needsSignIn, href])
 
   if (path === "/manage/signin") return <ManageSignIn />
+  if (path === "/manage/forgot-password") return <ManageSignIn view="forgot" />
+  if (path === "/manage/reset-password") return <ManageSignIn view="reset" />
   if (!isReady || !user) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-ab-bg text-ab-muted" role="status">
