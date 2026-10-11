@@ -437,8 +437,8 @@
 .route-dest.is-arrived { transform: scale(1.12); }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-in, .ab-card-in, .ab-pop, .route-draw, .route-redraw, .hero-slide.is-active { animation: none; opacity: 1; stroke-dasharray: none; }
-  .route-dest, .route-card { transition: none; }
+  /* (The home route card's trip still plays: see RoutePreview.) */
+  .hero-in, .ab-card-in, .ab-pop, .hero-slide.is-active { animation: none; opacity: 1; }
   /* Reduced motion: no sliding or zooming, only a gentle fade. */
   .reveal, .reveal-left, .reveal-right, .reveal.is-visible { transform: none; transition: opacity 0.6s ease; }
   .reveal-stagger > * { transform: none; transition: opacity 0.5s ease; transition-delay: calc(var(--i, 0) * 120ms + 180ms); }

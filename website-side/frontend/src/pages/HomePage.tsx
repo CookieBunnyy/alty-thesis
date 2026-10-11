@@ -42,7 +42,8 @@ function RoutePreview({ play = 0 }: { play?: number }) {
   const [trip, setTrip] = useState(0) // bumps to restart the animations
   const [phase, setPhase] = useState<"idle" | "driving" | "arrived">("idle")
   const timer = useRef<number | undefined>(undefined)
-  const still = prefersReducedMotion()
+  // The trip always plays, even with the OS "reduce motion" setting: it is a
+  // small drawing inside the card, and it is what explains the feature.
 
   const start = () => {
     if (phase === "driving") return
@@ -67,8 +68,8 @@ function RoutePreview({ play = 0 }: { play?: number }) {
   useEffect(() => {
     if (phase !== "driving") return
     window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => setPhase("arrived"), still ? 0 : TRIP_MS)
-  }, [phase, trip, still])
+    timer.current = window.setTimeout(() => setPhase("arrived"), TRIP_MS)
+  }, [phase, trip])
 
   const active = phase !== "idle"
   const chip = (lit: boolean) =>
@@ -94,7 +95,7 @@ function RoutePreview({ play = 0 }: { play?: number }) {
         <path className={trip ? "route-redraw" : "route-draw"} pathLength={trip ? 1 : undefined} d={ROUTE} fill="none" stroke="var(--color-ab-route)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
 
         {/* start pin, with a ring that pulses while the trip is on */}
-        {active && !still && (
+        {active && (
           <circle cx="40" cy="60" r="11" fill="none" stroke="var(--color-ab-accent)" strokeWidth="2">
             <animate attributeName="r" values="11;24" dur="1.4s" repeatCount="indefinite" />
             <animate attributeName="opacity" values="0.8;0" dur="1.4s" repeatCount="indefinite" />
@@ -109,7 +110,7 @@ function RoutePreview({ play = 0 }: { play?: number }) {
         </g>
 
         {/* the moving marker (mounted per trip so the motion starts from the pin) */}
-        {phase === "driving" && !still && (
+        {phase === "driving" && (
           <g>
             <circle r="8" fill="var(--color-ab-ink)" stroke="var(--color-ab-route)" strokeWidth="3">
               <animateMotion dur={`${TRIP_MS}ms`} fill="freeze" path={ROUTE} keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.45 0 0.25 1" />
