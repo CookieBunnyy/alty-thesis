@@ -401,6 +401,21 @@
 .hero-slide { opacity: 0; transition: opacity 1.4s ease; will-change: opacity, transform; }
 .hero-slide.is-active { opacity: 1; animation: ab-ken-burns 9s ease-out forwards; }
 
+/* Home hero: a dotted panel; the corner cards drift gently on wide screens. */
+.hero-panel {
+  background-color: var(--color-ab-sidebar);
+  background-image: radial-gradient(color-mix(in oklab, var(--color-ab-text) 13%, transparent) 1px, transparent 1.4px);
+  background-size: 14px 14px;
+}
+@keyframes ab-float { from { translate: 0 0; } to { translate: 0 -10px; } }
+@media (min-width: 1280px) {
+  .hero-float { animation: ab-float 7s ease-in-out infinite alternate; }
+  .hero-float-slow { animation-duration: 9s; animation-delay: -3s; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-float { animation: none; }
+}
+
 /* Home page partners strip: one lap moves right, then repeats seamlessly. */
 @keyframes ab-marquee-right {
   from { transform: translate3d(-50%, 0, 0); }

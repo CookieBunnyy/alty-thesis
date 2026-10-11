@@ -2,12 +2,8 @@ import { useEffect, useState } from "react"
 import { Eye, EyeOff, LoaderCircle } from "lucide-react"
 import { Link } from "@/components/Link"
 import { ThemeToggle } from "@/components/ThemeToggle"
-import { API_URL } from "@/config"
 import { useTheme } from "@/hooks/useTheme"
-import { requestJson } from "@/lib/auth"
-import { propertyImage } from "@/lib/media"
 import { navigate, safeNext, useLocation } from "@/lib/router"
-import type { HomeData } from "@/types"
 import { EXPIRED_KEY, useStaffAuth } from "./staffContext"
 import { t } from "./i18n"
 import { InstallAppButton } from "@/components/InstallAppButton"
@@ -19,24 +15,6 @@ import { Turnstile } from "@/components/Turnstile"
 
 const field =
   "mt-1.5 block w-full rounded-xl border border-ab-border bg-ab-input px-4 py-3 text-sm text-ab-text placeholder:text-ab-faint focus:border-ab-accent focus:outline-none"
-
-/** A real listing photo for the picture panel (the public home page's
- *  featured listings); null until loaded, or when none has a photo. */
-function useShowcasePhoto(width: number, enabled = true) {
-  const [photo, setPhoto] = useState<string | null>(null)
-  useEffect(() => {
-    if (!enabled) return
-    let alive = true
-    requestJson<HomeData>(`${API_URL}/api/v1/public/home`)
-      .then((home) => {
-        const url = home.featured_properties.map((p) => propertyImage(p, width)).find(Boolean) ?? null
-        if (alive) setPhoto(url)
-      })
-      .catch(() => {})
-    return () => { alive = false }
-  }, [width, enabled])
-  return photo
-}
 
 const DESKTOP = "(min-width: 1024px)"
 
@@ -52,11 +30,11 @@ function useIsDesktop() {
   return desktop
 }
 
-function Wordmark({ light = false }: { light?: boolean }) {
+function Wordmark() {
   return (
     <span className="leading-tight">
-      <span className={`block text-xl font-extrabold tracking-wide ${light ? "text-white" : "text-ab-text"}`}>ALTY</span>
-      <span className={`block text-[10px] font-semibold uppercase tracking-[0.2em] ${light ? "text-white/80" : "text-ab-faint"}`}>Abellar Realty</span>
+      <span className="block text-xl font-extrabold tracking-wide text-ab-text">ALTY</span>
+      <span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-ab-faint">Abellar Realty</span>
     </span>
   )
 }
@@ -84,7 +62,6 @@ export function ManageSignIn({ view = "signin" }: { view?: "signin" | "forgot" |
     try { return window.sessionStorage.getItem(EXPIRED_KEY) === "1" } catch { return false }
   })
   const desktop = useIsDesktop()
-  const photo = useShowcasePhoto(900, !desktop)
 
   useEffect(() => {
     if (user && view === "signin") navigate(next?.startsWith("/manage") ? next : "/manage", { replace: true })
@@ -124,17 +101,6 @@ export function ManageSignIn({ view = "signin" }: { view?: "signin" | "forgot" |
       setBusy(false)
     }
   }
-
-  const picture = (
-    <>
-      {photo ? (
-        <img src={photo} alt="" className="absolute inset-0 h-full w-full object-cover" />
-      ) : (
-        <div className="absolute inset-0 bg-#5e7e00" aria-hidden />
-      )}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/10 to-black/55" aria-hidden />
-    </>
-  )
 
   const form = (
     <form onSubmit={submit} className="w-full" noValidate>
@@ -206,15 +172,15 @@ export function ManageSignIn({ view = "signin" }: { view?: "signin" | "forgot" |
 
   return (
     <div className="min-h-dvh bg-ab-bg text-ab-text">
-      {/* ---- Phones and tablets: photo on top, form on a sheet ---- */}
+      {/* ---- Phones and tablets: the system's screens on top, form on a sheet ---- */}
       {!desktop && (
       <div className="flex min-h-dvh flex-col">
-        <div className="relative h-[38vh] min-h-56 overflow-hidden">
-          {picture}
-          <div className="relative flex items-start justify-between p-5">
-            <Link to="/"><Wordmark light /></Link>
+        <div className="relative h-[44vh] min-h-72 overflow-hidden">
+          <SystemShowcase compact />
+          <div className="relative z-40 flex items-start justify-between p-5">
+            <Link to="/"><Wordmark /></Link>
             <div className="flex items-center gap-2">
-              <InstallAppButton area="manage" translate={t} overlay />
+              <InstallAppButton area="manage" translate={t} />
               <ThemeToggle theme={theme} onToggle={toggleTheme} />
             </div>
           </div>

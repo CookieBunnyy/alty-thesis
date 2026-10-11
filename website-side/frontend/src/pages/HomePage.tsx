@@ -8,9 +8,7 @@ import {
   MapPinned,
   Navigation,
   Route,
-  Search,
   ShieldCheck,
-  Star,
   UserRound,
   Users,
 } from "lucide-react"
@@ -18,9 +16,7 @@ import { API_URL } from "@/config"
 import { requestJson } from "@/lib/auth"
 import { AgentPhoto } from "@/components/AgentPhoto"
 import { Link } from "@/components/Link"
-import { navigate } from "@/lib/router"
-import { sizedImage } from "@/lib/media"
-import { prefersReducedMotion, useCountUp, useReveal } from "@/hooks/useReveal"
+import { prefersReducedMotion, useReveal } from "@/hooks/useReveal"
 import { usePropertyViewer } from "@/hooks/usePropertyViewer"
 import { SiteHeader } from "@/components/SiteHeader"
 import { SiteFooter } from "@/components/SiteFooter"
@@ -31,6 +27,7 @@ import { PropertyGridSkeleton, Skeleton } from "@/components/Skeleton"
 import { categoryCounts } from "@/lib/categories"
 import type { HomeData } from "@/types"
 import { PartnersStrip } from "@/components/PartnersStrip"
+import { HomeHero } from "@/components/HomeHero"
 
 const ROUTE = "M40 60 H150 V120 H230 V190 H350"
 const TRIP_MS = 2200
@@ -156,19 +153,6 @@ function SectionHeading({ eyebrow, title, text, action }: { eyebrow: string; tit
   )
 }
 
-function Stat({ value, label, suffix = "" }: { value: number; label: string; suffix?: string }) {
-  const { ref, value: shown } = useCountUp(value)
-  return (
-    <div>
-      <p ref={ref as React.RefObject<HTMLParagraphElement>} className="text-3xl font-extrabold tabular-nums text-white md:text-4xl">
-        {shown.toLocaleString()}
-        {suffix}
-      </p>
-      <p className="text-xs font-medium uppercase tracking-wider text-white/70">{label}</p>
-    </div>
-  )
-}
-
 function EmptyState({ text }: { text: string }) {
   return <p className="rounded-2xl border border-dashed border-ab-border bg-ab-card p-8 text-center text-ab-muted">{text}</p>
 }
@@ -183,9 +167,7 @@ const WHY = [
 export function HomePage() {
   const [data, setData] = useState<HomeData | null>(null)
   const [error, setError] = useState("")
-  const [query, setQuery] = useState("")
   const [routePlays, setRoutePlays] = useState(0) // the route card replays each time it is reached
-  const [slide, setSlide] = useState(0)
   const viewer = usePropertyViewer()
   const reviewTrack = useRef<HTMLDivElement | null>(null)
 
@@ -194,18 +176,6 @@ export function HomePage() {
       .then(setData)
       .catch((loadError: Error) => setError(loadError.message))
   }, [])
-
-  const heroImages = (data?.featured_properties ?? [])
-    .map((property) => property.photos?.[0])
-    .filter((url): url is string => Boolean(url))
-    .slice(0, 4)
-
-  // Slow crossfade between real featured-property photos.
-  useEffect(() => {
-    if (heroImages.length < 2 || prefersReducedMotion()) return
-    const timer = window.setInterval(() => setSlide((index) => (index + 1) % heroImages.length), 6500)
-    return () => window.clearInterval(timer)
-  }, [heroImages.length])
 
   const scrollReviews = (direction: 1 | -1) => {
     const track = reviewTrack.current
@@ -218,110 +188,8 @@ export function HomePage() {
   return (
     <div className="min-h-dvh overflow-x-clip bg-ab-bg text-ab-text">
       {/* ---------------- HERO ---------------- */}
-      <section className="relative isolate flex min-h-[92dvh] flex-col overflow-hidden bg-[#242424]">
-        <div className="absolute inset-0 -z-10" aria-hidden="true">
-          {heroImages.length > 0 ? (
-            heroImages.map((url, index) => (
-              <img
-                key={url}
-                src={sizedImage(url, 1600)}
-                alt=""
-                loading={index === 0 ? "eager" : "lazy"}
-                fetchPriority={index === 0 ? "high" : "low"}
-                decoding="async"
-                className={`hero-slide absolute inset-0 h-full w-full object-cover ${index === slide ? "is-active" : ""}`}
-              />
-            ))
-          ) : (
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,#3d5a0a_0%,#242424_60%)]" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/45 to-[#242424]" />
-        </div>
-
-        <div className="absolute inset-x-0 top-0">
-          <SiteHeader overlay />
-        </div>
-
-        <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-center px-4 pb-16 pt-28 md:pt-32">
-          <p className="hero-in text-xs font-bold uppercase tracking-[0.3em] text-[#C7F000]" style={{ animationDelay: "60ms" }}>
-            Abellar Realty
-          </p>
-          <h1 className="hero-in mt-4 max-w-4xl text-4xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-5xl md:text-7xl" style={{ animationDelay: "160ms" }}>
-            Real Estate Property Discovery <span className="text-[#C7F000]">and Services</span>
-          </h1>
-          <p className="hero-in mt-5 max-w-2xl text-base text-white/80 md:text-lg" style={{ animationDelay: "280ms" }}>
-            Browse Abellar Realty's available properties, see how far each one is from your workplace by road, and
-            contact an Abellar agent near the property.
-          </p>
-
-          <form
-            role="search"
-            onSubmit={(event) => {
-              event.preventDefault()
-              navigate(`/properties${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ""}`)
-            }}
-            className="hero-in mt-8 flex w-full max-w-2xl items-center gap-2 rounded-2xl bg-white/95 p-2 shadow-2xl ring-1 ring-black/5"
-            style={{ animationDelay: "400ms" }}
-          >
-            <Search className="ml-2 h-5 w-5 shrink-0 text-[#566158]" />
-            <label htmlFor="home-search" className="sr-only">Search properties</label>
-            <input
-              id="home-search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search by property, village or city"
-              className="min-w-0 flex-1 bg-transparent py-2 text-base text-[#111719] placeholder:text-[#879087] focus:outline-none"
-            />
-            <button type="submit" className="rounded-xl bg-[#C7F000] px-4 py-2.5 text-sm font-bold text-[#0B0F10] transition hover:bg-[#D6FF33]">
-              Search
-            </button>
-          </form>
-
-          <div className="hero-in mt-5 flex flex-wrap gap-3" style={{ animationDelay: "500ms" }}>
-            <Link to="/properties" className="inline-flex items-center gap-2 rounded-xl bg-[#C7F000] px-5 py-3 font-bold text-[#0B0F10] transition hover:-translate-y-0.5 hover:bg-[#D6FF33]">
-              Explore Properties <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link to="/map" className="inline-flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-5 py-3 font-bold text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20">
-              <MapPinned className="h-4 w-4" /> View Property Map
-            </Link>
-          </div>
-
-          {!data && !error && (
-            <div className="mt-12 grid max-w-2xl grid-cols-2 gap-6 border-t border-white/15 pt-6 sm:grid-cols-3" aria-hidden="true">
-              {[0, 1].map((index) => (
-                <div key={index} className="space-y-2">
-                  <div className="h-9 w-16 animate-pulse rounded-lg bg-white/15" />
-                  <div className="h-3 w-28 animate-pulse rounded bg-white/10" />
-                </div>
-              ))}
-            </div>
-          )}
-          {data && (
-            <div className="hero-in mt-12 grid max-w-2xl grid-cols-2 gap-6 border-t border-white/15 pt-6 sm:grid-cols-3" style={{ animationDelay: "620ms" }}>
-              <Stat value={data.stats.available_properties} label="Available properties" />
-              <Stat value={data.stats.active_agents} label="Active agents" />
-              {reviewStats && reviewStats.count > 0 && reviewStats.average != null && (
-                <div>
-                  <p className="flex items-center gap-1 text-3xl font-extrabold text-white md:text-4xl">
-                    {reviewStats.average.toFixed(1)} <Star className="h-6 w-6 fill-[#F5B83D] text-[#F5B83D]" />
-                  </p>
-                  <p className="text-xs font-medium uppercase tracking-wider text-white/70">
-                    From {reviewStats.count} client review{reviewStats.count === 1 ? "" : "s"}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {heroImages.length > 1 && (
-          <div className="absolute bottom-6 right-6 hidden gap-1.5 md:flex" aria-hidden="true">
-            {heroImages.map((url, index) => (
-              <span key={url} className={`h-1.5 rounded-full transition-all duration-500 ${index === slide ? "w-8 bg-[#C7F000]" : "w-3 bg-white/40"}`} />
-            ))}
-          </div>
-        )}
-      </section>
+      <SiteHeader />
+      <HomeHero data={data} />
 
       {error && (
         <p role="alert" className="mx-auto mt-8 max-w-7xl px-4 text-center text-ab-danger">
@@ -368,7 +236,7 @@ export function HomePage() {
 
           {/* ---------------- PARTNERS ---------------- */}
           {data.partners && data.partners.length > 0 && (
-            <section className="mx-auto max-w-7xl px-4 pb-20" aria-label="Developers and partners">
+            <section id="partners" className="mx-auto max-w-7xl scroll-mt-24 px-4 pb-20" aria-label="Developers and partners">
               <Reveal className="border-y border-ab-border py-8">
                 <PartnersStrip partners={data.partners} />
               </Reveal>

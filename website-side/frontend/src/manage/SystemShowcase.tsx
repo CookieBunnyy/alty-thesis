@@ -21,8 +21,36 @@ function Shot({ name, label }: { name: keyof typeof SHOTS; label: string }) {
   )
 }
 
-/** Desktop sign-in panel: the system's own pages, stacked like a collage. */
-export function SystemShowcase() {
+/** Phones: the same windows, smaller, filling the top of the sign-in page. */
+function CompactShowcase() {
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-ab-accent-soft" aria-label={t("A look at the Management System")} role="img">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,color-mix(in_oklab,var(--color-ab-accent)_40%,transparent),transparent_60%)]" aria-hidden />
+      <div className={`${card} left-[9%] top-[25%] w-[120%] rounded-xl sm:left-[14%] sm:w-[95%]`}>
+        <div className="hero-in" style={{ animationDelay: "80ms" }}>
+          <div className="flex items-center gap-1 border-b border-ab-border bg-ab-card-2 px-2 py-1.5" aria-hidden>
+            <span className="h-2 w-2 rounded-full bg-[#FF5F57]" />
+            <span className="h-2 w-2 rounded-full bg-[#FEBC2E]" />
+            <span className="h-2 w-2 rounded-full bg-[#28C840]" />
+            <span className="ml-2 truncate text-[9px] font-medium text-ab-faint">Alty MSA · {t("Dashboard")}</span>
+          </div>
+          <Shot name="dashboard" label={t("Dashboard")} />
+        </div>
+      </div>
+      <div className={`${card} left-[3%] top-[50%] z-20 w-[42%] rounded-xl sm:w-[32%]`}>
+        <div className="hero-in" style={{ animationDelay: "220ms" }}><Shot name="agent" label={t("Agents")} /></div>
+      </div>
+      <div className={`${card} right-[4%] top-[38%] z-30 w-[34%] rounded-xl sm:w-[26%]`}>
+        <div className="hero-in" style={{ animationDelay: "340ms" }}><Shot name="property" label={t("Properties")} /></div>
+      </div>
+    </div>
+  )
+}
+
+/** Sign-in panel: the system's own pages, stacked like a collage
+ *  (`compact`: the phone version at the top of the page). */
+export function SystemShowcase({ compact = false }: { compact?: boolean }) {
+  if (compact) return <CompactShowcase />
   return (
     <aside className="relative min-h-[560px] overflow-hidden rounded-[2rem] bg-ab-accent-soft" aria-label={t("A look at the Management System")}>
       {/* soft light behind the windows */}
