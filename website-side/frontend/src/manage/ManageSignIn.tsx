@@ -130,7 +130,7 @@ export function ManageSignIn({ view = "signin" }: { view?: "signin" | "forgot" |
       {photo ? (
         <img src={photo} alt="" className="absolute inset-0 h-full w-full object-cover" />
       ) : (
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,#5e7e00_0%,#2d3b10_45%,#151a0d_100%)]" aria-hidden />
+        <div className="absolute inset-0 bg-#5e7e00" aria-hidden />
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/10 to-black/55" aria-hidden />
     </>

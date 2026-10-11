@@ -21,6 +21,8 @@ from app.core.database import get_db
 from app.core.security import get_optional_client
 from app.models.agent import Agent
 from app.services.profile_photos import photo_bytes, photo_version
+from app.models.partner import Partner
+from app.services.partner_logos import logo_bytes, logo_version
 from app.services import reviews as review_service
 from app.models.media import PropertyMedia
 from app.models.property_listing import PropertyListing
@@ -225,6 +227,7 @@ def public_home(db: Session = Depends(get_db)):
                                 for listing in featured],
         "categories": [{"category": name or "Other", "count": count} for name, count in categories],
         "agents": [_public_agent(agent, stats) for agent in agents[:6]],
+        "partners": public_partners(db),
         "reviews": [review_service.public_review(r, include_agent=True)
                     for r in review_service.recent_reviews(db, limit=9, with_text_first=True)],
     }
@@ -294,6 +297,35 @@ def list_nearby_agents(listing_id: int, request: Request, limit: int = 5,
     return {"property_id": listing.listing_id, "property_status": listing.status,
             "ranking": "Geographic (straight-line) proximity to the property",
             "routing": routing_status, "agents": results}
+
+
+def public_partners(db: Session) -> list[dict]:
+    """Active partners for the home page: name, type, website and logo only
+    (never contact people, emails, phone numbers or notes)."""
+    partners = db.execute(select(Partner).where(Partner.status == "ACTIVE").order_by(Partner.name)).scalars()
+    return [{
+        "id": partner.id,
+        "name": partner.name,
+        "partner_type": partner.partner_type,
+        "website": partner.website if (partner.website or "").startswith(("https://", "http://")) else None,
+        "logo_url": (f"/api/v1/public/partners/{partner.id}/logo?v={logo_version(partner)}"
+                     if logo_version(partner) else None),
+    } for partner in partners]
+
+
+@router.get("/partners")
+def list_public_partners(db: Session = Depends(get_db)):
+    return public_partners(db)
+
+
+@router.get("/partners/{partner_id}/logo")
+def get_partner_logo(partner_id: int, db: Session = Depends(get_db)):
+    """An active partner's logo (inactive partners are not shown publicly)."""
+    partner = db.get(Partner, partner_id)
+    if partner is None or partner.status != "ACTIVE":
+        raise HTTPException(status_code=404, detail="No logo")
+    return Response(content=logo_bytes(partner), media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/agents/{agent_id}/photo")

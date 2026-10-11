@@ -174,12 +174,12 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={user ? t("Edit user") : t("New user")}>
       <button type="button" aria-label={t("Cancel")} className="absolute inset-0 bg-black/55" onClick={onClose} />
-      <form onSubmit={submit} noValidate className="ab-pop relative w-full max-w-md rounded-t-2xl border border-ab-border bg-ab-card shadow-2xl sm:rounded-2xl">
-        <header className="flex items-center justify-between border-b border-ab-border px-5 py-4">
+      <form onSubmit={submit} noValidate className="ab-pop relative flex max-h-[90dvh] w-full max-w-md flex-col rounded-t-2xl border border-ab-border bg-ab-card shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl">
+        <header className="flex shrink-0 items-center justify-between border-b border-ab-border px-5 py-4">
           <h2 className="text-lg font-bold">{user ? t("Edit {name}", { name: user.full_name }) : t("New user")}</h2>
           <button type="button" onClick={onClose} aria-label={t("Close")} className="rounded-lg p-2 text-ab-muted hover:bg-ab-hover"><X className="h-4 w-4" /></button>
         </header>
-        <div className="space-y-3 p-5">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-5">
           {user && (
             <div className="flex items-center gap-3">
               <StaffAvatar userId={user.id} name={user.full_name} version={user.photo_version} size="md" />
@@ -238,7 +238,7 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
           {user?.id === me?.id && <p className="text-xs text-ab-warning">{t("This is your own account. Changing your role or deactivating it signs you out.")}</p>}
           {error && <p role="alert" className="rounded-lg border border-ab-danger/40 bg-ab-danger/10 px-3 py-2 text-sm text-ab-danger">{error}</p>}
         </div>
-        <footer className="flex justify-end gap-2 border-t border-ab-border px-5 py-3">
+        <footer className="flex shrink-0 justify-end gap-2 border-t border-ab-border px-5 py-3">
           <Button onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
           <Button type="submit" variant="primary" disabled={busy}>{busy && <LoaderCircle className="h-4 w-4 animate-spin" />} {user ? t("Save") : t("Create user")}</Button>
         </footer>

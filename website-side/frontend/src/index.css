@@ -401,6 +401,27 @@
 .hero-slide { opacity: 0; transition: opacity 1.4s ease; will-change: opacity, transform; }
 .hero-slide.is-active { opacity: 1; animation: ab-ken-burns 9s ease-out forwards; }
 
+/* Home page partners strip: one lap moves right, then repeats seamlessly. */
+@keyframes ab-marquee-right {
+  from { transform: translate3d(-50%, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+.ab-marquee { animation: ab-marquee-right var(--marquee-duration, 30s) linear infinite; }
+.ab-marquee-wrap:hover .ab-marquee,
+.ab-marquee-wrap:focus-within .ab-marquee { animation-play-state: paused; }
+.ab-marquee-mask {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
+}
+/* Logos in one tone: white on the dark theme, grey on the light one; full on hover. */
+.partner-logo { filter: brightness(0) invert(1); opacity: 0.7; transition: opacity 0.2s ease, filter 0.2s ease; }
+:root[data-theme="light"] .partner-logo { filter: grayscale(1); opacity: 0.65; }
+.partner-wordmark { color: var(--color-ab-muted); transition: color 0.2s ease; }
+.partner-item:hover .partner-logo, .partner-item:focus-visible .partner-logo { opacity: 1; }
+:root[data-theme="light"] .partner-item:hover .partner-logo,
+:root[data-theme="light"] .partner-item:focus-visible .partner-logo { filter: none; }
+.partner-item:hover .partner-wordmark, .partner-item:focus-visible .partner-wordmark { color: var(--color-ab-text); }
+
 /* Scroll reveal (see useReveal). */
 .reveal { opacity: 0; transform: translate3d(0, 28px, 0); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
 /* Side entrances only on wide screens; on phones a sideways start would push

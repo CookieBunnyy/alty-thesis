@@ -266,6 +266,16 @@ export interface PublicReview {
 export interface AgentProfile extends PublicAgent {
   completed_sales: number;
   reviews: PublicReview[];
+  partners?: PublicPartner[];
+}
+
+/** A developer / partner shown on the home page (public fields only). */
+export interface PublicPartner {
+  id: number;
+  name: string;
+  partner_type: string | null;
+  website: string | null;
+  logo_url: string | null;
 }
 
 export interface HomeData {
@@ -278,6 +288,7 @@ export interface HomeData {
   categories: { category: string; count: number }[];
   agents: PublicAgent[];
   reviews: PublicReview[];
+  partners?: PublicPartner[];
 }
 
 export interface ClientTransaction {

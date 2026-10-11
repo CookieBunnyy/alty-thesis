@@ -7,7 +7,7 @@ so listing history keeps its developer.
 
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -19,6 +19,7 @@ from app.models.property_listing import PropertyListing
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
 from app.services.audit import record_audit
+from app.services.partner_logos import logo_bytes, logo_version, remove_logo, save_logo
 
 router = APIRouter(prefix="/partners", tags=["Partners"])
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -108,6 +109,7 @@ def _serialize(partner: Partner, stats: dict) -> dict:
         "contact_person": partner.contact_person, "email": partner.email, "phone_number": partner.phone_number,
         "website": partner.website, "address": partner.address, "notes": partner.notes,
         "created_at": partner.created_at, "updated_at": partner.updated_at,
+        "logo_version": logo_version(partner),
         **stats.get(partner.id, {"listings": 0, "available_listings": 0, "transactions": 0,
                                  "completed_sales": 0, "sales_value": 0.0}),
     }
@@ -186,6 +188,33 @@ def update_partner(partner_id: int, payload: PartnerInput, db: Session = Depends
     return _serialize(partner, _stats(db, [partner_id]))
 
 
+@router.get("/{partner_id}/logo")
+def get_partner_logo(partner_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+    return Response(content=logo_bytes(_partner_or_404(db, partner_id)), media_type="image/png",
+                    headers={"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"})
+
+
+@router.put("/{partner_id}/logo")
+async def upload_partner_logo(partner_id: int, file: UploadFile = File(...), db: Session = Depends(get_db),
+                              actor: User = Depends(require_management)):
+    partner = _partner_or_404(db, partner_id)
+    await save_logo(partner, file)
+    record_audit(db, "PARTNER_LOGO_UPDATED", actor=actor, entity_type="partners", entity_id=partner_id,
+                 details={"name": partner.name})
+    db.commit()
+    return _serialize(partner, _stats(db, [partner_id]))
+
+
+@router.delete("/{partner_id}/logo")
+def delete_partner_logo(partner_id: int, db: Session = Depends(get_db), actor: User = Depends(require_management)):
+    partner = _partner_or_404(db, partner_id)
+    remove_logo(partner)
+    record_audit(db, "PARTNER_LOGO_REMOVED", actor=actor, entity_type="partners", entity_id=partner_id,
+                 details={"name": partner.name})
+    db.commit()
+    return _serialize(partner, _stats(db, [partner_id]))
+
+
 @router.delete("/{partner_id}", status_code=204)
 def delete_partner(partner_id: int, db: Session = Depends(get_db), actor: User = Depends(require_management)):
     partner = _partner_or_404(db, partner_id)
@@ -195,6 +224,7 @@ def delete_partner(partner_id: int, db: Session = Depends(get_db), actor: User =
                                                     "Mark the partner Inactive instead, so listing history is kept.")
     record_audit(db, "PARTNER_DELETED", actor=actor, entity_type="partners", entity_id=partner_id,
                  details={"name": partner.name})
+    remove_logo(partner)
     db.delete(partner)
     db.commit()
     return Response(status_code=204)

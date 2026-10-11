@@ -30,6 +30,7 @@ import { RatingSummary } from "@/components/Stars"
 import { PropertyGridSkeleton, Skeleton } from "@/components/Skeleton"
 import { categoryCounts } from "@/lib/categories"
 import type { HomeData } from "@/types"
+import { PartnersStrip } from "@/components/PartnersStrip"
 
 const ROUTE = "M40 60 H150 V120 H230 V190 H350"
 const TRIP_MS = 2200
@@ -364,6 +365,15 @@ export function HomePage() {
               </div>
             )}
           </section>
+
+          {/* ---------------- PARTNERS ---------------- */}
+          {data.partners && data.partners.length > 0 && (
+            <section className="mx-auto max-w-7xl px-4 pb-20" aria-label="Developers and partners">
+              <Reveal className="border-y border-ab-border py-8">
+                <PartnersStrip partners={data.partners} />
+              </Reveal>
+            </section>
+          )}
 
           {/* ---------------- REVIEWS ---------------- */}
           <section className="mx-auto max-w-7xl px-4 pb-20">

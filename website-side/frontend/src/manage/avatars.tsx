@@ -35,9 +35,14 @@ export function StaffAvatar({ userId, name, version, size }: { userId: number; n
 }
 
 /** "Upload photo / Change photo" and "Remove" buttons with a hidden file picker. */
-export function PhotoControls({ hasPhoto, onUpload, onRemove }: {
+export function PhotoControls({ hasPhoto, onUpload, onRemove, kind = "photo" }: {
   hasPhoto: boolean; onUpload: (file: File) => Promise<void>; onRemove: () => Promise<void>
+  /** "logo": the same controls, worded for a company logo. */
+  kind?: "photo" | "logo"
 }) {
+  const words = kind === "logo"
+    ? { input: t("Partner logo"), change: t("Change logo"), upload: t("Upload logo"), remove: t("Remove logo") }
+    : { input: t("Profile photo"), change: t("Change photo"), upload: t("Upload photo"), remove: t("Remove photo") }
   const picker = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState<"" | "upload" | "remove">("")
   const run = async (kind: "upload" | "remove", action: () => Promise<void>) => {
@@ -51,15 +56,15 @@ export function PhotoControls({ hasPhoto, onUpload, onRemove }: {
   }
   return (
     <div className="flex flex-wrap gap-2">
-      <input ref={picker} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label={t("Profile photo")}
+      <input ref={picker} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label={words.input}
         onChange={(e) => { const file = e.target.files?.[0]; if (file) void run("upload", () => onUpload(file)) }} />
       <Button onClick={() => picker.current?.click()} disabled={!!busy}>
         {busy === "upload" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-        {hasPhoto ? t("Change photo") : t("Upload photo")}
+        {hasPhoto ? words.change : words.upload}
       </Button>
       {hasPhoto && (
         <Button variant="danger" onClick={() => void run("remove", onRemove)} disabled={!!busy}>
-          {busy === "remove" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} {t("Remove photo")}
+          {busy === "remove" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} {words.remove}
         </Button>
       )}
     </div>

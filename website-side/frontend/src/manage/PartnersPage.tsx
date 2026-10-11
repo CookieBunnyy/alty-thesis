@@ -10,11 +10,14 @@ import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
 import { callLabels } from "./callLabels"
 import { CallButton } from "@/components/CallButton"
+import { useBlobUrl } from "./useBlobUrl"
+import { photoBody } from "./photoBody"
+import { PhotoControls } from "./avatars"
 
 export type Partner = {
   id: number; name: string; partner_type: string | null; status: string
   contact_person: string | null; email: string | null; phone_number: string | null; website: string | null; address: string | null; notes: string | null
-  created_at: string; updated_at: string
+  created_at: string; updated_at: string; logo_version?: number | null
   listings: number; available_listings: number; transactions: number; completed_sales: number; sales_value: number
 }
 type PartnerDetail = Partner & { listing_rows: { listing_id: number; title: string | null; category: string | null; status: string; price_total: number | null; village_name: string | null }[] }
@@ -86,7 +89,7 @@ export function PartnersPage() {
           <DataTable rows={shown} columns={columns} rowKey={(p) => String(p.id)} onOpen={(p) => open(String(p.id))} empty="No partners match these filters." initialSort={{ key: "name", dir: "asc" }} />
         </>
       )}
-      {selected && <PartnerDrawer partner={selected} canManage={canManage} onClose={close} onEdit={() => setEditing(selected)} onDeleted={() => { close(); void reload() }} />}
+      {selected && <PartnerDrawer partner={selected} canManage={canManage} onClose={close} onEdit={() => setEditing(selected)} onDeleted={() => { close(); void reload() }} onChanged={() => void reload()} />}
       {editing && (
         <PartnerForm partner={editing === "new" ? null : editing} onClose={() => setEditing(null)}
           onSaved={(p) => { setEditing(null); void reload().then(() => open(String(p.id))) }} />
@@ -95,7 +98,43 @@ export function PartnersPage() {
   )
 }
 
-function PartnerDrawer({ partner, canManage, onClose, onEdit, onDeleted }: { partner: Partner; canManage: boolean; onClose: () => void; onEdit: () => void; onDeleted: () => void }) {
+/** The partner's logo (shown on the public home page), with upload controls for management. */
+function PartnerLogo({ partner, canManage, onChanged }: { partner: Partner; canManage: boolean; onChanged: () => void }) {
+  const { api } = useStaffAuth()
+  const toast = useToast()
+  const [version, setVersion] = useState(partner.logo_version ?? null)
+  const { url } = useBlobUrl(version ? `/partners/${partner.id}/logo?v=${version}` : null)
+  const change = async (request: Promise<Partner>, done: string) => {
+    try {
+      const saved = await request
+      setVersion(saved.logo_version ?? null)
+      toast(done)
+      onChanged()
+    } catch (logoError) {
+      toast(t((logoError as Error).message), "error")
+    }
+  }
+  return (
+    <section className="rounded-2xl border border-ab-border bg-ab-card p-4">
+      <p className="text-xs font-bold uppercase tracking-wide text-ab-faint">{t("Logo on the website")}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-4">
+        <div className="flex h-16 w-40 items-center justify-center rounded-xl bg-ab-card-2 p-2">
+          {version && url
+            ? <img src={url} alt={t("{name} logo", { name: partner.name })} className="max-h-full max-w-full object-contain" />
+            : <span className="text-center text-xs text-ab-faint">{t("No logo: the name is shown instead")}</span>}
+        </div>
+        {canManage && (
+          <PhotoControls kind="logo" hasPhoto={Boolean(version)}
+            onUpload={(file) => change(api<Partner>(`/partners/${partner.id}/logo`, { method: "PUT", body: photoBody(file) }), t("Logo updated."))}
+            onRemove={() => change(api<Partner>(`/partners/${partner.id}/logo`, { method: "DELETE" }), t("Logo removed."))} />
+        )}
+      </div>
+      <p className="mt-2 text-xs text-ab-faint">{t("Active partners appear on the home page's partners strip. PNG with a transparent background works best.")}</p>
+    </section>
+  )
+}
+
+function PartnerDrawer({ partner, canManage, onClose, onEdit, onDeleted, onChanged }: { partner: Partner; canManage: boolean; onClose: () => void; onEdit: () => void; onDeleted: () => void; onChanged: () => void }) {
   const { api } = useStaffAuth()
   const toast = useToast()
   const [confirm, setConfirm] = useState(false)
@@ -126,7 +165,8 @@ function PartnerDrawer({ partner, canManage, onClose, onEdit, onDeleted }: { par
         </>
       )}
     >
-      <div className="flex flex-wrap gap-2 text-sm">
+      <PartnerLogo partner={partner} canManage={canManage} onChanged={onChanged} />
+      <div className="mt-4 flex flex-wrap gap-2 text-sm">
         {partner.phone_number && <CallButton phone={partner.phone_number} name={partner.name} labels={callLabels()} className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1 hover:border-ab-accent"><Phone className="h-3.5 w-3.5 text-ab-accent" />{partner.phone_number}</CallButton>}
         {partner.email && <a href={`mailto:${partner.email}`} className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1 hover:border-ab-accent"><Mail className="h-3.5 w-3.5 text-ab-accent" />{partner.email}</a>}
         {partner.website && <a href={partner.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1 hover:border-ab-accent"><ExternalLink className="h-3.5 w-3.5 text-ab-accent" />{t("Website")}</a>}
