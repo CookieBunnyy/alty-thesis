@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth"
 import { Link } from "@/components/Link"
 import { navigate, safeNext, useLocation } from "@/lib/router"
 import { SiteHeader } from "@/components/SiteHeader"
+import { FeatureBackdrop } from "@/components/HomeHero"
 
 const field =
   "mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2.5 text-sm text-ab-text placeholder:text-ab-faint focus:border-ab-accent focus:outline-none"
@@ -58,8 +59,10 @@ export function AuthPage({ mode }: { mode: "signin" | "signup" }) {
   return (
     <div className="flex min-h-dvh flex-col bg-ab-bg text-ab-text">
       <SiteHeader />
-      <main className="flex flex-1 items-center justify-center px-4 py-12">
-        <div className="ab-pop w-full max-w-md rounded-3xl border border-ab-border bg-ab-card p-6 shadow-xl sm:p-8">
+      {/* The site's features float behind the form, purely as decoration. */}
+      <main className="hero-panel relative flex flex-1 items-center justify-center overflow-hidden px-4 pb-32 pt-36 sm:py-40 xl:py-12">
+        <FeatureBackdrop />
+        <div className="ab-pop relative z-10 w-full max-w-md rounded-3xl border border-ab-border bg-ab-card p-6 shadow-xl sm:p-8">
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-ab-accent">Client account</p>
           <h1 className="mt-1 text-2xl font-extrabold">{isSignUp ? "Create your account" : "Welcome back"}</h1>
           <p className="mt-1 text-sm text-ab-muted">

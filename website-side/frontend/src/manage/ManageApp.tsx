@@ -28,6 +28,7 @@ import { ManageSignIn } from "./ManageSignIn"
 import { StaffAuthProvider } from "./staffAuth"
 import { useStaffAuth } from "./staffContext"
 import { ProfilePage } from "./ProfilePage"
+import { GuideProvider } from "./guide"
 
 // path -> [permission key, title, page]
 const PAGES: Record<string, [string, string, () => React.ReactNode]> = {
@@ -53,7 +54,9 @@ export default function ManageApp() {
     <StaffAuthProvider>
       <LanguageProvider>
         <ToastProvider>
-          <ManageRoutes />
+          <GuideProvider>
+            <ManageRoutes />
+          </GuideProvider>
         </ToastProvider>
       </LanguageProvider>
     </StaffAuthProvider>

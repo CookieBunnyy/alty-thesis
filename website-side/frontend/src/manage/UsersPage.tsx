@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, type FormEvent } from "react"
 import { KeyRound, LoaderCircle, Pencil, UserPlus, X } from "lucide-react"
 import { contains, dateTime } from "./format"
 import { Badge, Button, DataTable, LoadState, PageHeader, SearchBox, Select, Tiles, type Column } from "./ui"
+import { Term } from "./guide"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData } from "./useApiData"
@@ -94,7 +95,7 @@ export function UsersPage() {
       </div>
       {!isAdmin && <p className="text-xs text-ab-faint">{t("Only the Administrator can add users, change roles or reset passwords.")}</p>}
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
-      {data && <DataTable rows={shown} columns={columns} rowKey={(u) => String(u.id)} empty="No users match these filters." initialSort={{ key: "name", dir: "asc" }} />}
+      {data && <DataTable exportTitle="Users & Access" rows={shown} columns={columns} rowKey={(u) => String(u.id)} empty="No users match these filters." initialSort={{ key: "name", dir: "asc" }} />}
 
       {data && (
         <section className="rounded-2xl border border-ab-border bg-ab-card p-4">
@@ -208,12 +209,12 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
             <input type="email" inputMode="email" autoComplete="off" className={field} value={form.email} placeholder="name@example.com" onChange={(e) => set("email", e.target.value)} />
             <span className="mt-1 block text-xs font-normal text-ab-faint">{t("Used for “Forgot password”: reset links go only to this address. One email per account.")}</span>
           </label>
-          <label className="block text-sm font-medium">{t("Role")}
+          <label className="block text-sm font-medium"><Term label="Role" />
             <select className={field} value={form.role} onChange={(e) => set("role", e.target.value)}>
               {roles.map((r) => <option key={r} value={r}>{t(r)}</option>)}
             </select>
           </label>
-          <label className="block text-sm font-medium">{t("Linked agent record")}
+          <label className="block text-sm font-medium"><Term label="Linked agent record" />
             <select className={field} value={form.agent_id} onChange={(e) => set("agent_id", e.target.value)}>
               <option value="">{t("None (not an agent)")}</option>
               {agents.map((a) => (

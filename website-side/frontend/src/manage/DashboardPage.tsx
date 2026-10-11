@@ -107,12 +107,13 @@ export function DashboardPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+        <div data-tour="dash-greeting">
           <p className="text-sm text-ab-muted">{today}</p>
           <p className="text-2xl font-extrabold">{greeting()}, {user?.full_name}</p>
         </div>
         <button
           type="button"
+          data-tour="dash-refresh"
           onClick={() => void reload()}
           className="inline-flex items-center gap-1.5 rounded-xl border border-ab-border-strong px-3 py-2 text-sm font-semibold hover:bg-ab-hover"
         >
@@ -148,7 +149,7 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6" data-tour="dash-kpis">
         <Kpi icon={Building2} label="Total properties" value={count(summary.total_properties)}
           detail={t("{a} available · {r} reserved · {s} sold", { a: summary.available_properties, r: summary.reserved_properties, s: summary.sold_properties })} />
         <Kpi icon={Users} label="Buyers & sellers" value={count(summary.total_clients)} detail={t("From client records")} />
@@ -162,7 +163,7 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
           tone={summary.failed_documents ? "text-ab-danger" : "text-ab-muted"} />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-3" data-tour="dash-charts">
         <Card
           title="Transactions per month"
           className="lg:col-span-2"

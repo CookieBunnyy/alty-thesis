@@ -1,7 +1,8 @@
 import React from "react"
-import { MessageSquare, Map as MapIcon } from "lucide-react"
+import { Map as MapIcon } from "lucide-react"
 import type { HeaderProps } from "../types"
 import { SiteHeader } from "./SiteHeader"
+import { ChatBotIcon } from "./icons/ChatBotIcon"
 
 /** Map page header: the site navigation, plus the existing mobile
  *  Chat Assistance / Interactive Map tabs underneath. */
@@ -18,7 +19,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, activePropertiesCount
             activeTab === "chat" ? "border-b-2 border-ab-border bg-ab-card-2 text-ab-text" : "text-ab-muted hover:text-ab-text"
           }`}
         >
-          <MessageSquare className="h-4 w-4" />
+          <ChatBotIcon className="h-4 w-4" />
           <span>Chat Assistance</span>
         </button>
         <button

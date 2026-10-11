@@ -102,7 +102,7 @@ export function PropertiesPage() {
       {data && (
         <>
           <p className="text-xs text-ab-faint">{t("{n} of {total} listings", { n: shown.length, total: listings.length })}</p>
-          <DataTable rows={shown} columns={columns} rowKey={(l) => String(l.listing_id)} onOpen={(l) => open(String(l.listing_id))}
+          <DataTable exportTitle="Properties" rows={shown} columns={columns} rowKey={(l) => String(l.listing_id)} onOpen={(l) => open(String(l.listing_id))}
             empty="No listings match these filters." initialSort={{ key: "title", dir: "asc" }} />
         </>
       )}

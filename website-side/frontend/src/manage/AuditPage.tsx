@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react"
-import { ChevronLeft, ChevronRight, Download } from "lucide-react"
+import { ChevronLeft, ChevronRight, FileDown } from "lucide-react"
 import { Link } from "@/components/Link"
 import { dateTime, statusLabel } from "./format"
 import { Badge, Button, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
 import { t } from "./i18n"
+import { exportPdf } from "./pdfExport"
+import { useToast } from "./toastContext"
 
 type Event = { id: number; timestamp: string; actor: string; actor_id: number | null; action: string; entity_type: string | null; entity_id: string | null; result: string; details: Record<string, unknown> }
 type Page = { total: number; items: Event[] }
@@ -16,7 +18,8 @@ const ENTITY_PAGES: Record<string, string> = { property_listings: "/manage/prope
 /** Who did what, when (Administrator only, like the desktop). Filtering and
  *  paging happen on the server, over the whole log. */
 export function AuditPage() {
-  const { api } = useStaffAuth()
+  const { api, user } = useStaffAuth()
+  const toast = useToast()
   const [search, setSearch] = useState("")
   const [query, setQuery] = useState("")
   const [action, setAction] = useState("")
@@ -47,17 +50,30 @@ export function AuditPage() {
   const { data, error, loading, reload } = useApiData(load, `audit:${params(PAGE_SIZE, offset)}`)
   const [page, actions] = data ?? [{ total: 0, items: [] }, []]
 
-  const exportCsv = async () => {
+  // Every entry matching the filters (up to 1,000), not just this page.
+  const exportAudit = async () => {
     setExporting(true)
     try {
       const all = await api<Page>(`/audit?${params(1000, 0)}`)
-      const quote = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`
-      const lines = [["Time", "Actor", "Action", "Entity", "Entity ID", "Result", "Details"].map((h) => t(h)).join(","),
-        ...all.items.map((e) => [e.timestamp, e.actor, e.action, e.entity_type, e.entity_id, e.result, JSON.stringify(e.details)].map(quote).join(","))]
-      const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }))
-      const link = Object.assign(document.createElement("a"), { href: url, download: `alty-audit-${new Date().toLocaleDateString("en-CA")}.csv` })
-      link.click()
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      const details = (value: unknown) => {
+        if (!value || typeof value !== "object" || Object.keys(value).length === 0) return ""
+        // {"name": "X", "role": "Y"} -> "name: X · role: Y"
+        const text = Object.entries(value as Record<string, unknown>)
+          .map(([key, item]) => `${key.replace(/_/g, " ")}: ${typeof item === "object" && item !== null ? JSON.stringify(item) : String(item)}`)
+          .join(" · ")
+        return text.length > 200 ? `${text.slice(0, 197)}…` : text
+      }
+      const filters = [query && `${t("Search")}: ${query}`, action && `${t("Action")}: ${statusLabel(action)}`, result && `${t("Result")}: ${result}`,
+        since && `${t("From")} ${since}`, until && `${t("To")} ${until}`].filter(Boolean).join("   ·   ")
+      await exportPdf({
+        title: "Audit Logs",
+        note: [filters, all.total > all.items.length ? t("First {n} of {total} entries", { n: all.items.length, total: all.total }) : ""].filter(Boolean).join("   ·   ") || undefined,
+        author: user?.full_name,
+        columns: ["Time", "Actor", "Action", "Record", "Result", "Details"],
+        rows: all.items.map((e) => [dateTime(e.timestamp), e.actor ?? "", statusLabel(e.action), e.entity_type ? `${statusLabel(e.entity_type)}${e.entity_id ? ` · ${e.entity_id}` : ""}` : "", e.result ?? "", details(e.details)]),
+      })
+    } catch {
+      toast(t("The PDF couldn't be created. Please try again."), "error")
     } finally {
       setExporting(false)
     }
@@ -77,7 +93,7 @@ export function AuditPage() {
       <PageHeader
         title="A record of every action taken in ALTY"
         subtitle="Every sign-in, record change, document action and sync, from the desktop app and the website. Entries can't be edited or deleted."
-        actions={<Button onClick={exportCsv} disabled={exporting || !page.total}><Download className="h-4 w-4" /> {exporting ? t("Exporting…") : t("Export CSV")}</Button>}
+        actions={<Button onClick={() => void exportAudit()} disabled={exporting || !page.total}><FileDown className="h-4 w-4" /> {exporting ? t("Exporting…") : t("Export PDF")}</Button>}
       />
       <div className="flex flex-wrap items-end gap-2">
         <div className="w-full md:w-auto md:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search action, actor or record ID" /></div>

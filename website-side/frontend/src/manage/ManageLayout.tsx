@@ -31,8 +31,9 @@ import { useStaffAuth } from "./staffContext"
 import { t } from "./i18n"
 import { StaffAvatar } from "./avatars"
 import { InstallAppButton } from "@/components/InstallAppButton"
+import { HelpMenu, Tooltip } from "./guide"
 
-type NavItem = { key: string; label: string; icon: LucideIcon; path?: string }
+type NavItem = { key: string; label: string; icon: LucideIcon; path?: string; hint?: string }
 
 // Same groups, labels and permission keys as the desktop sidebar. Only pages
 // that already work on the web get a link; the rest are listed as coming in a
@@ -41,33 +42,33 @@ const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: "Main",
     items: [
-      { key: "dashboard", label: "Dashboard", icon: Gauge, path: "/manage" },
-      { key: "properties", label: "Properties", icon: Home, path: "/manage/properties" },
-      { key: "clients", label: "Buyers & Sellers", icon: Users, path: "/manage/clients" },
-      { key: "transactions", label: "Transactions", icon: ArrowLeftRight, path: "/manage/transactions" },
-      { key: "agents", label: "Agents", icon: UserRound, path: "/manage/agents" },
-      { key: "partners", label: "Partners / Developers", icon: Handshake, path: "/manage/partners" },
+      { key: "dashboard", label: "Dashboard", icon: Gauge, path: "/manage", hint: "A summary of the whole business at a glance" },
+      { key: "properties", label: "Properties", icon: Home, path: "/manage/properties", hint: "Every listing and whether it is available, reserved or sold" },
+      { key: "clients", label: "Buyers & Sellers", icon: Users, path: "/manage/clients", hint: "Clients, created automatically from documents" },
+      { key: "transactions", label: "Transactions", icon: ArrowLeftRight, path: "/manage/transactions", hint: "Every reservation and sale on record" },
+      { key: "agents", label: "Agents", icon: UserRound, path: "/manage/agents", hint: "Agents, their clients, sales and reviews" },
+      { key: "partners", label: "Partners / Developers", icon: Handshake, path: "/manage/partners", hint: "Developers and partner companies" },
     ],
   },
   {
     group: "Intelligence",
     items: [
-      { key: "analytics", label: "Analytics", icon: BarChart3, path: "/manage/analytics" },
-      { key: "forecasting", label: "Forecasting", icon: LineChart, path: "/manage/forecasting" },
+      { key: "analytics", label: "Analytics", icon: BarChart3, path: "/manage/analytics", hint: "How sales and listings are performing" },
+      { key: "forecasting", label: "Forecasting", icon: LineChart, path: "/manage/forecasting", hint: "Projections for the coming months" },
       // Decision support is a layer inside Analytics, Forecasting, properties and
       // agents; this is its central feed (same "dss" permission as the desktop).
-      { key: "dss", label: "Recommendations", icon: ListChecks, path: "/manage/insights" },
-      { key: "media", label: "Digital Preview", icon: Images, path: "/manage/media" },
+      { key: "dss", label: "Recommendations", icon: ListChecks, path: "/manage/insights", hint: "What needs attention and what to do next" },
+      { key: "media", label: "Digital Preview", icon: Images, path: "/manage/media", hint: "Property photos and their quality checks" },
     ],
   },
   {
     group: "Operations",
     items: [
-      { key: "documents", label: "Document Repository", icon: FolderOpen, path: "/manage/documents" },
-      { key: "workforce", label: "Workforce", icon: Network, path: "/manage/workforce" },
-      { key: "users", label: "Users & Access", icon: ShieldUser, path: "/manage/users" },
-      { key: "audit", label: "Audit Logs", icon: ClipboardList, path: "/manage/audit" },
-      { key: "settings", label: "Settings", icon: Settings, path: "/manage/settings" },
+      { key: "documents", label: "Document Repository", icon: FolderOpen, path: "/manage/documents", hint: "Upload documents; ALTY reads and files them" },
+      { key: "workforce", label: "Workforce", icon: Network, path: "/manage/workforce", hint: "The team and how work is shared" },
+      { key: "users", label: "Users & Access", icon: ShieldUser, path: "/manage/users", hint: "Staff accounts and what each role can open" },
+      { key: "audit", label: "Audit Logs", icon: ClipboardList, path: "/manage/audit", hint: "A permanent record of every action" },
+      { key: "settings", label: "Settings", icon: Settings, path: "/manage/settings", hint: "Appearance, language and tours" },
     ],
   },
 ]
@@ -83,7 +84,7 @@ function BottomNav({ pathname, can, me }: { pathname: string; can: (key: string)
   const cell = "flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 px-1 text-[10px] font-semibold"
   return (
     <nav aria-label={t("Quick navigation")}
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-ab-border bg-ab-sidebar/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+      data-tour="bottom-nav" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-ab-border bg-ab-sidebar/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
       {quick.map(({ key, label, icon: Icon, path }) => {
         const active = path === pathname
         return (
@@ -123,7 +124,7 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
         <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-ab-faint">Abellar Realty</span>
       </Link>
       {user?.agent_id && (
-        <Link to="/manage/my-work" onClick={() => setMenuOpen(false)} aria-current={pathname === "/manage/my-work" ? "page" : undefined}
+        <Link to="/manage/my-work" data-tour="my-work" onClick={() => setMenuOpen(false)} aria-current={pathname === "/manage/my-work" ? "page" : undefined}
           className={`flex min-h-10 items-center gap-2.5 rounded-xl px-3 text-sm font-semibold transition ${pathname === "/manage/my-work" ? "bg-ab-accent text-ab-ink" : "border border-ab-accent/40 text-ab-text hover:bg-ab-hover"}`}>
           <Briefcase className="h-4 w-4 shrink-0" /> {t("My Work")}
         </Link>
@@ -135,12 +136,13 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
           <div key={group}>
             <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-ab-faint">{t(group)}</p>
             <ul className="space-y-0.5">
-              {visible.map(({ key, label, icon: Icon, path }) => {
+              {visible.map(({ key, label, icon: Icon, path, hint }) => {
                 const active = path === pathname
                 const base = "flex min-h-10 items-center gap-2.5 rounded-xl px-3 text-sm font-semibold transition"
                 return (
                   <li key={key}>
                     {path ? (
+                      <Tooltip content={t(hint ?? label)} side="right" className="block">
                       <Link
                         to={path}
                         onClick={() => setMenuOpen(false)}
@@ -149,6 +151,7 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
                       >
                         <Icon className="h-4 w-4 shrink-0" /> {t(label)}
                       </Link>
+                      </Tooltip>
                     ) : (
                       <span className={`${base} cursor-default text-ab-faint`} title={t("Coming in a later migration phase — use the desktop app for now")}>
                         <Icon className="h-4 w-4 shrink-0" /> <span className="flex-1">{t(label)}</span>
@@ -167,7 +170,7 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
 
   return (
     <div className="flex min-h-dvh bg-ab-bg text-ab-text">
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-ab-border bg-ab-sidebar lg:block">{sidebar}</aside>
+      <aside data-tour="nav" className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-ab-border bg-ab-sidebar lg:block">{sidebar}</aside>
 
       {menuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={t("Menu")}>
@@ -198,15 +201,16 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-ab-border bg-ab-sidebar/95 px-3 backdrop-blur sm:h-16 sm:gap-3 sm:px-6">
-          <button type="button" onClick={() => setMenuOpen(true)} aria-label={t("Open menu")} className="shrink-0 rounded-lg border border-ab-border-strong p-2 lg:hidden">
+          <button type="button" data-tour="menu-button" onClick={() => setMenuOpen(true)} aria-label={t("Open menu")} className="shrink-0 rounded-lg border border-ab-border-strong p-2 lg:hidden">
             <Menu className="h-4 w-4" />
           </button>
           <h1 className="min-w-0 flex-1 truncate text-base font-bold sm:text-lg md:flex-none md:shrink-0">{title}</h1>
-          <div className="hidden min-w-0 flex-1 justify-center px-2 md:flex"><GlobalSearch /></div>
+          <div className="hidden min-w-0 flex-1 justify-center px-2 md:flex" data-tour="search"><GlobalSearch /></div>
           <InstallAppButton area="manage" translate={t} />
-          <NotificationBell />
+          <span data-tour="bell" className="shrink-0"><NotificationBell /></span>
+          <HelpMenu />
           <span className="hidden lg:block"><ThemeToggle theme={theme} onToggle={toggleTheme} /></span>
-          <Link to="/manage/profile" title={t("My profile")}
+          <Link to="/manage/profile" title={t("My profile")} data-tour="profile"
             className="hidden items-center gap-2.5 rounded-xl border border-ab-border bg-ab-card px-2 py-1.5 transition hover:border-ab-border-strong lg:flex">
             {me}
             <span className="hidden leading-tight sm:block">
@@ -214,9 +218,13 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
               <span className="block text-[11px] text-ab-faint">{t(user?.role ?? "")}</span>
             </span>
           </Link>
-          <button type="button" onClick={signOut} title={t("Sign out")} aria-label={t("Sign out")} className="hidden rounded-lg border border-ab-border-strong p-2 text-ab-muted hover:bg-ab-hover hover:text-ab-danger lg:block">
-            <LogOut className="h-4 w-4" />
-          </button>
+          <span className="hidden lg:block">
+            <Tooltip content={t("Sign out")} side="bottom">
+              <button type="button" onClick={signOut} aria-label={t("Sign out")} className="rounded-lg border border-ab-border-strong p-2 text-ab-muted hover:bg-ab-hover hover:text-ab-danger">
+                <LogOut className="h-4 w-4" />
+              </button>
+            </Tooltip>
+          </span>
         </header>
         <main className="min-w-0 flex-1 p-3 pb-24 sm:p-6 sm:pb-24 lg:pb-6">
           <ErrorBoundary key={pathname}>{children}</ErrorBoundary>

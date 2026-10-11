@@ -110,14 +110,14 @@ export function AnalyticsPage() {
 
           <div>
             <h2 className="mb-2 font-bold">{t("Property performance")}</h2>
-            <DataTable rows={data.breakdown.properties} columns={propertyColumns} rowKey={(p) => String(p.listing_id)} empty="No listings." initialSort={{ key: "revenue", dir: "desc" }} />
+            <DataTable exportTitle="Analytics: properties" rows={data.breakdown.properties} columns={propertyColumns} rowKey={(p) => String(p.listing_id)} empty="No listings." initialSort={{ key: "revenue", dir: "desc" }} />
             <p className="mt-2 text-xs text-ab-faint">{t("Counts are reservations and sales recorded in ALTY. Website views and inquiries aren't recorded yet, so interest before a reservation isn't shown.")}</p>
           </div>
 
           <div className="space-y-5">
             <div>
               <h2 className="mb-2 font-bold">{t("Agent performance")}</h2>
-              <DataTable rows={data.overview.agents} columns={agentColumns} rowKey={(a) => a.agent_id} empty="No agents." initialSort={{ key: "value", dir: "desc" }} />
+              <DataTable exportTitle="Analytics: agents" rows={data.overview.agents} columns={agentColumns} rowKey={(a) => a.agent_id} empty="No agents." initialSort={{ key: "value", dir: "desc" }} />
             </div>
             <div>
               <h2 className="mb-2 font-bold">{t("Prices by property type")}</h2>

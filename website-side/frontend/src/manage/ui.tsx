@@ -2,23 +2,29 @@
 // search/filter bar, a sortable data table that becomes cards on phones, a
 // detail drawer, confirm dialog and status badges. Labels passed to these
 // components (titles, column names, filter options…) are translated here.
-import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Inbox, LoaderCircle, Search, X } from "lucide-react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, FileDown, Inbox, LoaderCircle, Search, X } from "lucide-react"
+import { exportPdf, readTable } from "./pdfExport"
+import { useStaffAuth } from "./staffContext"
+import { useToast } from "./toastContext"
 import { statusLabel } from "./format"
 import { t } from "./i18n"
+import { glossary } from "./glossary"
+import { HelpTip, Term, Tooltip } from "./guide"
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <div className="min-w-0">
+      <div className="min-w-0" data-tour="page-header">
         <h2 className="text-xl font-extrabold leading-tight sm:text-2xl">{t(title)}</h2>
         {subtitle && <p className="mt-1 line-clamp-3 max-w-3xl text-xs text-ab-muted sm:line-clamp-none sm:text-sm">{t(subtitle)}</p>}
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap gap-2" data-tour="page-actions">{actions}</div>}
     </div>
   )
 }
 
+/** ``title`` is shown as a tooltip on hover and keyboard focus (and read by screen readers). */
 export function Button({ children, onClick, variant = "secondary", disabled, type = "button", title }: {
   children: ReactNode; onClick?: () => void; variant?: "primary" | "secondary" | "danger"; disabled?: boolean; type?: "button" | "submit"; title?: string
 }) {
@@ -27,17 +33,19 @@ export function Button({ children, onClick, variant = "secondary", disabled, typ
     secondary: "border-ab-border-strong text-ab-text hover:bg-ab-hover",
     danger: "border-ab-danger/50 text-ab-danger hover:bg-ab-danger/10",
   }[variant]
-  return (
+  const button = (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
-      title={title}
+      // A disabled button gets no hover or focus, so it keeps the browser's own tooltip.
+      title={disabled ? title : undefined}
       className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border px-3.5 text-sm font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${style}`}
     >
       {children}
     </button>
   )
+  return title && !disabled ? <Tooltip content={title}>{button}</Tooltip> : button
 }
 
 // Static class names (Tailwind can't see computed ones): one row on wide screens.
@@ -45,22 +53,29 @@ const XL_COLUMNS: Record<number, string> = { 3: "xl:grid-cols-3", 4: "xl:grid-co
 
 export function Tiles({ items }: { items: { label: string; value: ReactNode; detail?: ReactNode; onClick?: () => void; active?: boolean }[] }) {
   return (
-    <div className={`grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 ${XL_COLUMNS[items.length] ?? "xl:grid-cols-5"}`}>
+    <div data-tour="tiles" className={`grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 ${XL_COLUMNS[items.length] ?? "xl:grid-cols-5"}`}>
       {items.map((item) => {
+        const help = glossary(item.label)
         const body = (
           <>
-            <p className="text-xs font-semibold text-ab-muted">{t(item.label)}</p>
+            <p className={`text-xs font-semibold text-ab-muted ${help ? "pr-5" : ""}`}>{t(item.label)}</p>
             <p className="mt-1 text-xl font-extrabold tabular-nums text-ab-text sm:mt-1.5 sm:text-2xl">{item.value}</p>
             {item.detail && <p className="mt-0.5 text-xs text-ab-faint">{typeof item.detail === "string" ? t(item.detail) : item.detail}</p>}
           </>
         )
-        const cls = `rounded-2xl border bg-ab-card p-3 text-left sm:p-4 ${item.active ? "border-ab-accent" : "border-ab-border"}`
-        return item.onClick ? (
-          <button key={item.label} type="button" onClick={item.onClick} aria-pressed={item.active} className={`${cls} transition hover:border-ab-border-strong`}>
-            {body}
-          </button>
-        ) : (
-          <div key={item.label} className={cls}>{body}</div>
+        const cls = `h-full w-full rounded-2xl border bg-ab-card p-3 text-left sm:p-4 ${item.active ? "border-ab-accent" : "border-ab-border"}`
+        return (
+          // The "?" sits beside the tile's button, not inside it (a button can't hold another button).
+          <div key={item.label} className="relative">
+            {item.onClick ? (
+              <button type="button" onClick={item.onClick} aria-pressed={item.active} className={`${cls} transition hover:border-ab-border-strong`}>
+                {body}
+              </button>
+            ) : (
+              <div className={cls}>{body}</div>
+            )}
+            {help && <span className="absolute right-2 top-2 sm:right-3 sm:top-3"><HelpTip text={help} label={item.label} /></span>}
+          </div>
         )
       })}
     </div>
@@ -69,7 +84,7 @@ export function Tiles({ items }: { items: { label: string; value: ReactNode; det
 
 export function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
-    <label className="relative block min-w-0 flex-1">
+    <label className="relative block min-w-0 flex-1" data-tour="filters">
       <span className="sr-only">{t(placeholder)}</span>
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ab-faint" />
       <input
@@ -136,11 +151,30 @@ export type Column<T> = {
 }
 
 /** Sortable table; on phones each row becomes a card (title + label/value pairs). */
-export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort }: {
+export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort, exportTitle, exportNote }: {
   rows: T[]; columns: Column<T>[]; rowKey: (row: T) => string; onOpen?: (row: T) => void; empty: string
   initialSort?: { key: string; dir: "asc" | "desc" }
+  /** Adds "Export PDF": the table as shown (search, filters, sort), titled this. */
+  exportTitle?: string
+  /** A line under the PDF title, e.g. the filters in use. */
+  exportNote?: string
 }) {
   const [sort, setSort] = useState(initialSort ?? null)
+  const tableRef = useRef<HTMLTableElement | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const { user } = useStaffAuth()
+  const toast = useToast()
+  const exportTable = async () => {
+    if (!tableRef.current || !exportTitle) return
+    setExporting(true)
+    try {
+      await exportPdf({ title: exportTitle, note: exportNote, author: user?.full_name, ...readTable(tableRef.current) })
+    } catch {
+      toast(t("The PDF couldn't be created. Please try again."), "error")
+    } finally {
+      setExporting(false)
+    }
+  }
   const sorted = useMemo(() => {
     const column = columns.find((c) => c.key === sort?.key)
     if (!sort || !column?.sort) return rows
@@ -165,7 +199,15 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
   const [first, ...rest] = columns
   return (
     <>
-      <ul className="space-y-2 md:hidden">
+      {exportTitle && (
+        <div className="mb-2 flex justify-end">
+          <Button onClick={() => void exportTable()} disabled={exporting}>
+            {exporting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+            {exporting ? t("Exporting…") : t("Export PDF")}
+          </Button>
+        </div>
+      )}
+      <ul className="space-y-2 md:hidden" data-tour="table">
         {sorted.map((row) => (
           <li key={rowKey(row)}>
             {/* A card is a button only when it opens something (it may hold its own buttons otherwise). */}
@@ -186,8 +228,8 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
           </li>
         ))}
       </ul>
-      <div className="ab-table-scroll hidden rounded-2xl border border-ab-border bg-ab-card md:block">
-        <table className="w-full text-left text-sm">
+      <div className="ab-table-scroll hidden rounded-2xl border border-ab-border bg-ab-card md:block" data-tour="table">
+        <table ref={tableRef} className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-ab-border text-[11px] uppercase tracking-wide text-ab-faint">
               {columns.map((c) => {
@@ -206,6 +248,7 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
                         {active && (sort!.dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
                       </button>
                     ) : t(c.label)}
+                    {glossary(c.label) && <span data-pdf-skip className="ml-0.5"><HelpTip text={glossary(c.label)!} label={c.label} side="bottom" /></span>}
                   </th>
                 )
               })}
@@ -294,7 +337,7 @@ export function Section({ title, children, action }: { title: string; children: 
   return (
     <section className="rounded-2xl border border-ab-border bg-ab-card p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-ab-faint">{t(title)}</h3>
+        <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-ab-faint"><Term label={title} /></h3>
         {action}
       </div>
       {children}
@@ -308,7 +351,7 @@ export function Facts({ items }: { items: [string, ReactNode][] }) {
     <dl className="grid grid-cols-1 gap-x-4 gap-y-2.5 text-sm sm:grid-cols-2">
       {items.map(([label, value]) => (
         <div key={label} className="min-w-0">
-          <dt className="text-xs text-ab-faint">{t(label)}</dt>
+          <dt className="text-xs text-ab-faint"><Term label={label} /></dt>
           <dd className={`break-words ${value === null || value === undefined || value === "" || value === "—" ? "italic text-ab-faint" : "font-medium"}`}>
             {value === null || value === undefined || value === "" || value === "—" ? t("Not provided") : value}
           </dd>

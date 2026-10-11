@@ -113,7 +113,7 @@ export function AgentsPage() {
       {data && (
         <>
           <p className="text-xs text-ab-faint">{t("{n} of {total} agents", { n: shown.length, total: agents.length })}</p>
-          <DataTable rows={shown} columns={columns} rowKey={(a) => a.agent_id} onOpen={(a) => open(a.agent_id)} empty="No agents match these filters." initialSort={{ key: "value", dir: "desc" }} />
+          <DataTable exportTitle="Agents" rows={shown} columns={columns} rowKey={(a) => a.agent_id} onOpen={(a) => open(a.agent_id)} empty="No agents match these filters." initialSort={{ key: "value", dir: "desc" }} />
         </>
       )}
       {selected && <AgentDrawer agent={selected} onClose={close} onChanged={reload} />}

@@ -23,6 +23,8 @@
     "axios": "^1.20.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.5",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "leaflet": "^1.9.4",
     "leaflet-geosearch": "^4.4.0",
     "lucide-react": "^1.41.0",

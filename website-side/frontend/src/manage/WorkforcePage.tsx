@@ -68,7 +68,7 @@ export function WorkforcePage() {
           <InsightPanel title="Workforce Recommendation" insights={agentInsights} empty={t("No agent needs attention right now — workload and performance are within the normal range.")} />
           <div>
             <h2 className="mb-2 font-bold">{t("Agent workload")}</h2>
-            <DataTable rows={rows} columns={columns} rowKey={(a) => a.agent_id} empty="No agents." initialSort={{ key: "open", dir: "desc" }} />
+            <DataTable exportTitle="Workforce" rows={rows} columns={columns} rowKey={(a) => a.agent_id} empty="No agents." initialSort={{ key: "open", dir: "desc" }} />
             <p className="mt-2 text-xs text-ab-faint">{t("Generated {when}. Counts are from records in ALTY (transactions from documents and sync).", { when: dateTime(workforce.generated_at) })}</p>
           </div>
         </>

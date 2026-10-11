@@ -11,7 +11,6 @@ import {
   LoaderCircle,
   MapPin,
   MapPinOff,
-  MessageCircleMore,
   Search,
   House,
   ListFilter,
@@ -36,6 +35,7 @@ import { navigate, useLocation } from "./lib/router"
 import { RowSkeleton } from "./components/Skeleton"
 import { useCommute } from "./hooks/useCommute"
 import { formatKm, formatMinutes, getCapabilities, requestCurrentPosition, reversePlace, searchPlaces } from "./lib/mapApi"
+import { ChatBotIcon } from "./components/icons/ChatBotIcon"
 
 // Live, AVAILABLE properties from the main Alty API (documents + central data).
 const PROPERTIES_URL = PUBLIC_PROPERTIES_URL
@@ -995,7 +995,7 @@ export default function App() {
                 className="absolute bottom-5 right-5 z-[1100] inline-flex h-14 w-14 items-center justify-center rounded-full bg-ab-accent text-ab-ink shadow-[0_12px_30px_rgba(12,53,41,0.35)] transition hover:-translate-y-1 hover:bg-ab-accent-hover"
                 aria-label="Toggle assistant"
               >
-                <MessageCircleMore className="h-6 w-6" />
+                <ChatBotIcon className="h-7 w-7" />
               </button>
 
               {isChatOpen && (

@@ -28,6 +28,7 @@ import { categoryCounts } from "@/lib/categories"
 import type { HomeData } from "@/types"
 import { PartnersStrip } from "@/components/PartnersStrip"
 import { HomeHero } from "@/components/HomeHero"
+import { useAuth } from "@/lib/auth"
 
 const ROUTE = "M40 60 H150 V120 H230 V190 H350"
 const TRIP_MS = 2200
@@ -169,6 +170,7 @@ export function HomePage() {
   const [error, setError] = useState("")
   const [routePlays, setRoutePlays] = useState(0) // the route card replays each time it is reached
   const viewer = usePropertyViewer()
+  const { client } = useAuth()
   const reviewTrack = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -395,18 +397,34 @@ export function HomePage() {
           </section>
 
           {/* ---------------- CTA ---------------- */}
+          {/* Same panel as the hero, in the page's theme; signed-in clients get their account instead of sign-up. */}
           <section className="px-4 pb-20">
-            <Reveal className="mx-auto max-w-7xl overflow-hidden rounded-3xl bg-[#3B3B3B] p-8 text-white shadow-2xl md:p-14">
-              <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-3xl font-extrabold tracking-tight md:text-4xl">Ready to find your next home?</h2>
-                  <p className="mt-2 max-w-xl text-white/75">
-                    Create a free client account to follow your transactions and rate your agent.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <Link to="/signup" className="rounded-xl bg-[#C7F000] px-5 py-3 font-bold text-[#0B0F10] transition hover:bg-[#D6FF33]">Create account</Link>
-                  <Link to="/properties" className="rounded-xl border border-white/30 px-5 py-3 font-bold transition hover:bg-white/10">Browse properties</Link>
+            <Reveal className="hero-panel relative mx-auto max-w-7xl overflow-hidden rounded-3xl border border-ab-border px-6 py-12 text-center md:px-14 md:py-16">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,color-mix(in_oklab,var(--color-ab-accent)_22%,transparent),transparent_60%)]" aria-hidden />
+              <div className="relative mx-auto flex max-w-2xl flex-col items-center">
+                <img src="/icons/site-192.png" alt="" width={56} height={56} className="h-14 w-14 rounded-2xl shadow-[0_14px_30px_-12px_rgba(0,0,0,0.55)]" />
+                <h2 className="mt-6 text-3xl font-extrabold tracking-tight text-ab-text md:text-4xl">Ready to find your next home?</h2>
+                <p className="mt-3 text-ab-muted md:text-lg">
+                  {client
+                    ? "Browse the latest listings, or follow your transactions and reviews in your account."
+                    : "Create a free client account to follow your transactions and rate your agent."}
+                </p>
+                <div className="mt-7 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
+                  {client ? (
+                    <>
+                      <Link to="/properties" className="inline-flex items-center justify-center gap-2 rounded-xl bg-ab-accent px-6 py-3 font-bold text-ab-ink transition hover:-translate-y-0.5 hover:bg-ab-accent-hover">
+                        Browse properties <ArrowRight className="h-4 w-4" />
+                      </Link>
+                      <Link to="/account" className="inline-flex items-center justify-center rounded-xl border border-ab-border-strong bg-ab-card px-6 py-3 font-bold text-ab-text transition hover:-translate-y-0.5 hover:bg-ab-hover">My account</Link>
+                    </>
+                  ) : (
+                    <>
+                      <Link to="/signup" className="inline-flex items-center justify-center gap-2 rounded-xl bg-ab-accent px-6 py-3 font-bold text-ab-ink transition hover:-translate-y-0.5 hover:bg-ab-accent-hover">
+                        Create free account <ArrowRight className="h-4 w-4" />
+                      </Link>
+                      <Link to="/properties" className="inline-flex items-center justify-center rounded-xl border border-ab-border-strong bg-ab-card px-6 py-3 font-bold text-ab-text transition hover:-translate-y-0.5 hover:bg-ab-hover">Browse properties</Link>
+                    </>
+                  )}
                 </div>
               </div>
             </Reveal>

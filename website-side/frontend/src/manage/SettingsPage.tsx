@@ -10,6 +10,7 @@ import { useLanguage } from "./languageContext"
 import { LANGUAGES, t, type Lang } from "./i18n"
 import { photoBody } from "./photoBody"
 import { PhotoControls, StaffAvatar } from "./avatars"
+import { useGuide } from "./guideContext"
 
 type Sync = { enabled: boolean; counts: Record<string, Record<string, number>> }
 type PushReport = { reason?: string; tables?: Record<string, { pushed: number; failed: number; errors: string[] }>; warnings?: string[] }
@@ -54,7 +55,7 @@ export function SettingsPage() {
         </Section>
       )}
       <Section title="Appearance">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" data-tour="settings-appearance">
           {([["dark", "Dark mode", Moon], ["light", "Light mode", Sun]] as const).map(([mode, label, Icon]) => (
             <button key={mode} type="button" aria-pressed={theme === mode} onClick={() => setTheme(mode)}
               className={`inline-flex min-h-10 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition ${theme === mode ? "border-ab-accent bg-ab-accent text-ab-ink" : "border-ab-border-strong hover:bg-ab-hover"}`}>
@@ -65,7 +66,7 @@ export function SettingsPage() {
         </div>
       </Section>
       <Section title="Language">
-        <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label={t("Language")}>
+        <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label={t("Language")} data-tour="settings-language">
           {(Object.entries(LANGUAGES) as [Lang, string][]).map(([code, name]) => (
             <button key={code} type="button" role="radio" aria-checked={lang === code} onClick={() => setLang(code)}
               className={`inline-flex min-h-10 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition ${lang === code ? "border-ab-accent bg-ab-accent text-ab-ink" : "border-ab-border-strong hover:bg-ab-hover"}`}>
@@ -75,8 +76,36 @@ export function SettingsPage() {
           <p className="text-xs text-ab-faint sm:ml-3">{t("Changes every page of the Management System. Names, addresses and other record details stay as they were entered.")}</p>
         </div>
       </Section>
+      <HelpSettings />
       {isAdmin ? <AdminSettings /> : <p className="text-xs text-ab-faint">{t("System configuration is available to the Administrator.")}</p>}
     </div>
+  )
+}
+
+/** Guided tours: on or off, and start them all over again. */
+function HelpSettings() {
+  const { auto, setAuto, reset, start } = useGuide()
+  const toast = useToast()
+  return (
+    <Section title="Tours and help">
+      <div className="space-y-3" data-tour="settings-help">
+        <label className="flex cursor-pointer items-start gap-3 text-sm">
+          <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--color-ab-accent)]" />
+          <span>
+            <span className="block font-semibold">{t("Show tours automatically")}</span>
+            <span className="block text-xs text-ab-faint">{t("A short guided tour the first time you open each page. Saved on this browser for your account.")}</span>
+          </span>
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => start("welcome")}>{t("Start the getting started tour")}</Button>
+          <Button onClick={() => { reset(); setAuto(true); toast(t("Tours will show again on each page.")) }}
+            title={t("Every page shows its tour again the next time you open it")}>
+            {t("Show all tours again")}
+          </Button>
+        </div>
+        <p className="text-xs text-ab-faint">{t("Tip: press ? on any page to start its tour, and look for the ? icons next to terms to see what they mean.")}</p>
+      </div>
+    </Section>
   )
 }
 
