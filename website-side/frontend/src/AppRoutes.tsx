@@ -10,6 +10,7 @@ import { AccountPage } from "./pages/AccountPage"
 import { AgentPage } from "./pages/AgentPage"
 import { SiteHeader } from "./components/SiteHeader"
 import { applyManifest, areaOf } from "@/lib/pwa"
+import { crossHostUrl } from "@/lib/hosts"
 
 // Management System: its own bundle, downloaded only by staff who open /manage.
 const ManageApp = lazy(() => import("./manage/ManageApp"))
@@ -41,6 +42,13 @@ export function AppRoutes() {
   const area = areaOf(pathname)
   // Install as "Alty MSA" inside /manage, as "Abellar Realty" elsewhere.
   useEffect(() => applyManifest(area), [area])
+  // A link into the other part of the site (e.g. "Client sign in" on the MSA
+  // domain) continues on that part's own domain.
+  const away = crossHostUrl(pathname, window.location.search + window.location.hash)
+  useEffect(() => {
+    if (away) window.location.replace(away)
+  }, [away])
+  if (away) return null
   if (area === "manage") {
     return (
       <Suspense

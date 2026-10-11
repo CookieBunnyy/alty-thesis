@@ -71,6 +71,24 @@ Then **Redeploy** — Vite bakes these in at build time, so changing them
 requires a new build. `vercel.json` makes page links like `/properties`
 work on refresh.
 
+### Separate app for the Management System (Alty MSA)
+
+The public site and the Management System install as two separate apps
+only when they are on different domains (an installed app covers every page
+under its address). Both domains point at the same Vercel project:
+
+1. Vercel → Project → **Settings → Domains** → **Add** a second domain, e.g.
+   `alty-msa.vercel.app` (any free `*.vercel.app` name, or your own domain).
+2. **Environment Variables**:
+   - `VITE_SITE_URL` = `https://alty-thesis.vercel.app` (the public site)
+   - `VITE_MSA_URL` = `https://alty-msa.vercel.app` (the new domain)
+3. Render → API service → **Environment** → add the new domain to
+   `CORS_ORIGINS` (comma-separated), so the Management System can call the API.
+4. **Redeploy** the website.
+
+`/manage` on the public domain then moves to the MSA domain, and public pages
+opened on the MSA domain move back. Staff sign in once on the new domain.
+
 ## 4. Point the desktop app at it
 
 Desktop → **Settings → API server URL** = the Render URL → Save → restart.

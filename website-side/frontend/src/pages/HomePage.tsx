@@ -37,7 +37,8 @@ const TRIP_MS = 2200
 /** Decorative workplace → property route (not data). Hovering (or tapping on
  *  touch screens) replays the trip: the route redraws, a marker drives from the
  *  start pin to the property, and the two labels light up in turn. */
-function RoutePreview() {
+/** `play` bumps each time the card scrolls into view: the trip runs by itself. */
+function RoutePreview({ play = 0 }: { play?: number }) {
   const [trip, setTrip] = useState(0) // bumps to restart the animations
   const [phase, setPhase] = useState<"idle" | "driving" | "arrived">("idle")
   const timer = useRef<number | undefined>(undefined)
@@ -48,13 +49,26 @@ function RoutePreview() {
     window.clearTimeout(timer.current)
     setTrip((n) => n + 1)
     setPhase("driving")
-    timer.current = window.setTimeout(() => setPhase("arrived"), still ? 0 : TRIP_MS)
   }
   const stop = () => {
     window.clearTimeout(timer.current)
     setPhase("idle")
   }
   useEffect(() => () => window.clearTimeout(timer.current), [])
+  // Scrolled into view: draw the route and drive the marker to the property.
+  const [played, setPlayed] = useState(play)
+  if (played !== play) {
+    setPlayed(play)
+    if (play > 0) {
+      setTrip((n) => n + 1)
+      setPhase("driving")
+    }
+  }
+  useEffect(() => {
+    if (phase !== "driving") return
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setPhase("arrived"), still ? 0 : TRIP_MS)
+  }, [phase, trip, still])
 
   const active = phase !== "idle"
   const chip = (lit: boolean) =>
@@ -111,13 +125,15 @@ function RoutePreview() {
   )
 }
 
-function Reveal({ children, className = "", delay = 0, as: Tag = "div" }: {
+function Reveal({ children, className = "", delay = 0, as: Tag = "div", onChange }: {
   children: React.ReactNode
   className?: string
   delay?: number
   as?: "div" | "section"
+  /** Hears the section entering (true) and leaving (false) the screen. */
+  onChange?: (visible: boolean) => void
 }) {
-  const ref = useReveal<HTMLDivElement>()
+  const ref = useReveal<HTMLDivElement>(onChange)
   return (
     <Tag ref={ref} className={`reveal ${className}`} style={{ transitionDelay: `${delay}ms` }}>
       {children}
@@ -166,6 +182,7 @@ export function HomePage() {
   const [data, setData] = useState<HomeData | null>(null)
   const [error, setError] = useState("")
   const [query, setQuery] = useState("")
+  const [routePlays, setRoutePlays] = useState(0) // the route card replays each time it is reached
   const [slide, setSlide] = useState(0)
   const viewer = usePropertyViewer()
   const reviewTrack = useRef<HTMLDivElement | null>(null)
@@ -386,10 +403,10 @@ export function HomePage() {
           {/* ---------------- MAP CTA ---------------- */}
           <section className="bg-ab-sidebar py-20">
             <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 md:grid-cols-2">
-              <Reveal>
+              <Reveal className="reveal-left">
                 <p className="text-xs font-bold uppercase tracking-[0.22em] text-ab-accent">Interactive property map</p>
                 <h2 className="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl">Find a property near your workplace</h2>
-                <ol className="mt-6 space-y-3">
+                <ol className="reveal-stagger mt-6 space-y-3">
                   {[
                     [Briefcase, "Set your workplace"],
                     [MapPinned, "Explore nearby properties"],
@@ -399,8 +416,8 @@ export function HomePage() {
                   ].map(([Icon, text], index) => {
                     const StepIcon = Icon as typeof Briefcase
                     return (
-                      <li key={text as string} className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-ab-accent-soft text-ab-accent">
+                      <li key={text as string} className="flex items-center gap-3" style={{ "--i": index } as React.CSSProperties}>
+                        <span className="stagger-pop flex h-9 w-9 items-center justify-center rounded-xl bg-ab-accent-soft text-ab-accent">
                           <StepIcon className="h-4 w-4" />
                         </span>
                         <span className="font-medium text-ab-text">
@@ -415,8 +432,8 @@ export function HomePage() {
                   Explore Property Map <ArrowRight className="h-4 w-4" />
                 </Link>
               </Reveal>
-              <Reveal delay={120}>
-                <RoutePreview />
+              <Reveal delay={150} className="reveal-right" onChange={(visible) => visible && setRoutePlays((n) => n + 1)}>
+                <RoutePreview play={routePlays} />
               </Reveal>
             </div>
           </section>

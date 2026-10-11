@@ -3,27 +3,38 @@ import { useEffect, useRef, useState } from "react"
 export const prefersReducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
 
-/** Adds `is-visible` once the element scrolls into view (CSS does the
- *  animation; see .reveal in index.css). Reduced motion shows it at once. */
-export function useReveal<T extends HTMLElement>() {
+/** Adds `is-visible` when the element scrolls into view and removes it once
+ *  it is fully out of view again, so the animation replays each time the
+ *  section is reached (CSS does the animation; see .reveal in index.css).
+ *  `onChange` hears each enter/leave. Reduced motion shows it at once. */
+export function useReveal<T extends HTMLElement>(onChange?: (visible: boolean) => void) {
   const ref = useRef<T | null>(null)
+  const changed = useRef(onChange)
+  useEffect(() => {
+    changed.current = onChange
+  })
   useEffect(() => {
     const element = ref.current
     if (!element) return
     if (prefersReducedMotion() || !("IntersectionObserver" in window)) {
       element.classList.add("is-visible")
+      changed.current?.(true)
       return
     }
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          if (entry.isIntersecting) {
+          const shown = entry.target.classList.contains("is-visible")
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.12 && !shown) {
             entry.target.classList.add("is-visible")
-            observer.unobserve(entry.target)
+            changed.current?.(true)
+          } else if (!entry.isIntersecting && shown) {
+            entry.target.classList.remove("is-visible")
+            changed.current?.(false)
           }
         }
       },
-      { rootMargin: "0px 0px -10% 0px", threshold: 0.12 },
+      { rootMargin: "0px 0px -10% 0px", threshold: [0, 0.12] },
     )
     observer.observe(element)
     return () => observer.disconnect()

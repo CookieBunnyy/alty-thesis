@@ -403,7 +403,22 @@
 
 /* Scroll reveal (see useReveal). */
 .reveal { opacity: 0; transform: translate3d(0, 28px, 0); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+.reveal-left { transform: translate3d(-48px, 0, 0); }
+.reveal-right { transform: translate3d(48px, 0, 0) scale(0.97); }
 .reveal.is-visible { opacity: 1; transform: none; }
+/* Children enter one after another (index in --i) once the parent is visible. */
+.reveal-stagger > * {
+  opacity: 0; transform: translate3d(-18px, 0, 0);
+  transition: opacity 0.5s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: calc(var(--i, 0) * 120ms + 180ms);
+}
+.is-visible .reveal-stagger > * { opacity: 1; transform: none; }
+.reveal-stagger .stagger-pop {
+  transform: scale(0.55);
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition-delay: calc(var(--i, 0) * 120ms + 260ms);
+}
+.is-visible .reveal-stagger .stagger-pop { transform: none; }
 
 .ab-pop { animation: ab-pop 0.22s ease-out both; }
 .ab-card-in { opacity: 0; animation: ab-fade-up 0.5s ease-out forwards; }
@@ -421,6 +436,7 @@
   .hero-in, .ab-card-in, .ab-pop, .route-draw, .route-redraw, .hero-slide.is-active { animation: none; opacity: 1; stroke-dasharray: none; }
   .route-dest, .route-card { transition: none; }
   .reveal, .reveal.is-visible { opacity: 1; transform: none; transition: none; }
+  .reveal-stagger > *, .reveal-stagger .stagger-pop { opacity: 1; transform: none; transition: none; }
   .hero-slide { transition: none; }
 }
 
