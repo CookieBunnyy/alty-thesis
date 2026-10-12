@@ -55,27 +55,36 @@ export function PropertyCard({ property, onOpen, onMap, style, className = "", e
         )}
       </button>
       <div className="flex flex-1 flex-col p-4">
-        <p className="text-xl font-bold text-ab-accent">{peso(property.price_total)}</p>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+          <p className="text-xl font-bold text-ab-accent">{peso(property.price_total)}</p>
+          {property.monthly_rate ? (
+            <p className="whitespace-nowrap text-xs font-medium text-ab-muted">
+              <span className="font-semibold text-ab-text">{peso(property.monthly_rate)}</span>/mo
+            </p>
+          ) : null}
+        </div>
         <h3 className="mt-1 line-clamp-2 text-base font-semibold leading-snug text-ab-text">{property.title}</h3>
         <p className="mt-1 flex items-center gap-1 text-sm text-ab-muted">
           <MapPin className="h-3.5 w-3.5 shrink-0 text-ab-faint" />
           <span className="truncate">{property.village_name || "Location to be confirmed"}</span>
         </p>
-        <p className="mt-3 flex items-center gap-4 text-sm text-ab-muted">
-          <span className="inline-flex items-center gap-1">
-            <BedDouble className="h-4 w-4 text-ab-faint" /> {property.num_bedrooms ?? "—"} bd
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Bath className="h-4 w-4 text-ab-faint" /> {property.num_bathrooms ?? "—"} ba
-          </span>
+        <ul className="mt-3 flex gap-1.5 text-sm text-ab-muted">
+          <li className="flex flex-auto items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-ab-card-2 px-2 py-1.5" title="Bedrooms">
+            <BedDouble className="h-4 w-4 shrink-0 text-ab-faint" />
+            <span className="font-semibold text-ab-text">{property.num_bedrooms ?? "—"}</span> bd
+          </li>
+          <li className="flex flex-auto items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-ab-card-2 px-2 py-1.5" title="Bathrooms">
+            <Bath className="h-4 w-4 shrink-0 text-ab-faint" />
+            <span className="font-semibold text-ab-text">{property.num_bathrooms ?? "—"}</span> ba
+          </li>
           {lotAreaShort(property.lot_area_sqm) && (
-            <span className="inline-flex items-center gap-1" title="Lot area">
-              <LandPlot className="h-4 w-4 text-ab-faint" /> {lotAreaShort(property.lot_area_sqm)}
-            </span>
+            <li className="flex flex-auto items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-ab-card-2 px-2 py-1.5" title="Lot area">
+              <LandPlot className="h-4 w-4 shrink-0 text-ab-faint" />
+              <span className="font-semibold text-ab-text">{lotAreaShort(property.lot_area_sqm)}</span>
+            </li>
           )}
-          {property.monthly_rate ? <span className="ml-auto text-xs">{peso(property.monthly_rate)}/mo</span> : null}
-        </p>
-        <div className="mt-4 flex gap-2 pt-1">
+        </ul>
+        <div className="mt-auto flex gap-2 pt-4">
           <button type="button" onClick={() => onOpen(property)} className="flex-1 rounded-xl bg-ab-accent px-3 py-2 text-sm font-semibold text-ab-ink transition hover:bg-ab-accent-hover">
             View Property
           </button>

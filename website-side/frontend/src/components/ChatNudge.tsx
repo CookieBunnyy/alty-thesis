@@ -39,8 +39,8 @@ export function ChatNudge({ chatOpen, onOpen }: { chatOpen: boolean; onOpen: () 
     <div role="status" aria-live="polite"
       className="ab-pop absolute bottom-6 right-[5.25rem] z-[1100] w-[min(15rem,calc(100vw-7rem))] rounded-2xl rounded-br-md border border-ab-border bg-ab-card py-3 pl-4 pr-9 text-left text-ab-text shadow-[0_12px_30px_rgba(12,53,41,0.25)]">
       <button type="button" onClick={onOpen} className="block text-left">
-        <span className="block text-sm font-bold">Have a question? 👋</span>
-        <span className="mt-0.5 block text-xs text-ab-muted">Ask me — quick answers to FAQs.</span>
+        <span className="block text-sm font-bold">Have a question?</span>
+        <span className="mt-0.5 block text-xs text-ab-muted">Ask MIA — quick answers to FAQs.</span>
       </button>
       <button type="button" onClick={dismiss} aria-label="Dismiss" className="absolute right-2 top-2 rounded-lg p-1 text-ab-faint hover:bg-ab-hover hover:text-ab-text">
         <X className="h-3.5 w-3.5" />

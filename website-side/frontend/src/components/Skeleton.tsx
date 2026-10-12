@@ -12,6 +12,7 @@ export function PropertyCardSkeleton() {
         <Skeleton className="h-6 w-32" />
         <Skeleton className="h-4 w-4/5" />
         <Skeleton className="h-4 w-1/2" />
+        <Skeleton className="h-8 w-full" />
         <div className="flex gap-2 pt-2">
           <Skeleton className="h-9 flex-1 rounded-xl" />
           <Skeleton className="h-9 w-16 rounded-xl" />

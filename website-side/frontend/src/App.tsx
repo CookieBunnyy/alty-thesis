@@ -12,7 +12,6 @@ import {
   MapPin,
   MapPinOff,
   Search,
-  House,
   ListFilter,
   X,
   LandPlot,
@@ -37,6 +36,7 @@ import { RowSkeleton } from "./components/Skeleton"
 import { useCommute } from "./hooks/useCommute"
 import { formatKm, formatMinutes, getCapabilities, requestCurrentPosition, reversePlace, searchPlaces } from "./lib/mapApi"
 import { ChatBotIcon } from "./components/icons/ChatBotIcon"
+import { MIA_GREETING, MiaHeader } from "./components/Mia"
 import { ChatNudge } from "./components/ChatNudge"
 import { lotAreaShort } from "./lib/area"
 
@@ -64,7 +64,7 @@ export default function App() {
         {
           id: "1",
           sender: "assistant",
-          text: "Hello! I am your real estate assistant. What is your budget and location preference?",
+          text: MIA_GREETING,
           timestamp: new Date().toISOString(),
         },
       ],
@@ -928,15 +928,7 @@ export default function App() {
             activeTab === "chat" ? (
               <div className="flex h-full flex-col bg-ab-card">
                 <div className="flex items-center justify-between border-b bg-ab-sidebar px-4 py-3 text-ab-text">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ab-accent-soft text-ab-muted">
-                      <House className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">Property Assistant</p>
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-ab-muted">Online</p>
-                    </div>
-                  </div>
+                  <MiaHeader />
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-hidden">
@@ -1051,7 +1043,7 @@ export default function App() {
                 type="button"
                 onClick={handleChatToggle}
                 className="absolute bottom-5 right-5 z-[1100] inline-flex h-14 w-14 items-center justify-center rounded-full bg-ab-accent text-ab-ink shadow-[0_12px_30px_rgba(12,53,41,0.35)] transition hover:-translate-y-1 hover:bg-ab-accent-hover"
-                aria-label="Toggle assistant"
+                aria-label="Chat with MIA"
               >
                 <ChatBotIcon className="h-7 w-7" />
               </button>
@@ -1060,20 +1052,12 @@ export default function App() {
               {isChatOpen && (
                 <div className="absolute bottom-24 right-5 z-[1100] flex h-[480px] w-[340px] flex-col overflow-hidden rounded-[1.5rem] border border-ab-border bg-ab-card shadow-[0_20px_45px_rgba(12,53,41,0.18)]">
                   <div className="flex items-center justify-between border-b bg-ab-sidebar px-4 py-3 text-ab-text">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ab-accent-soft text-ab-muted">
-                        <House className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold">Property Assistant</p>
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-ab-muted">Online</p>
-                      </div>
-                    </div>
+                    <MiaHeader />
                     <button
                       type="button"
                       onClick={handleChatClose}
                       className="rounded-full bg-ab-card-2 p-1.5 text-ab-text transition hover:bg-ab-hover"
-                      aria-label="Close assistant"
+                      aria-label="Close chat with MIA"
                     >
                       <X className="h-4 w-4" />
                     </button>

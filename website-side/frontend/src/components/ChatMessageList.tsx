@@ -1,6 +1,7 @@
 import React from "react"
 import { AlertCircle, Eye, MapPin, Bed, Bath } from "lucide-react"
 import type { ChatMessage, Property } from "../types"
+import { MiaAvatar, MiaTyping } from "./Mia"
 
 const formatDayLabel = (value?: string) => {
   if (!value) return ""
@@ -62,8 +63,10 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                 msg.sender === "user" ? "items-end" : "items-start"
               }`}
             >
+              <div className={`flex max-w-[88%] items-end gap-2 ${msg.sender === "user" ? "" : "pr-2"}`}>
+              {msg.sender !== "user" && <MiaAvatar size="sm" />}
               <div
-                className={`max-w-[88%] rounded-2xl px-4 py-3 text-xs shadow-sm sm:text-sm ${
+                className={`min-w-0 rounded-2xl px-4 py-3 text-xs shadow-sm sm:text-sm ${
                   msg.sender === "user"
                     ? "rounded-br-none bg-ab-sidebar text-ab-text"
                     : msg.status === "rejected"
@@ -81,9 +84,10 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                 )}
                 <p className="leading-relaxed">{msg.text}</p>
               </div>
+              </div>
 
               {msg.timestamp && (
-                <div className={`mt-1 text-[10px] text-ab-muted ${msg.sender === "user" ? "mr-1" : "ml-1"}`}>
+                <div className={`mt-1 text-[10px] text-ab-muted ${msg.sender === "user" ? "mr-1" : "ml-9"}`}>
                   {formatTimeLabel(msg.timestamp)}
                 </div>
               )}
@@ -149,11 +153,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
           </React.Fragment>
         )
       })}
-      {isLoading && (
-        <div className="animate-pulse text-xs text-ab-faint">
-          Assistant is typing...
-        </div>
-      )}
+      {isLoading && <MiaTyping />}
       <div ref={chatEndRef} />
     </div>
   )

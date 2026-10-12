@@ -178,7 +178,7 @@ async def chat_assistant(prompt: UserPrompt):
     if not (in_domain or has_money or work_name or area_name or unlocated_workplace):
         return {
             "status": "casual_chat",
-            "reply": "Hello! I am your real estate assistant. Tell me your budget, the kind of property you want, or your workplace (e.g., 'I work at BGC Taguig').",
+            "reply": "Hi! I'm MIA, your Marketing Intelligence Assistant. Tell me your budget, the kind of property you want, or your workplace (e.g., 'I work at BGC Taguig').",
             "recommendations": [],
         }
 

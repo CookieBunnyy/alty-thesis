@@ -20,7 +20,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, activePropertiesCount
           }`}
         >
           <ChatBotIcon className="h-4 w-4" />
-          <span>Chat Assistance</span>
+          <span>Chat with MIA</span>
         </button>
         <button
           onClick={() => onTabChange("map")}
