@@ -1,7 +1,8 @@
-import { Bath, BedDouble, Building, MapPin } from "lucide-react"
+import { Bath, BedDouble, Building, MapPin, LandPlot } from "lucide-react"
 import { peso, propertyImage } from "@/lib/media"
 import { categoryLabel } from "@/lib/categories"
 import type { Property } from "@/types"
+import { lotAreaShort } from "@/lib/area"
 
 const STATUS_STYLES: Record<string, string> = {
   AVAILABLE: "bg-ab-success text-white",
@@ -67,6 +68,11 @@ export function PropertyCard({ property, onOpen, onMap, style, className = "", e
           <span className="inline-flex items-center gap-1">
             <Bath className="h-4 w-4 text-ab-faint" /> {property.num_bathrooms ?? "—"} ba
           </span>
+          {lotAreaShort(property.lot_area_sqm) && (
+            <span className="inline-flex items-center gap-1" title="Lot area">
+              <LandPlot className="h-4 w-4 text-ab-faint" /> {lotAreaShort(property.lot_area_sqm)}
+            </span>
+          )}
           {property.monthly_rate ? <span className="ml-auto text-xs">{peso(property.monthly_rate)}/mo</span> : null}
         </p>
         <div className="mt-4 flex gap-2 pt-1">

@@ -127,6 +127,12 @@ class PropertyListing(Base):
         nullable=True,
     )
 
+    # The lot's size in square metres (shown as m² or hectares).
+    lot_area_sqm: Mapped[float | None] = mapped_column(
+        Numeric(14, 2),
+        nullable=True,
+    )
+
     status: Mapped[str] = mapped_column(
         String(20),
         default="AVAILABLE",

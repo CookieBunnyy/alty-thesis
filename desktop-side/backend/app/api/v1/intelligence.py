@@ -36,7 +36,7 @@ def get_analytics(months: int = Query(default=12, ge=3, le=60), db: Session = De
 def get_forecast(metric: str = Query(default="revenue", pattern="^(revenue|transactions|sales)$"),
                  horizon: int = Query(default=3, ge=1, le=12), db: Session = Depends(get_db),
                  _user: User = Depends(require_insight)):
-    result = analytics.forecast(db, metric, horizon)
+    result = analytics.outlook(db, metric, horizon)  # the forecast plus the look back
     return {"forecast": result, "insights": intelligence.forecast_insights(db, metric, result)}
 
 
@@ -54,6 +54,14 @@ def get_agent_insights(agent_id: str, db: Session = Depends(get_db), _user: User
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
     return {"insights": intelligence.agent_insights(db, agent)}
+
+
+@router.get("/outlook/month")
+def get_outlook_month(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+                      metric: str = Query(default="revenue", pattern="^(revenue|transactions|sales)$"),
+                      db: Session = Depends(get_db), _user: User = Depends(require_insight)):
+    """The records that make up one month's figure on Business Outlook."""
+    return analytics.month_breakdown(db, month, metric)
 
 
 @router.get("/agent-forecasts")

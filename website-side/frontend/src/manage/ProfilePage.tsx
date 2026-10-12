@@ -14,7 +14,7 @@ import { useToast } from "./toastContext"
 // Page keys -> names (same as the sidebar).
 const PAGE_NAMES: Record<string, string> = {
   dashboard: "Dashboard", properties: "Properties", clients: "Buyers & Sellers", transactions: "Transactions",
-  agents: "Agents", partners: "Partners / Developers", analytics: "Analytics", forecasting: "Forecasting",
+  agents: "Agents", partners: "Partners / Developers", analytics: "Analytics", forecasting: "Business Outlook",
   dss: "Recommendations", media: "Digital Preview", documents: "Document Repository", workforce: "Workforce",
   users: "Users & Access", audit: "Audit Logs", settings: "Settings",
 }

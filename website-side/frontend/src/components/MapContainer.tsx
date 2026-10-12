@@ -8,6 +8,7 @@ import { formatKm, formatMinutes, trafficTileUrl } from '@/lib/mapApi';
 
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+import { lotAreaShort } from '@/lib/area';
 
 const DefaultIcon = L.icon({
   iconUrl: markerIcon,
@@ -538,6 +539,7 @@ export const PropertyMap: React.FC<MapProps> = ({
                   <p className="text-xs text-ab-muted">{prop.village_name}</p>
                   <p className="text-[11px] text-ab-faint">
                     {prop.num_bedrooms ?? 0} beds · {prop.num_bathrooms ?? 0} baths
+                    {lotAreaShort(prop.lot_area_sqm) ? ` · ${lotAreaShort(prop.lot_area_sqm)} lot` : ''}
                     {prop.category ? ` · ${prop.category}` : ''}
                   </p>
                 </div>

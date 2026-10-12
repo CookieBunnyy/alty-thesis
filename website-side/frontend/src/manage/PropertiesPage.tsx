@@ -12,6 +12,7 @@ import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
 import { CancelReason } from "./cancellation"
+import { lotAreaLong, lotAreaShort } from "@/lib/area"
 
 type PartnerOption = { id: number; name: string; status: string }
 type Summary = { available: number; reserved: number; sold: number; on_hold: number; unavailable: number; total: number }
@@ -72,6 +73,7 @@ export function PropertiesPage() {
     { key: "price", label: "Price", align: "right", sort: (l) => Number(l.price_total ?? 0), render: (l) => peso(l.price_total) },
     { key: "monthly", label: "Monthly", align: "right", sort: (l) => Number(l.monthly_rate ?? 0), render: (l) => peso(l.monthly_rate), hideOnPhone: true },
     { key: "rooms", label: "Bed / Bath", sort: (l) => l.num_bedrooms ?? 0, render: (l) => `${l.num_bedrooms ?? "—"} / ${l.num_bathrooms ?? "—"}`, hideOnPhone: true },
+    { key: "lot", label: "Lot area", sort: (l) => Number(l.lot_area_sqm ?? 0), render: (l) => lotAreaShort(l.lot_area_sqm) ?? "—", hideOnPhone: true },
     { key: "status", label: "Status", sort: (l) => l.status, render: (l) => <Badge value={l.status} /> },
     { key: "sync", label: "Sync", sort: (l) => l.sync_status, render: (l) => <Badge value={l.sync_status} />, hideOnPhone: true },
   ]
@@ -205,6 +207,7 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
           ["Layout", listing.layout_type],
           ["Bedrooms", listing.num_bedrooms],
           ["Bathrooms", listing.num_bathrooms],
+          ["Lot area", lotAreaLong(listing.lot_area_sqm)],
           ["Garage", listing.has_garage ? (listing.garage_spaces ? t("{n} space(s)", { n: listing.garage_spaces }) : t("Yes")) : null],
           ["Coordinates", listing.lat != null && listing.lng != null ? `${Number(listing.lat).toFixed(5)}, ${Number(listing.lng).toFixed(5)}` : null],
         ]} />

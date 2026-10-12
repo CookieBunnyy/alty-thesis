@@ -1,9 +1,10 @@
-import { Bath, Bed, Building, Info, MapPin, PhoneCall, X } from "lucide-react"
+import { Bath, Bed, Building, Info, MapPin, PhoneCall, X, LandPlot } from "lucide-react"
 import { CommuteCard } from "./CommuteCard"
 import { publicUrl } from "@/config"
 import { categoryLabel } from "@/lib/categories"
 import type { LocationPoint, Property, RouteSelection } from "@/types"
 import type { CommuteState } from "@/hooks/useCommute"
+import { lotAreaShort } from "@/lib/area"
 
 type Props = {
   property: Property
@@ -90,6 +91,11 @@ export function SelectedPropertyPanel({
             <span className="inline-flex items-center gap-1">
               <Bath className="h-3.5 w-3.5 text-ab-faint" /> {property.num_bathrooms}
             </span>
+            {lotAreaShort(property.lot_area_sqm) && (
+              <span className="inline-flex items-center gap-1" title="Lot area">
+                <LandPlot className="h-3.5 w-3.5 text-ab-faint" /> {lotAreaShort(property.lot_area_sqm)}
+              </span>
+            )}
           </p>
         </div>
       </div>

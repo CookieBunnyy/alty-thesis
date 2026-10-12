@@ -5,6 +5,7 @@ import { statusLabel } from "./format"
 import { Button } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { t } from "./i18n"
+import { lotAreaLong } from "@/lib/area"
 
 export type Listing = {
   listing_id: number
@@ -16,6 +17,7 @@ export type Listing = {
   monthly_rate: number | null
   num_bedrooms: number | null
   num_bathrooms: number | null
+  lot_area_sqm?: number | string | null
   layout_type: string | null
   village_name: string | null
   lat: number | null
@@ -69,6 +71,7 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
     monthly_rate: String(listing.monthly_rate ?? ""),
     num_bedrooms: String(listing.num_bedrooms ?? ""),
     num_bathrooms: String(listing.num_bathrooms ?? ""),
+    lot_area_sqm: listing.lot_area_sqm == null ? "" : String(Number(listing.lot_area_sqm)),
     layout_type: listing.layout_type ?? "",
     village_name: listing.village_name ?? "",
     lat: listing.lat == null ? "" : String(listing.lat),
@@ -99,6 +102,8 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
     if (!form.title.trim()) return setError(t("Title is required."))
     const numbers = { price_total: num(form.price_total), initial_dp: num(form.initial_dp), monthly_rate: num(form.monthly_rate), num_bedrooms: num(form.num_bedrooms), num_bathrooms: num(form.num_bathrooms), garage_spaces: num(form.garage_spaces) }
     if (Object.values(numbers).some((v) => v !== null && (!Number.isFinite(v) || v < 0))) return setError(t("Prices, rooms and garage spaces must be zero or more."))
+    const lotArea = num(form.lot_area_sqm)
+    if (lotArea !== null && (!Number.isFinite(lotArea) || lotArea <= 0)) return setError(t("Lot area must be more than zero (leave it blank for condominium units)."))
     const lat = num(form.lat)
     const lng = num(form.lng)
     if ((lat === null) !== (lng === null)) return setError(t("Enter both latitude and longitude, or neither."))
@@ -109,6 +114,7 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
       title: form.title.trim(),
       category: form.category.trim() || null,
       ...numbers,
+      lot_area_sqm: lotArea,
       layout_type: form.layout_type.trim() || null,
       village_name: form.village_name.trim() || null,
       lat, lng,
@@ -177,6 +183,10 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
           <Field label="Layout type"><input className={field} value={form.layout_type} onChange={(e) => set("layout_type", e.target.value)} /></Field>
           <Field label="Bedrooms"><input className={field} inputMode="numeric" value={form.num_bedrooms} onChange={(e) => set("num_bedrooms", e.target.value)} /></Field>
           <Field label="Bathrooms"><input className={field} inputMode="numeric" value={form.num_bathrooms} onChange={(e) => set("num_bathrooms", e.target.value)} /></Field>
+          <Field label="Lot area (sqm)">
+            <input className={field} inputMode="decimal" value={form.lot_area_sqm} placeholder={t("e.g. 250 or 640000")} onChange={(e) => set("lot_area_sqm", e.target.value)} />
+            {lotAreaLong(form.lot_area_sqm) && <span className="mt-1 block text-xs font-normal text-ab-faint">= {lotAreaLong(form.lot_area_sqm)}</span>}
+          </Field>
           <Field label="Village / location" wide><input className={field} value={form.village_name} onChange={(e) => set("village_name", e.target.value)} /></Field>
           <Field label="Latitude"><input className={field} inputMode="decimal" value={form.lat} onChange={(e) => set("lat", e.target.value)} /></Field>
           <Field label="Longitude"><input className={field} inputMode="decimal" value={form.lng} onChange={(e) => set("lng", e.target.value)} /></Field>

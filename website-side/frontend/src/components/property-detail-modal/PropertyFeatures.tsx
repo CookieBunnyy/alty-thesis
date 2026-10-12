@@ -1,6 +1,7 @@
 import React from 'react';
-import { Bed, Bath, UtensilsCrossed, Sun, Trees, Car } from 'lucide-react';
+import { Bed, Bath, UtensilsCrossed, Sun, Trees, Car, LandPlot } from 'lucide-react';
 import type { Property } from '@/types';
+import { lotAreaLong } from "@/lib/area"
 
 interface FeaturesProps {
   property: Property;
@@ -20,6 +21,13 @@ export const PropertyFeatures: React.FC<FeaturesProps> = ({ property }) => {
           <Bath className="h-4 w-4 text-ab-accent shrink-0" />
           <span>{property.num_bathrooms} Bathrooms</span>
         </div>
+
+        {lotAreaLong(property.lot_area_sqm) && (
+        <div className="col-span-2 flex items-center space-x-2 bg-ab-card p-2.5 rounded-xl border border-ab-border text-ab-muted text-xs font-medium sm:col-span-1">
+          <LandPlot className="h-4 w-4 text-ab-accent shrink-0" />
+          <span>Lot area: {lotAreaLong(property.lot_area_sqm)}</span>
+        </div>
+        )}
 
         {(property.has_kitchen ?? true) && (
           <div className="flex items-center space-x-2 bg-ab-card p-2.5 rounded-xl border border-ab-border text-ab-muted text-xs font-medium">

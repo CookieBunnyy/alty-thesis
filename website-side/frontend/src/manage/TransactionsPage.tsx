@@ -8,6 +8,16 @@ import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
 import { useToast } from "./toastContext"
 import { CancellationDetails, CancelReason, CancelReservationDialog } from "./cancellation"
+import { GrossSalesRecap } from "./GrossSalesRecap"
+import { PaymentSchedule, ProceedToSaleDialog } from "./reservationPayments"
+import { locale } from "./i18n"
+
+// Philippine-time month of a transaction ("2026-09").
+const monthOf = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }).slice(0, 7)
+const monthLabel = (key: string) => {
+  const [year, month] = key.split("-").map(Number)
+  return new Date(year, month - 1, 1).toLocaleDateString(locale(), { month: "long", year: "numeric" })
+}
 
 type Transaction = {
   transaction_id: string; external_transaction_id: string | null; client_id: string; client_name: string | null
@@ -25,14 +35,19 @@ export function TransactionsPage() {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
   const [type, setType] = useState("")
+  const [period, setPeriod] = useState("")
   const load = useCallback(() => Promise.all([api<Transaction[]>("/transactions?limit=2000"), api<Summary>("/transactions/summary")]), [api])
   const { data, error, loading, reload } = useApiData(load, "transactions")
   const [rows, summary] = data ?? [[], null]
   const shown = useMemo(
     () => rows.filter((t) => (!status || t.status === status) && (!type || t.transaction_type === type) &&
+      (!period || (period.length === 4 ? monthOf(t.transaction_date).startsWith(period) : monthOf(t.transaction_date) === period)) &&
       contains([t.client_name, t.property_title, t.agent_name, t.transaction_id, t.external_transaction_id, t.agent_id, t.cancellation_reason], search)),
-    [rows, status, type, search],
+    [rows, status, type, period, search],
   )
+  const months = useMemo(() => [...new Set(rows.map((t) => monthOf(t.transaction_date)))].sort().reverse(), [rows])
+  const years = [...new Set(months.map((m) => m.slice(0, 4)))]
+  const periodLabel = !period ? t("all time") : period.length === 4 ? period : monthLabel(period)
   const selected = id ? rows.find((t) => t.transaction_id === id || t.external_transaction_id === id) ?? null : null
   const types = [...new Set(rows.map((t) => t.transaction_type))]
 
@@ -61,7 +76,7 @@ export function TransactionsPage() {
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
         title="Every reservation and sale on record"
-        subtitle="Reservations and sales recorded from processed documents and from the central database. Transactions are never created by hand, so the history stays tied to its documents."
+        subtitle="Reservations and sales recorded from processed documents and from the central database. Management records the payments on a reservation and marks it sold when it proceeds to a purchase; every change is audited."
         actions={isManagement(user?.role) && <SyncButton path="/transactions/sync" what="Transactions" onDone={reload} />}
       />
       {summary && (
@@ -77,10 +92,16 @@ export function TransactionsPage() {
         <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search client, property, agent or reference" /></div>
         <Select label="Type" value={type} onChange={setType} options={[{ value: "", label: "All types" }, ...types.map((t) => ({ value: t, label: statusLabel(t) }))]} />
         <Select label="Status" value={status} onChange={setStatus} options={[{ value: "", label: "All statuses" }, ...["RESERVED", "COMPLETED", "CANCELLED"].map((s) => ({ value: s, label: statusLabel(s) }))]} />
+        <Select label="Period" value={period} onChange={setPeriod} options={[
+          { value: "", label: "All time" },
+          ...years.map((y) => ({ value: y, label: t("Year {y}", { y }) })),
+          ...months.map((m) => ({ value: m, label: monthLabel(m) })),
+        ]} />
       </div>
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
+          <GrossSalesRecap rows={shown} period={periodLabel} />
           <p className="text-xs text-ab-faint">{t("{n} of {total} transactions", { n: shown.length, total: rows.length })}</p>
           <DataTable exportTitle="Transactions" rows={shown} columns={columns} rowKey={(t) => t.transaction_id} onOpen={(t) => open(t.transaction_id)} empty="No transactions match these filters." initialSort={{ key: "date", dir: "desc" }} />
         </>
@@ -95,6 +116,7 @@ function TransactionDrawer({ transaction: tx, related, onClose, canCancel, onCha
 }) {
   const toast = useToast()
   const [cancelling, setCancelling] = useState(false)
+  const [selling, setSelling] = useState(false)
   const isOpenReservation = tx.transaction_type === "RESERVED" && tx.status === "RESERVED"
   // Timeline: every transaction for the same property and client (reservation -> sale).
   const timeline = related
@@ -106,7 +128,10 @@ function TransactionDrawer({ transaction: tx, related, onClose, canCancel, onCha
       subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={tx.status} /> {transactionDate(tx.transaction_date)}</span>}
       onClose={onClose}
       footer={canCancel && isOpenReservation && (
-        <Button variant="danger" onClick={() => setCancelling(true)}>{t("Cancel reservation")}</Button>
+        <>
+          <Button variant="danger" onClick={() => setCancelling(true)}>{t("Cancel reservation")}</Button>
+          <Button variant="primary" onClick={() => setSelling(true)}>{t("Proceed to sale")}</Button>
+        </>
       )}
     >
       {tx.status === "CANCELLED" && <CancellationDetails reason={tx.cancellation_reason} by={tx.cancelled_by} at={tx.cancelled_at} />}
@@ -118,6 +143,9 @@ function TransactionDrawer({ transaction: tx, related, onClose, canCancel, onCha
           ["Amount", peso(tx.amount)],
         ]} />
       </Section>
+      {tx.transaction_type === "RESERVED" && tx.status !== "CANCELLED" && (
+        <PaymentSchedule transactionId={tx.transaction_id} canRecord={canCancel} />
+      )}
       <Section title="Timeline for this client and property">
         <ol className="relative space-y-3 border-l border-ab-border pl-4">
           {timeline.map((r) => (
@@ -144,6 +172,15 @@ function TransactionDrawer({ transaction: tx, related, onClose, canCancel, onCha
           ["Updated", dateTime(tx.updated_at)],
         ]} />
       </Section>
+      {selling && (
+        <ProceedToSaleDialog
+          transactionId={tx.transaction_id}
+          label={`${text(tx.client_name)} · ${text(tx.property_title)}`}
+          price={null}
+          onClose={() => setSelling(false)}
+          onDone={() => { setSelling(false); toast(t("Marked as sold. The property and the client are now Sold.")); void onChanged() }}
+        />
+      )}
       {cancelling && (
         <CancelReservationDialog
           transactionId={tx.transaction_id}

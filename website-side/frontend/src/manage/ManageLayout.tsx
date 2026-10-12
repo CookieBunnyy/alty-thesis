@@ -54,7 +54,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: "Intelligence",
     items: [
       { key: "analytics", label: "Analytics", icon: BarChart3, path: "/manage/analytics", hint: "How sales and listings are performing" },
-      { key: "forecasting", label: "Forecasting", icon: LineChart, path: "/manage/forecasting", hint: "Projections for the coming months" },
+      { key: "forecasting", label: "Business Outlook", icon: LineChart, path: "/manage/forecasting", hint: "Past months against their forecast, and the months ahead" },
       // Decision support is a layer inside Analytics, Forecasting, properties and
       // agents; this is its central feed (same "dss" permission as the desktop).
       { key: "dss", label: "Recommendations", icon: ListChecks, path: "/manage/insights", hint: "What needs attention and what to do next" },

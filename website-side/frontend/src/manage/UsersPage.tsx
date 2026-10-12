@@ -17,7 +17,7 @@ type Role = { name: string; description?: string | null; permissions?: string[] 
 const PAGE_NAMES: Record<string, string> = {
   dashboard: "Dashboard", properties: "Properties", partners: "Partners", clients: "Buyers & Sellers", transactions: "Transactions",
   documents: "Documents", media: "Digital Preview", agents: "Agents", workforce: "Workforce", analytics: "Analytics",
-  forecasting: "Forecasting", dss: "Recommendations", users: "Users", audit: "Audit Logs", settings: "Settings",
+  forecasting: "Business Outlook", dss: "Recommendations", users: "Users", audit: "Audit Logs", settings: "Settings",
 }
 
 const field = "mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm focus:border-ab-accent focus:outline-none"

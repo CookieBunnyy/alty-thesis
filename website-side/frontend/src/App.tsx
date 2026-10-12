@@ -15,6 +15,7 @@ import {
   House,
   ListFilter,
   X,
+  LandPlot,
 } from "lucide-react"
 import { PropertyMap } from "./components/MapContainer"
 import { PropertyDetailModal } from "./components/PropertyDetailModal"
@@ -36,6 +37,7 @@ import { RowSkeleton } from "./components/Skeleton"
 import { useCommute } from "./hooks/useCommute"
 import { formatKm, formatMinutes, getCapabilities, requestCurrentPosition, reversePlace, searchPlaces } from "./lib/mapApi"
 import { ChatBotIcon } from "./components/icons/ChatBotIcon"
+import { lotAreaShort } from "./lib/area"
 
 // Live, AVAILABLE properties from the main Alty API (documents + central data).
 const PROPERTIES_URL = PUBLIC_PROPERTIES_URL
@@ -872,6 +874,12 @@ export default function App() {
                                 <Bath className="h-3.5 w-3.5 text-ab-faint" />
                                 {property.num_bathrooms} ba
                               </span>
+                              {lotAreaShort(property.lot_area_sqm) && (
+                                <span className="inline-flex items-center gap-1" title="Lot area">
+                                  <LandPlot className="h-3.5 w-3.5 text-ab-faint" />
+                                  {lotAreaShort(property.lot_area_sqm)}
+                                </span>
+                              )}
                             </div>
                           </div>
                           {!property.commute_info && distanceFromWork.has(String(property.listing_id)) && (

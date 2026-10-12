@@ -41,7 +41,7 @@ const PAGES: Record<string, [string, string, () => React.ReactNode]> = {
   "/manage/documents": ["documents", "Document Repository", () => <DocumentsPage />],
   "/manage/media": ["media", "Digital Preview", () => <MediaPage />],
   "/manage/analytics": ["analytics", "Analytics", () => <AnalyticsPage />],
-  "/manage/forecasting": ["forecasting", "Forecasting", () => <ForecastingPage />],
+  "/manage/forecasting": ["forecasting", "Business Outlook", () => <ForecastingPage />],
   "/manage/insights": ["dss", "Recommendations", () => <InsightsPage />],
   "/manage/workforce": ["workforce", "Workforce", () => <WorkforcePage />],
   "/manage/users": ["users", "Users & Access", () => <UsersPage />],

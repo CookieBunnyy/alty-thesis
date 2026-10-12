@@ -207,6 +207,75 @@ def forecast(db: Session, metric: str = "revenue", horizon: int = 3, agent_id: s
     }
 
 
+def _fit(values: list[float]) -> tuple[float, float, float]:
+    """Least-squares line through the values at x = 0..n-1: (intercept, slope, residual std)."""
+    from sklearn.linear_model import LinearRegression
+
+    x = np.arange(len(values)).reshape(-1, 1)
+    y = np.array(values)
+    model = LinearRegression().fit(x, y)
+    sigma = float(np.std(y - model.predict(x), ddof=1)) if len(values) > 2 else 0.0
+    return float(model.intercept_), float(model.coef_[0]), sigma
+
+
+def outlook(db: Session, metric: str = "revenue", horizon: int = 3) -> dict:
+    """The forecast plus a look back: for each past complete month with
+    enough earlier history, what the same method would have predicted from
+    the months before it, and whether the recorded value landed in its range.
+    Every point carries its formula inputs, so the page can show the working."""
+    result = forecast(db, metric, horizon)
+    values = [float(point["value"]) for point in result["history"]]
+    backtest = []
+    for index, point in enumerate(result["history"]):
+        prior = values[:index]
+        if len(prior) < settings.FORECAST_MIN_MONTHS or sum(1 for v in prior if v > 0) < 3:
+            continue
+        intercept, slope, sigma = _fit(prior)
+        predicted = max(0.0, intercept + slope * index)
+        lower, upper = max(0.0, predicted - 1.96 * sigma), predicted + 1.96 * sigma
+        actual = values[index]
+        verdict = "WITHIN" if lower <= actual <= upper else ("ABOVE" if actual > upper else "BELOW")
+        backtest.append({
+            "month": point["month"], "actual": round(actual, 2), "value": round(predicted, 2),
+            "lower": round(lower, 2), "upper": round(upper, 2), "verdict": verdict,
+            "model": {"months_used": len(prior), "first_month": result["history"][0]["month"],
+                      "intercept": round(intercept, 2), "slope": round(slope, 2), "x": index,
+                      "sigma": round(sigma, 2)},
+        })
+    if result.get("status") == "estimated":
+        intercept, slope, sigma = _fit(values)
+        for step, point in enumerate(result["forecast"]):
+            point["model"] = {"months_used": len(values), "first_month": result["history"][0]["month"],
+                              "intercept": round(intercept, 2), "slope": round(slope, 2),
+                              "x": len(values) + step, "sigma": round(sigma, 2)}
+    result["backtest"] = backtest
+    result["accuracy"] = {"months": len(backtest), "within": sum(1 for b in backtest if b["verdict"] == "WITHIN"),
+                          "above": sum(1 for b in backtest if b["verdict"] == "ABOVE"),
+                          "below": sum(1 for b in backtest if b["verdict"] == "BELOW")}
+    return result
+
+
+def month_breakdown(db: Session, month: str, metric: str = "revenue") -> dict:
+    """The records behind one month's figure: completed sales for revenue and
+    sales, every live transaction for transactions (same rules as the chart)."""
+    key = func.to_char(func.timezone("UTC", PropertyTransaction.transaction_date), "YYYY-MM")
+    condition = SALE if metric in {"revenue", "sales"} else LIVE
+    rows = db.execute(select(PropertyTransaction).where(key == month, condition)
+                      .order_by(PropertyTransaction.transaction_date)).scalars().all()
+    items = [{
+        "transaction_id": str(row.transaction_id),
+        "date": row.transaction_date,
+        "type": row.transaction_type,
+        "status": row.status,
+        "amount": float(row.amount or 0),
+        "client": row.client.full_name if row.client else None,
+        "property": row.property_listing.title if row.property_listing else None,
+        "agent": row.agent.full_name if row.agent else None,
+    } for row in rows]
+    total = sum(item["amount"] for item in items) if metric == "revenue" else float(len(items))
+    return {"month": month, "metric": metric, "count": len(items), "total": round(total, 2), "items": items}
+
+
 def _pct_change(recent: float, previous: float) -> float | None:
     return round((recent - previous) / previous * 100, 1) if previous else None
 

@@ -36,6 +36,9 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
+# Windows consoles may not print "₱"; never fail on printing a summary.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="replace")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -101,6 +104,9 @@ def _listing(index: int, row: tuple, status: str, rng: random.Random) -> Propert
         has_garage="garage" in features, garage_spaces=1 if "garage" in features else 0,
         has_balcony="balcony" in features, has_backyard="backyard" in features or "pool" in features,
         has_kitchen=True, photos=photos, status=status, sync_status=MARK,
+        # Condominium units have no lot of their own.
+        lot_area_sqm=None if category == "Condominium" else Decimal(
+            rng.randrange(60, 110, 5) if category == "Townhouse" else rng.randrange(120, 420, 10)),
         details=(f"{bedrooms}-bedroom {category.lower()} in {place}. "
                  f"{'With a private pool. ' if 'pool' in features else ''}Demo listing for previewing the website."),
     )

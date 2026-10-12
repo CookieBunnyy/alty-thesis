@@ -33,6 +33,8 @@ export interface Property {
   monthly_rate?: number | null;
   num_bedrooms: number;
   num_bathrooms: number;
+  /** Lot size in square metres (none for condominium units). */
+  lot_area_sqm?: number | null;
   has_balcony?: boolean;
   has_kitchen?: boolean;
   has_backyard?: boolean;

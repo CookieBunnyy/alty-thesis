@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -31,6 +31,19 @@ class TransactionResponse(BaseModel):
 
 class TransactionCancel(BaseModel):
     reason: str = Field(min_length=3, max_length=1000)
+
+
+class PaymentCreate(BaseModel):
+    amount: Decimal = Field(gt=0, le=10_000_000_000, max_digits=14, decimal_places=2)
+    paid_at: date
+    note: str | None = Field(default=None, max_length=300)
+
+
+class SaleCompletion(BaseModel):
+    """Turn an open reservation into a completed sale."""
+    amount: Decimal | None = Field(default=None, gt=0, le=10_000_000_000, max_digits=14, decimal_places=2)
+    sale_date: date | None = None
+    note: str | None = Field(default=None, max_length=1000)
 
 
 class TransactionSummary(BaseModel):

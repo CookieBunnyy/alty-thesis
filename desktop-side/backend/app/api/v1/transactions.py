@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func, select
@@ -6,15 +7,19 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_management
+from app.models.payment import TransactionPayment
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
 from app.schemas.transaction import (
+    PaymentCreate,
+    SaleCompletion,
     TransactionCancel,
     TransactionResponse,
     TransactionSummary,
     TransactionSyncResult,
 )
 from app.services.audit import record_audit
+from app.services.payment_plan import build_plan
 from app.services.client_sync import cancel_reservation
 from app.services.cloud_sync import try_push_pending
 from app.services.entity_matching import (
@@ -159,6 +164,133 @@ def cancel_transaction(transaction_id: str, payload: TransactionCancel, db: Sess
     try_push_pending(db)
     db.refresh(transaction)
     return _response(transaction)
+
+
+def _reservation_or_404(db: Session, transaction_id: str) -> PropertyTransaction:
+    transaction = find_transaction_by_reference(db, transaction_id)
+    if transaction is None:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return transaction
+
+
+def _payments(db: Session, transaction: PropertyTransaction) -> list[TransactionPayment]:
+    return list(db.execute(select(TransactionPayment)
+                           .where(TransactionPayment.transaction_id == transaction.transaction_id)
+                           .order_by(TransactionPayment.paid_at, TransactionPayment.id)).scalars())
+
+
+def _plan_response(db: Session, transaction: PropertyTransaction) -> dict:
+    payments = _payments(db, transaction)
+    return {
+        "plan": build_plan(transaction, payments),
+        "payments": [{"id": p.id, "amount": p.amount, "paid_at": p.paid_at, "note": p.note,
+                      "recorded_by": p.recorded_by, "created_at": p.created_at} for p in payments],
+    }
+
+
+@router.get("/{transaction_id}/payment-plan")
+def get_payment_plan(transaction_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+    """A reservation's payment schedule (from the listing's terms) and the payments recorded for it."""
+    return _plan_response(db, _reservation_or_404(db, transaction_id))
+
+
+@router.post("/{transaction_id}/payments", status_code=201)
+def add_payment(transaction_id: str, payload: PaymentCreate, db: Session = Depends(get_db),
+                user: User = Depends(require_management)):
+    transaction = _reservation_or_404(db, transaction_id)
+    if transaction.transaction_type != "RESERVED" or transaction.status == "CANCELLED":
+        raise HTTPException(status_code=409, detail="Payments are recorded on a reservation that isn't cancelled")
+    if payload.paid_at > date.today() + timedelta(days=1):
+        raise HTTPException(status_code=422, detail="The payment date can't be in the future")
+    payment = TransactionPayment(transaction_id=transaction.transaction_id, amount=payload.amount,
+                                 paid_at=payload.paid_at, note=(payload.note or "").strip() or None,
+                                 recorded_by=user.full_name or user.username)
+    db.add(payment)
+    db.flush()
+    record_audit(db, "PAYMENT_RECORDED", actor=user, entity_type="transactions",
+                 entity_id=str(transaction.transaction_id),
+                 details={"amount": str(payload.amount), "paid_at": payload.paid_at.isoformat(),
+                          "client": transaction.client.full_name, "property": transaction.property_listing.title})
+    db.commit()
+    return _plan_response(db, transaction)
+
+
+@router.delete("/{transaction_id}/payments/{payment_id}")
+def delete_payment(transaction_id: str, payment_id: int, db: Session = Depends(get_db),
+                   user: User = Depends(require_management)):
+    transaction = _reservation_or_404(db, transaction_id)
+    payment = db.get(TransactionPayment, payment_id)
+    if payment is None or payment.transaction_id != transaction.transaction_id:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    record_audit(db, "PAYMENT_DELETED", actor=user, entity_type="transactions",
+                 entity_id=str(transaction.transaction_id),
+                 details={"amount": str(payment.amount), "paid_at": payment.paid_at.isoformat()})
+    db.delete(payment)
+    db.commit()
+    return _plan_response(db, transaction)
+
+
+@router.post("/{transaction_id}/complete-sale", response_model=TransactionResponse)
+def complete_sale(transaction_id: str, payload: SaleCompletion, db: Session = Depends(get_db),
+                  user: User = Depends(require_management)):
+    """The reservation proceeded to a purchase: record the sale. Same rules as a
+    sale read from a document: the reservation becomes COMPLETED (kept as
+    history), the property and the client become SOLD."""
+    reservation = _reservation_or_404(db, transaction_id)
+    if reservation.transaction_type != "RESERVED" or reservation.status != "RESERVED":
+        raise HTTPException(status_code=409, detail="Only an open reservation can proceed to a sale")
+    listing = reservation.property_listing
+    if listing.status not in {"AVAILABLE", "RESERVED"}:
+        raise HTTPException(status_code=409, detail=f"The property is {listing.status}; it can't be sold")
+    others = db.scalar(select(func.count()).select_from(PropertyTransaction).where(
+        PropertyTransaction.property_id == listing.listing_id,
+        PropertyTransaction.transaction_type == "RESERVED",
+        PropertyTransaction.status == "RESERVED",
+        PropertyTransaction.client_id != reservation.client_id,
+    ))
+    if others:
+        raise HTTPException(status_code=409, detail="Another client also holds a reservation on this property")
+    amount = payload.amount if payload.amount is not None else (
+        Decimal(listing.price_total) if listing.price_total else None)
+    if amount is None:
+        raise HTTPException(status_code=422, detail="Enter the sale amount (the property has no price on record)")
+    sold_day = payload.sale_date or date.today()
+    if sold_day > date.today() + timedelta(days=1):
+        raise HTTPException(status_code=422, detail="The sale date can't be in the future")
+    if sold_day < reservation.transaction_date.date() - timedelta(days=1):
+        raise HTTPException(status_code=422, detail="The sale can't be dated before its reservation")
+    # Noon Philippine time on that day (date-only records stay on the right day).
+    sold_at = datetime.combine(sold_day, time(12, 0), tzinfo=timezone(timedelta(hours=8))).astimezone(timezone.utc)
+
+    sale = PropertyTransaction(
+        client_id=reservation.client_id, property_id=listing.listing_id, agent_id=reservation.agent_id,
+        transaction_type="SOLD", status="COMPLETED", transaction_date=sold_at, amount=amount,
+        notes=(payload.note or "").strip() or f"Sale recorded from reservation {reservation.transaction_id}",
+        source="MANAGEMENT", sync_status="PENDING",
+    )
+    db.add(sale)
+    reservation.status = "COMPLETED"
+    reservation.sync_status = "PENDING"
+    old_status = listing.status
+    listing.status = "SOLD"
+    listing.status_changed_at = datetime.utcnow()
+    listing.sync_status = "PENDING"
+    client = reservation.client
+    client.transaction_type = "SOLD"
+    client.status = "SOLD"
+    client.transaction_date = sold_at
+    client.property_id = listing.listing_id
+    client.sync_status = "PENDING"
+    db.flush()
+    record_audit(db, "RESERVATION_COMPLETED_AS_SALE", actor=user, entity_type="transactions",
+                 entity_id=str(sale.transaction_id),
+                 details={"reservation": str(reservation.transaction_id), "amount": str(amount),
+                          "client": client.full_name, "property": listing.title,
+                          "property_status": {"old": old_status, "new": "SOLD"}})
+    db.commit()
+    try_push_pending(db)
+    db.refresh(sale)
+    return _response(sale)
 
 
 @router.post("/sync", response_model=TransactionSyncResult)

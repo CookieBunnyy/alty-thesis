@@ -45,6 +45,7 @@ class PropertyListingCreate(BaseModel):
     has_backyard: bool = False
     has_garage: bool = False
     garage_spaces: int = Field(default=0, ge=0)
+    lot_area_sqm: Decimal | None = Field(default=None, gt=0, le=100_000_000, max_digits=14, decimal_places=2)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -91,6 +92,7 @@ class PropertyListingResponse(BaseModel):
     has_garage: bool | None = None
 
     garage_spaces: int | None = None
+    lot_area_sqm: float | None = None
     status: PropertyStatus = "AVAILABLE"
 
     sync_status: str
@@ -130,6 +132,7 @@ class PropertyListingUpdate(BaseModel):
     has_backyard: bool | None = None
     has_garage: bool | None = None
     garage_spaces: int | None = Field(default=None, ge=0)
+    lot_area_sqm: Decimal | None = Field(default=None, gt=0, le=100_000_000, max_digits=14, decimal_places=2)
     status: str | None = None
     partner_id: int | None = None
 

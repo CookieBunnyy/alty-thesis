@@ -257,13 +257,22 @@ export function ShareBar({ parts }: { parts: { label: string; value: number; col
 }
 
 type ForecastPoint = { month: string; value: number; lower: number; upper: number }
+/** What the method would have forecast for a past month, and how it went. */
+export type BacktestPoint = ForecastPoint & { actual: number; verdict: "WITHIN" | "ABOVE" | "BELOW" }
+const VERDICT_TEXT: Record<BacktestPoint["verdict"], string> = { WITHIN: "Within the likely range", ABOVE: "Above the likely range", BELOW: "Below the likely range" }
 
 /** History (solid) followed by forecast months (lighter, outlined) with the
  *  likely range drawn as a whisker. One y-axis; hover shows exact values. */
-export function ForecastChart({ history, forecast, format, axisFormat = format, caption, height = 240 }: {
+export function ForecastChart({ history, forecast, format, axisFormat = format, caption, height = 240, backtest = [], selected, onSelect }: {
   history: { month: string; value: number }[]; forecast: ForecastPoint[]
   format: (v: number) => string; axisFormat?: (v: number) => string; caption: string; height?: number
+  /** Past months: the forecast made from the months before each one (range + marker). */
+  backtest?: BacktestPoint[]
+  /** The month picked for details (highlighted); clicking a month picks it. */
+  selected?: string | null
+  onSelect?: (month: string) => void
 }) {
+  const past = new Map(backtest.map((b) => [b.month, b]))
   const [hover, setHover] = useState<number | null>(null)
   const [wrapRef, width] = useWidth<HTMLDivElement>()
   const titleId = useId()
@@ -271,7 +280,7 @@ export function ForecastChart({ history, forecast, format, axisFormat = format, 
     ...history.map((h) => ({ month: h.month, value: h.value, kind: "history" as const })),
     ...forecast.map((f) => ({ month: f.month, value: f.value, lower: f.lower, upper: f.upper, kind: "forecast" as const })),
   ]
-  const max = niceMax(Math.max(0, ...columns.map((c) => ("upper" in c && c.upper != null ? c.upper : c.value))))
+  const max = niceMax(Math.max(0, ...columns.map((c) => ("upper" in c && c.upper != null ? c.upper : c.value)), ...backtest.map((b) => b.upper)))
   const W = width
   const H = height
   const left = 52
@@ -305,7 +314,7 @@ export function ForecastChart({ history, forecast, format, axisFormat = format, 
           const h = Math.max(c.value > 0 ? 2 : 0, y(0) - y(c.value))
           return (
             <g key={c.month}>
-              {hover === i && <rect x={left + step * i + 2} y={top} width={step - 4} height={plotH} rx={6} fill="var(--color-ab-hover)" opacity={0.6} />}
+              {(hover === i || selected === c.month) && <rect x={left + step * i + 2} y={top} width={step - 4} height={plotH} rx={6} fill={selected === c.month ? "var(--color-ab-accent-soft)" : "var(--color-ab-hover)"} opacity={0.6} />}
               {c.kind === "history" ? (
                 h > 0 ? <path d={`M${cx - barW / 2},${y(0)} v${-(Math.max(h, 4) - 4)} q0,-4 4,-4 h${barW - 8} q4,0 4,4 v${Math.max(h, 4) - 4} z`} fill="var(--color-ab-chart-1)" />
                   : <rect x={cx - barW / 2} y={y(0) - 2} width={barW} height={2} rx={1} fill="var(--color-ab-border-strong)" />
@@ -322,10 +331,24 @@ export function ForecastChart({ history, forecast, format, axisFormat = format, 
                   )}
                 </>
               )}
+              {c.kind === "history" && past.has(c.month) && (() => {
+                const b = past.get(c.month)!
+                return (
+                  <g opacity={0.9}>
+                    <line x1={cx} x2={cx} y1={y(b.upper)} y2={y(b.lower)} stroke="var(--color-ab-chart-2)" strokeWidth={1.5} strokeDasharray="3 2" />
+                    <line x1={cx - 5} x2={cx + 5} y1={y(b.upper)} y2={y(b.upper)} stroke="var(--color-ab-chart-2)" strokeWidth={1.5} />
+                    <line x1={cx - 5} x2={cx + 5} y1={y(b.lower)} y2={y(b.lower)} stroke="var(--color-ab-chart-2)" strokeWidth={1.5} />
+                    <path d={`M${cx},${y(b.value) - 5} l5,5 l-5,5 l-5,-5 z`} fill="var(--color-ab-chart-2)" stroke="var(--color-ab-card)" strokeWidth={1.5} />
+                  </g>
+                )
+              })()}
               {(!narrow || i % 2 === 0 || hover === i) && (
                 <text x={cx} y={H - 6} textAnchor="middle" fontSize={11} fill={hover === i ? "var(--color-ab-text)" : "var(--color-ab-faint)"}>{monthLabel(c.month, i)}</text>
               )}
               <rect x={left + step * i} y={top} width={step} height={plotH + bottom} fill="transparent" tabIndex={0}
+                className={onSelect ? "cursor-pointer" : undefined}
+                onClick={() => onSelect?.(c.month)}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onSelect && (e.preventDefault(), onSelect(c.month))}
                 onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} onFocus={() => setHover(i)} onBlur={() => setHover(null)}
                 aria-label={`${c.month}: ${c.kind === "forecast" ? `${t("forecast")} ` : ""}${format(c.value)}${"upper" in c ? `, ${t("Likely range {low} – {high}", { low: format(c.lower), high: format(c.upper) })}` : ""}`} />
             </g>
@@ -342,6 +365,16 @@ export function ForecastChart({ history, forecast, format, axisFormat = format, 
             <p className="font-semibold text-ab-text">{c.month} {c.kind === "forecast" && <span className="font-normal text-ab-faint">· {t("forecast")}</span>}</p>
             <p className="mt-0.5 tabular-nums text-ab-text">{format(c.value)}</p>
             {"upper" in c && <p className="tabular-nums text-ab-muted">{t("Likely range {low} – {high}", { low: format(c.lower), high: format(c.upper) })}</p>}
+            {c.kind === "history" && past.has(c.month) && (() => {
+              const b = past.get(c.month)!
+              return (
+                <>
+                  <p className="mt-1 tabular-nums text-ab-muted">{t("Forecast was {v}", { v: format(b.value) })}</p>
+                  <p className="tabular-nums text-ab-muted">{t("Likely range {low} – {high}", { low: format(b.lower), high: format(b.upper) })}</p>
+                  <p className={`font-semibold ${b.verdict === "WITHIN" ? "text-ab-accent" : "text-ab-warning"}`}>{t(VERDICT_TEXT[b.verdict])}</p>
+                </>
+              )
+            })()}
           </div>
         )
       })()}
