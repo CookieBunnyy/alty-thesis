@@ -32,6 +32,33 @@ export function SiteHeader({ overlay = false }: { overlay?: boolean }) {
     setAccountOpen(false)
   }
 
+  // Scrolling down hides the bar, scrolling up brings it back. It stays in
+  // the page flow (sticky), so nothing below it moves when it hides.
+  const [scrolledAway, setScrolledAway] = useState(false)
+  useEffect(() => {
+    let last = window.scrollY
+    let frame = 0
+    const onScroll = () => {
+      if (frame) return
+      frame = window.requestAnimationFrame(() => {
+        frame = 0
+        const y = window.scrollY
+        const delta = y - last
+        if (y < 80) setScrolledAway(false)
+        else if (delta > 8) setScrolledAway(true)
+        else if (delta < -8) setScrolledAway(false)
+        if (Math.abs(delta) > 8 || y < 80) last = y
+      })
+    }
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => {
+      window.removeEventListener("scroll", onScroll)
+      window.cancelAnimationFrame(frame)
+    }
+  }, [])
+  // Never hidden while its menus are open or something in it has keyboard focus.
+  const hidden = scrolledAway && !menuOpen && !accountOpen
+
   useEffect(() => {
     if (!accountOpen) return
     const close = (event: MouseEvent) => {
@@ -50,7 +77,8 @@ export function SiteHeader({ overlay = false }: { overlay?: boolean }) {
 
   return (
     <header
-      className={`relative z-[1500] w-full border-b ${
+      onFocus={() => setScrolledAway(false)}
+      className={`sticky top-0 z-[1500] w-full border-b transition-transform duration-300 ease-out motion-reduce:transition-none ${hidden ? "-translate-y-full" : "translate-y-0"} ${
         overlay ? "border-transparent bg-transparent text-white" : "border-ab-border bg-ab-sidebar/95 text-ab-text backdrop-blur"
       }`}
     >

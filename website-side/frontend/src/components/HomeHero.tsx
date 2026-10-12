@@ -171,7 +171,7 @@ export function HomeHero({ data }: { data: HomeData | null }) {
   return (
     <section className="px-3 pb-8 pt-2 sm:px-4" aria-label="Abellar Realty">
       <div className="hero-panel relative overflow-hidden rounded-[2rem] border border-ab-border pb-6 xl:min-h-[680px] xl:pb-0">
-        {/* ---- phones and tablets: small cards beside the brand tile ---- */}
+        {/* ---- phones and tablets: small cards in the top corners ---- */}
         <div {...enter(500)} className="hero-in absolute left-3 top-4 z-20 sm:left-6 sm:top-6 xl:hidden">
           <div className="hero-float -rotate-6"><MapMini /></div>
         </div>
@@ -179,11 +179,9 @@ export function HomeHero({ data }: { data: HomeData | null }) {
           <div className="hero-float hero-float-slow rotate-6"><PropertyMini data={data} /></div>
         </div>
 
-        {/* ---- the middle: brand tile, headline, actions, numbers ---- */}
+        {/* ---- the middle: headline, actions, numbers ---- */}
         <div className="relative z-10 mx-auto flex max-w-[680px] flex-col items-center px-5 pt-12 text-center sm:pt-16 xl:max-w-[800px] xl:pt-[86px]">
-          <img src="/icons/site-192.png" alt="" width={72} height={72} {...enter(0)}
-            className="hero-in h-16 w-16 rounded-2xl shadow-[0_18px_36px_-14px_rgba(0,0,0,0.6)] sm:h-[72px] sm:w-[72px]" />
-          <h1 className="hero-in mt-12 text-4xl font-extrabold leading-[1.05] tracking-tight text-ab-text sm:mt-10 sm:text-5xl xl:mt-7 xl:text-6xl" style={{ animationDelay: "100ms" }}>
+          <h1 className="hero-in mt-28 text-4xl font-extrabold leading-[1.05] tracking-tight text-ab-text sm:mt-28 sm:text-5xl xl:mt-[70px] xl:text-6xl" style={{ animationDelay: "100ms" }}>
             Real Estate Property
             <span className="mt-1 block text-ab-faint">Discovery and Services</span>
           </h1>
