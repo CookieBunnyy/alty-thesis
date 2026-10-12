@@ -16,7 +16,7 @@ website, so they are not marked TEST_DATA. They are marked ``DEMO`` instead
 (listing code DEMO-…, source and sync status DEMO): never pushed to the
 central listings (only PENDING rows are) and removed exactly by ``--remove``.
 The demo reviews count toward the agents' ratings while they exist, so remove
-them before real clients use the site.
+them before real client use the site.
 
 The live database: pass its connection string (Render → Environment →
 DATABASE_URL) for this one command, plus ``--allow-remote``; you are asked to
