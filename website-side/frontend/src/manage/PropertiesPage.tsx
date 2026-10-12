@@ -13,6 +13,7 @@ import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
 import { CancelReason } from "./cancellation"
 import { lotAreaLong, lotAreaShort } from "@/lib/area"
+import { LotBoundarySection } from "./LotBoundarySection"
 
 type PartnerOption = { id: number; name: string; status: string }
 type Summary = { available: number; reserved: number; sold: number; on_hold: number; unavailable: number; total: number }
@@ -220,6 +221,7 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
         </div>
         {listing.details && <p className="mt-3 whitespace-pre-line text-sm text-ab-muted">{listing.details}</p>}
       </Section>
+      <LotBoundarySection listing={listing} canEdit={canEditListings(user?.role)} onSaved={onSaved} />
 
       <Section title="Amenities & nearby">
         {amenities.length ? (

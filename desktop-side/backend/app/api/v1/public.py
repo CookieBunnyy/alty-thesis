@@ -108,6 +108,8 @@ def _public_listing(listing: PropertyListing, media: list[str]) -> dict:
         "has_garage": listing.has_garage,
         "garage_spaces": listing.garage_spaces,
         "lot_area_sqm": number(listing.lot_area_sqm),
+        "boundary": listing.boundary,
+        "boundary_measurements": listing.boundary_measurements,
         "status": listing.status,
     }
 

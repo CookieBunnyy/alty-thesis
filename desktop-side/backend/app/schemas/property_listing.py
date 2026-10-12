@@ -93,6 +93,10 @@ class PropertyListingResponse(BaseModel):
 
     garage_spaces: int | None = None
     lot_area_sqm: float | None = None
+    boundary: dict | None = None
+    boundary_measurements: dict | None = None
+    boundary_updated_at: datetime | None = None
+    boundary_updated_by: str | None = None
     status: PropertyStatus = "AVAILABLE"
 
     sync_status: str
@@ -137,6 +141,14 @@ class PropertyListingUpdate(BaseModel):
     partner_id: int | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+class BoundaryInput(BaseModel):
+    """A lot outline drawn on the map (GeoJSON Polygon geometry)."""
+    model_config = ConfigDict(extra="forbid")
+
+    geometry: dict
+    use_as_lot_area: bool = False
 
 
 class PropertyListingStatusSummary(BaseModel):

@@ -5,6 +5,7 @@ import { categoryLabel } from "@/lib/categories"
 import type { LocationPoint, Property, RouteSelection } from "@/types"
 import type { CommuteState } from "@/hooks/useCommute"
 import { lotAreaShort } from "@/lib/area"
+import { LotMeasurements } from "./LotMeasurements"
 
 type Props = {
   property: Property
@@ -99,6 +100,8 @@ export function SelectedPropertyPanel({
           </p>
         </div>
       </div>
+
+      <LotMeasurements property={property} compact={compact} />
 
       <CommuteCard
         property={property}

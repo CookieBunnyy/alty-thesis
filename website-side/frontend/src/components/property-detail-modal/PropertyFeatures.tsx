@@ -2,6 +2,7 @@ import React from 'react';
 import { Bed, Bath, UtensilsCrossed, Sun, Trees, Car, LandPlot } from 'lucide-react';
 import type { Property } from '@/types';
 import { lotAreaLong } from "@/lib/area"
+import { LotMeasurements } from '@/components/LotMeasurements';
 
 interface FeaturesProps {
   property: Property;
@@ -60,6 +61,9 @@ export const PropertyFeatures: React.FC<FeaturesProps> = ({ property }) => {
             </span>
           </div>
         )}
+      </div>
+      <div className="mt-3">
+        <LotMeasurements property={property} />
       </div>
     </div>
   );

@@ -35,6 +35,9 @@ export interface Property {
   num_bathrooms: number;
   /** Lot size in square metres (none for condominium units). */
   lot_area_sqm?: number | null;
+  /** The lot's outline drawn by staff, and what it measures (estimates). */
+  boundary?: import("./lib/lotGeometry").Boundary | null;
+  boundary_measurements?: import("./lib/lotGeometry").BoundaryMeasurements | null;
   has_balcony?: boolean;
   has_kitchen?: boolean;
   has_backyard?: boolean;

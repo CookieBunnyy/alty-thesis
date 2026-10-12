@@ -133,6 +133,19 @@ class PropertyListing(Base):
         nullable=True,
     )
 
+    # The lot's outline as a GeoJSON Polygon drawn by staff (see
+    # services/lot_geometry.py); measurements are calculated from it.
+    boundary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    boundary_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    boundary_updated_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    @property
+    def boundary_measurements(self) -> dict | None:
+        """Area, perimeter and side lengths estimated from the boundary."""
+        from app.services.lot_geometry import measure
+
+        return measure(self.boundary)
+
     status: Mapped[str] = mapped_column(
         String(20),
         default="AVAILABLE",

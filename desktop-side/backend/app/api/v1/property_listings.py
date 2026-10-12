@@ -11,6 +11,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.services import lot_geometry
 from app.core.security import FILING_ROLES, get_current_user, require_management, require_roles
 from app.core.supabase import supabase
 from app.models.document import Document
@@ -19,6 +20,7 @@ from app.models.property_listing import PropertyListing
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
 from app.schemas.property_listing import (
+    BoundaryInput,
     PropertyListingResponse,
     PropertyListingStatusSummary,
     PropertyListingUpdate,
@@ -170,6 +172,46 @@ def update_property_listing(listing_id: int, payload: PropertyListingUpdate,
     db.commit()
     if changes:
         try_push_pending(db)
+    db.refresh(listing)
+    return listing
+
+
+@router.put("/{listing_id}/boundary", response_model=PropertyListingResponse)
+def save_boundary(listing_id: int, payload: BoundaryInput, db: Session = Depends(get_db),
+                  user: User = Depends(require_editor)):
+    """Save the lot outline drawn on the map (validated; never invented)."""
+    listing = _listing_or_404(db, listing_id)
+    try:
+        geometry = lot_geometry.normalize(payload.geometry)
+    except lot_geometry.BoundaryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    measured = lot_geometry.measure(geometry)
+    had = listing.boundary is not None
+    listing.boundary = geometry
+    listing.boundary_updated_at = datetime.utcnow()
+    listing.boundary_updated_by = user.full_name or user.username
+    details = {"points": len(geometry["coordinates"][0]) - 1, "area_sqm": measured["area_sqm"],
+               "perimeter_m": measured["perimeter_m"]}
+    if payload.use_as_lot_area:
+        details["lot_area_sqm"] = {"old": str(listing.lot_area_sqm), "new": str(round(measured["area_sqm"], 2))}
+        listing.lot_area_sqm = round(measured["area_sqm"], 2)
+    record_audit(db, "PROPERTY_BOUNDARY_UPDATED" if had else "PROPERTY_BOUNDARY_ADDED", actor=user,
+                 entity_type="property_listings", entity_id=listing_id, details=details)
+    db.commit()
+    db.refresh(listing)
+    return listing
+
+
+@router.delete("/{listing_id}/boundary", response_model=PropertyListingResponse)
+def delete_boundary(listing_id: int, db: Session = Depends(get_db), user: User = Depends(require_editor)):
+    listing = _listing_or_404(db, listing_id)
+    if listing.boundary is None:
+        raise HTTPException(status_code=404, detail="This property has no boundary")
+    listing.boundary = None
+    listing.boundary_updated_at = datetime.utcnow()
+    listing.boundary_updated_by = user.full_name or user.username
+    record_audit(db, "PROPERTY_BOUNDARY_REMOVED", actor=user, entity_type="property_listings", entity_id=listing_id)
+    db.commit()
     db.refresh(listing)
     return listing
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Circle, MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
+import { Circle, MapContainer, TileLayer, Marker, Popup, Polygon, Polyline, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { Layers, LocateFixed, MapPinOff, Minus, Plus } from 'lucide-react';
+import { Layers, LocateFixed, MapPinOff, Minus, Plus, Satellite } from 'lucide-react';
 import type { MapProps, NearbyEstablishmentsMap, RouteOption, TrafficLevel } from '../types';
 import { publicUrl } from '../config';
 import { formatKm, formatMinutes, trafficTileUrl } from '@/lib/mapApi';
@@ -9,6 +9,10 @@ import { formatKm, formatMinutes, trafficTileUrl } from '@/lib/mapApi';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import { lotAreaShort } from '@/lib/area';
+import type { Property } from '../types';
+import { lotAreaLong } from '@/lib/area';
+import { SATELLITE_ATTRIBUTION, SATELLITE_MAX_ZOOM, SATELLITE_TILES, STREET_TILES, type Basemap } from '@/lib/mapTiles';
+import { LOT_STYLE, formatLength, measure, toLatLngs } from '@/lib/lotGeometry';
 
 const DefaultIcon = L.icon({
   iconUrl: markerIcon,
@@ -181,6 +185,73 @@ const CameraController: React.FC<{
   return null;
 };
 
+/** Lot outlines: red polygons following each mapped boundary. The selected
+ *  lot is drawn strongest, with its side lengths when zoomed in; others show
+ *  from street level (zoom 15) and select their property when clicked. */
+const LotBoundaries: React.FC<{
+  properties: Property[];
+  selected: Property | null;
+  onSelect: (property: Property) => void;
+}> = ({ properties, selected, onSelect }) => {
+  const map = useMap();
+  const [zoom, setZoom] = useState(map.getZoom());
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
+  const lots = properties.filter((p) => p.boundary && (selected?.listing_id === p.listing_id || zoom >= 15));
+  if (selected?.boundary && !lots.some((p) => p.listing_id === selected.listing_id)) lots.push(selected);
+  return (
+    <>
+      {lots.map((property) => {
+        const isSelected = selected?.listing_id === property.listing_id;
+        const boundary = property.boundary!;
+        const measured = property.boundary_measurements ?? measure(boundary);
+        const points = toLatLngs(boundary);
+        return (
+          <React.Fragment key={`lot-${property.listing_id}`}>
+            <Polygon
+              positions={points}
+              pathOptions={{ ...LOT_STYLE, weight: isSelected ? 3 : 2, fillOpacity: isSelected ? 0.12 : 0.06 }}
+              eventHandlers={{ click: () => onSelect(property) }}
+            >
+              <Tooltip sticky>
+                <div className="text-xs">
+                  <p className="font-bold">{property.title}</p>
+                  <p>Lot area (mapped): {lotAreaLong(measured.area_sqm)}</p>
+                  <p>Perimeter: {formatLength(measured.perimeter_m)}</p>
+                </div>
+              </Tooltip>
+            </Polygon>
+            {isSelected && zoom >= 17 && points.map((point, i) => {
+              const next = points[(i + 1) % points.length];
+              return (
+                <Marker
+                  key={`side-${i}`}
+                  position={[(point[0] + next[0]) / 2, (point[1] + next[1]) / 2]}
+                  interactive={false}
+                  icon={L.divIcon({ className: 'lot-side-label', html: `<span>${formatLength(measured.sides_m[i] ?? 0)}</span>`, iconSize: [0, 0] })}
+                />
+              );
+            })}
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+};
+
+/** Frame a selected property's whole lot (instead of only its pin). */
+const FitLot: React.FC<{ property: Property | null; paused: boolean; bottomInset: number }> = ({ property, paused, bottomInset }) => {
+  const map = useMap();
+  const key = property?.boundary ? `${property.listing_id}:${JSON.stringify(property.boundary.coordinates[0][0])}` : null;
+  useEffect(() => {
+    if (!key || paused || !property?.boundary) return;
+    map.flyToBounds(L.latLngBounds(toLatLngs(property.boundary)), {
+      paddingTopLeft: [40, 90], paddingBottomRight: [70, 40 + bottomInset], maxZoom: 18, duration: 0.6,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, key]);
+  return null;
+};
+
 /** The north-west and south-east corners of a circle (for framing it). */
 const radiusBounds = (center: { lat: number; lng: number }, km: number): [number, number][] => {
   const dLat = km / 111.32;
@@ -251,7 +322,9 @@ const MapControls: React.FC<{
   located: boolean;
   top: number;
   legend?: React.ReactNode;
-}> = ({ onLocate, onToggleTraffic, showTraffic, trafficAvailable, onClearNearby, hasSelection, located, top, legend }) => {
+  basemap: Basemap;
+  onToggleBasemap: () => void;
+}> = ({ onLocate, onToggleTraffic, showTraffic, trafficAvailable, onClearNearby, hasSelection, located, top, legend, basemap, onToggleBasemap }) => {
   const map = useMap();
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -282,6 +355,16 @@ const MapControls: React.FC<{
           <LocateFixed className="h-5 w-5" />
         </button>
       )}
+      <button
+        type="button"
+        onClick={onToggleBasemap}
+        aria-pressed={basemap === 'satellite'}
+        aria-label="Satellite view"
+        title={basemap === 'satellite' ? 'Back to the street map' : 'Satellite view (see lot boundaries on the ground)'}
+        className={`${controlButton} ${controlState(basemap === 'satellite')}`}
+      >
+        <Satellite className="h-5 w-5" />
+      </button>
       {onToggleTraffic && (
         <button
           type="button"
@@ -375,9 +458,10 @@ export const PropertyMap: React.FC<MapProps> = ({
 
   const focusTarget =
     focusPoint ??
-    (selectedProperty?.lat != null && selectedProperty?.lng != null
+    (selectedProperty?.lat != null && selectedProperty?.lng != null && !selectedProperty.boundary
       ? { lat: selectedProperty.lat, lng: selectedProperty.lng, zoom: 15 }
       : null);
+  const [basemap, setBasemap] = useState<Basemap>('map');
 
   // Live-traffic key: beside the map controls on desktop, bottom-left on phones.
   const trafficLegendCard =
@@ -397,6 +481,19 @@ export const PropertyMap: React.FC<MapProps> = ({
       {!legendInControls && trafficLegendCard ? (
         <div className="absolute bottom-9 left-3 z-[1000]">{trafficLegendCard}</div>
       ) : null}
+      {basemap === 'satellite' && (
+        <p className="pointer-events-none absolute bottom-1 left-2 z-[1000] rounded bg-black/55 px-1.5 py-0.5 text-[10px] text-white/90">{SATELLITE_ATTRIBUTION}</p>
+      )}
+      {selectedProperty?.boundary && basemap === 'map' && (
+        <button
+          type="button"
+          onClick={() => setBasemap('satellite')}
+          style={{ bottom: 12 + bottomInset }}
+          className="absolute left-3 z-[1000] inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1.5 text-xs font-semibold text-ab-text shadow-md hover:bg-ab-hover"
+        >
+          <Satellite className="h-3.5 w-3.5 text-ab-accent" /> View lot on satellite
+        </button>
+      )}
       {isPickingLocation && (
         <div className="pointer-events-none absolute inset-x-0 top-20 z-[1000] flex justify-center px-4">
           <p className="rounded-full bg-ab-text px-4 py-2 text-sm font-semibold text-ab-bg shadow-lg">
@@ -408,12 +505,16 @@ export const PropertyMap: React.FC<MapProps> = ({
       <MapContainer center={initialCenter} zoom={13} zoomControl={false} attributionControl={SHOW_MAP_ATTRIBUTION} className="z-0 h-full w-full rounded-xl">
         {/* OpenStreetMap tiles; darkened in CSS (.ab-dark-tiles) for the dark
             theme, shown as-is for the light theme. Keyed so the class swaps. */}
-        <TileLayer
-          key={theme}
-          attribution={SHOW_MAP_ATTRIBUTION ? '&copy; <a href="https://www.openstreetmap.org/copyright">' : ''}
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          className={theme === 'dark' ? 'ab-dark-tiles' : ''}
-        />
+        {basemap === 'satellite' ? (
+          <TileLayer key="satellite" url={SATELLITE_TILES} maxNativeZoom={SATELLITE_MAX_ZOOM} maxZoom={20} />
+        ) : (
+          <TileLayer
+            key={theme}
+            attribution={SHOW_MAP_ATTRIBUTION ? '&copy; <a href="https://www.openstreetmap.org/copyright">' : ''}
+            url={STREET_TILES}
+            className={theme === 'dark' ? 'ab-dark-tiles' : ''}
+          />
+        )}
         {showTraffic && trafficAvailable && (
           <TileLayer
             key={`traffic-${theme}`}
@@ -435,7 +536,11 @@ export const PropertyMap: React.FC<MapProps> = ({
           legend={legendInControls ? trafficLegendCard : null}
           located={Boolean(currentPosition)}
           top={controlsTop}
+          basemap={basemap}
+          onToggleBasemap={() => setBasemap((value) => (value === 'satellite' ? 'map' : 'satellite'))}
         />
+        <LotBoundaries properties={validProperties} selected={selectedProperty} onSelect={onSelectProperty} />
+        <FitLot property={selectedProperty} paused={Boolean(activeRoute)} bottomInset={bottomInset} />
         <CameraController route={activeRoute} target={focusTarget} bottomInset={bottomInset} />
         <FitToProperties
           points={[

@@ -18,6 +18,10 @@ export type Listing = {
   num_bedrooms: number | null
   num_bathrooms: number | null
   lot_area_sqm?: number | string | null
+  boundary?: import("@/lib/lotGeometry").Boundary | null
+  boundary_measurements?: import("@/lib/lotGeometry").BoundaryMeasurements | null
+  boundary_updated_at?: string | null
+  boundary_updated_by?: string | null
   layout_type: string | null
   village_name: string | null
   lat: number | null

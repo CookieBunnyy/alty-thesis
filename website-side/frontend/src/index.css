@@ -401,6 +401,20 @@
 .hero-slide { opacity: 0; transition: opacity 1.4s ease; will-change: opacity, transform; }
 .hero-slide.is-active { opacity: 1; animation: ab-ken-burns 9s ease-out forwards; }
 
+/* Lot boundary side lengths on the map (white pills, centred on each side). */
+.lot-side-label span {
+  display: inline-block;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #b91c1c;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
 /* Home hero: a dotted panel; the corner cards drift gently on wide screens. */
 .hero-panel {
   background-color: var(--color-ab-sidebar);
