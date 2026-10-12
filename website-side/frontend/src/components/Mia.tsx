@@ -50,8 +50,9 @@ export function MiaHeader() {
   )
 }
 
-/** Shown while MIA prepares a reply: bouncing dots and a phrase that
- *  fades out and is replaced by another, picked at random (never the same twice in a row). */
+/** Shown while MIA prepares a reply: a phrase with a light sweeping across
+ *  it, which fades out and is replaced by another, picked at random (never
+ *  the same twice in a row). */
 export function MiaTyping() {
   const [index, setIndex] = useState(0) // always starts with "MIA is typing"
   const [visible, setVisible] = useState(true)
@@ -75,18 +76,10 @@ export function MiaTyping() {
   }, [])
 
   return (
-    <div className="flex flex-col items-start gap-1" role="status" aria-live="polite">
-      <div className="flex items-end gap-2">
-        <MiaAvatar size="sm" />
-        <div className="flex items-center gap-1 rounded-2xl rounded-bl-none bg-ab-hover px-4 py-3 shadow-sm" aria-hidden>
-          <span className="mia-dot" />
-          <span className="mia-dot [animation-delay:0.15s]" />
-          <span className="mia-dot [animation-delay:0.3s]" />
-        </div>
-      </div>
-      <p className={`ml-9 text-[11px] font-medium text-ab-muted transition-opacity duration-200 ${visible ? "opacity-100" : "opacity-0"}`}>
-        {TYPING_PHRASES[index]}
-        <span className="mia-ellipsis" aria-hidden />
+    <div className="flex items-center gap-2" role="status" aria-live="polite">
+      <MiaAvatar size="sm" />
+      <p className={`mia-shimmer text-xs font-medium transition-opacity duration-200 sm:text-sm ${visible ? "opacity-100" : "opacity-0"}`}>
+        {TYPING_PHRASES[index]}…
       </p>
     </div>
   )

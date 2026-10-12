@@ -43,12 +43,14 @@ import { lotAreaShort } from "./lib/area"
 // Live, AVAILABLE properties from the main Alty API (documents + central data).
 const PROPERTIES_URL = PUBLIC_PROPERTIES_URL
 const QUICK_CHAT_SUGGESTIONS = [
-  "Find a condo in BGC under 8k monthly",
-  "Show me 3-bedroom houses in Alabang",
-  "Properties near my office in Makati",
-  "I want a duplex with a 2M down payment",
-  "Apartment in Taguig within 30 minutes commute",
-  "Affordable studio in Pasig",
+  "House and lot with a lot boundary",
+  "3-bedroom house near a school under 5M",
+  "Condo with a pool near a mall",
+  "Lot of at least 200 sqm",
+  "300k down payment and 15k monthly",
+  "I work in Makati, within 30 minutes",
+  "How do I reserve a property?",
+  "What is a lot boundary?",
 ] as const
 // Preferred default mode when a commute loads: the first one the provider answered.
 const MODE_PREFERENCE: TravelMode[] = ["driving", "motorcycle", "bicycle", "walking"]
@@ -286,6 +288,8 @@ export default function App() {
           workplace_lat: workplace?.lat || null,
           workplace_lng: workplace?.lng || null,
           workplace_name: workplace?.name || null,
+          // The last search MIA understood, so "how about 3 bedrooms?" refines it.
+          context: [...messages].reverse().find((m) => m.sender === "assistant" && m.context !== undefined)?.context ?? null,
         }),
       })
 
@@ -304,6 +308,7 @@ export default function App() {
           timestamp: new Date().toISOString(),
           status: data.status,
           recommendations: (data.recommendations || []).filter(isAvailable),
+          context: data.context ?? null,
         },
       ])
 

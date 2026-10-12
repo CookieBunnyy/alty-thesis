@@ -25,8 +25,68 @@
         document.querySelector('meta[name="apple-mobile-web-app-title"]').content = "Alty MSA"
       }
     </script>
+    <style>
+      /* Welcome screen shown from the first paint until the first data arrives
+         (removed by src/lib/splash.ts). Plain CSS so it needs no JavaScript bundle. */
+      #alty-splash { position: fixed; inset: 0; z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; padding: 24px; background: #242424; color: #F2F2F2; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center; transition: opacity .45s ease, visibility .45s ease; }
+      html[data-theme="light"] #alty-splash { background: #F4F6F2; color: #111719; }
+      #alty-splash.is-done { opacity: 0; visibility: hidden; }
+      #alty-splash img { width: 76px; height: 76px; border-radius: 20px; box-shadow: 0 14px 40px rgba(199, 240, 0, .18); animation: alty-splash-pop .6s cubic-bezier(.2, .9, .3, 1.2) both; }
+      #alty-splash .s-kicker { margin: 26px 0 0; font-size: 12px; font-weight: 700; letter-spacing: .28em; text-transform: uppercase; color: #BDBDBD; animation: alty-splash-rise .6s .1s ease-out both; }
+      html[data-theme="light"] #alty-splash .s-kicker { color: #566158; }
+      #alty-splash h1 { margin: 8px 0 0; font-size: clamp(26px, 6vw, 40px); font-weight: 800; line-height: 1.1; letter-spacing: -.01em; animation: alty-splash-rise .6s .18s ease-out both; }
+      #alty-splash h1 span { color: #C7F000; }
+      html[data-theme="light"] #alty-splash h1 span { color: #5E7E00; }
+      #alty-splash .s-sub { margin: 8px 0 0; font-size: 14px; color: #BDBDBD; animation: alty-splash-rise .6s .26s ease-out both; }
+      html[data-theme="light"] #alty-splash .s-sub { color: #566158; }
+      #alty-splash .s-track { width: min(320px, 78vw); height: 6px; margin-top: 34px; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, .12); animation: alty-splash-rise .6s .34s ease-out both; }
+      html[data-theme="light"] #alty-splash .s-track { background: rgba(17, 23, 25, .1); }
+      /* Fills quickly at first, then slows toward 92% while waiting; jumps to 100% when done. */
+      #alty-splash .s-bar { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #8FB300, #C7F000); animation: alty-splash-fill 14s cubic-bezier(.08, .8, .2, 1) .3s forwards; }
+      html[data-theme="light"] #alty-splash .s-bar { background: linear-gradient(90deg, #4A6400, #7FA600); }
+      #alty-splash.is-done .s-bar { width: 100% !important; animation: none; transition: width .3s ease-out; }
+      #alty-splash .s-status { min-height: 18px; margin: 12px 0 0; font-size: 12px; color: #BDBDBD; transition: opacity .3s ease; }
+      html[data-theme="light"] #alty-splash .s-status { color: #566158; }
+      @keyframes alty-splash-fill { from { width: 0; } 35% { width: 55%; } to { width: 92%; } }
+      @keyframes alty-splash-pop { from { opacity: 0; transform: scale(.8); } to { opacity: 1; transform: none; } }
+      @keyframes alty-splash-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+      @media (prefers-reduced-motion: reduce) {
+        #alty-splash img, #alty-splash .s-kicker, #alty-splash h1, #alty-splash .s-sub, #alty-splash .s-track { animation: none; }
+      }
+    </style>
   </head>
   <body>
+    <div id="alty-splash" role="status" aria-live="polite">
+      <img src="/icons/site-192.png" alt="" width="76" height="76" />
+      <p class="s-kicker">Welcome to</p>
+      <h1><span>Abellar</span> Realty</h1>
+      <p class="s-sub">ALTY Property Finder</p>
+      <div class="s-track" aria-hidden="true"><div class="s-bar"></div></div>
+      <p class="s-status">Loading properties…</p>
+    </div>
+    <script>
+      // Same theme as the app (src/hooks/useTheme.ts), set before the splash paints,
+      // and the Management System gets its own name.
+      ;(function () {
+        var theme = null
+        try { theme = localStorage.getItem("alty-theme") } catch (e) {}
+        if (theme !== "light" && theme !== "dark") theme = window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"
+        document.documentElement.dataset.theme = theme
+        var splash = document.getElementById("alty-splash")
+        var status = splash.querySelector(".s-status")
+        if (/^\/manage(\/|$)/.test(location.pathname)) {
+          splash.querySelector("img").src = "/icons/manage-192.png"
+          splash.querySelector("h1").innerHTML = "<span>Alty</span> MSA"
+          splash.querySelector(".s-sub").textContent = "Abellar Realty Management System"
+          status.textContent = "Getting things ready…"
+        }
+        // The server can take a while to wake up on the first visit: say so.
+        var later = [[4000, "Connecting to the server…"], [10000, "Waking up the server, this can take a few more seconds…"]]
+        later.forEach(function (step) {
+          setTimeout(function () { if (status.isConnected) status.textContent = step[1] }, step[0])
+        })
+      })()
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

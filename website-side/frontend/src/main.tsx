@@ -9,6 +9,7 @@ import { AuthProvider } from "./components/AuthProvider"
 import { TopProgressBar } from "./components/TopProgressBar"
 import { installFetchTracking } from "./lib/loading"
 import { setupPwa } from "./lib/pwa"
+import { dismissSplashWhenReady } from "./lib/splash"
 import { moveToOwnHost } from "./lib/hosts"
 
 // Count API requests for the loading bar before anything fetches.
@@ -18,13 +19,17 @@ setupPwa()
 
 // The public site and the Management System have separate domains in
 // production; a page opened on the wrong one moves before anything renders.
-if (!moveToOwnHost()) createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <ThemeProvider>
-      <AuthProvider>
-        <TopProgressBar />
-        <AppRoutes />
-      </AuthProvider>
-    </ThemeProvider>
-  </StrictMode>,
-)
+if (!moveToOwnHost()) {
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <ThemeProvider>
+        <AuthProvider>
+          <TopProgressBar />
+          <AppRoutes />
+        </AuthProvider>
+      </ThemeProvider>
+    </StrictMode>,
+  )
+  // The welcome screen (index.html) stays until the first data has arrived.
+  dismissSplashWhenReady()
+}

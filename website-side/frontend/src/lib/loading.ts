@@ -18,6 +18,13 @@ export function endActivity() {
   if (active === 0) emit()
 }
 
+/** Whether any ALTY request is in flight, and a way to hear when that changes (outside React). */
+export const isActive = () => active > 0
+export function onActivityChange(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
 export function useActivity(): boolean {
   return useSyncExternalStore(
     (listener) => {

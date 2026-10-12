@@ -61,6 +61,8 @@ export interface ChatMessage {
   timestamp?: string;
   status?: 'rejected' | 'clarification_needed' | 'success' | 'casual_chat' | 'no_match' | 'recommendation_found';
   recommendations?: Property[];
+  /** MIA's understanding of the search so far, sent back so follow-ups refine it. */
+  context?: Record<string, unknown> | null;
 }
 
 export interface CommuteAnalysis {

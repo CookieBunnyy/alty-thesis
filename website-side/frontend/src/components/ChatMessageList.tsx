@@ -82,7 +82,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                     <span>More details needed</span>
                   </div>
                 )}
-                <p className="leading-relaxed">{msg.text}</p>
+                <p className="whitespace-pre-line break-words leading-relaxed">{msg.text}</p>
               </div>
               </div>
 
