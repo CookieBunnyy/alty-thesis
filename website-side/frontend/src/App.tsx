@@ -27,7 +27,7 @@ import { ContactAgentsModal } from "./components/ContactAgentsModal"
 import type { ChatMessage, Property, LocationPoint, PlaceResult, RouteSelection, TrafficStatus, TravelMode } from "./types"
 import { CHAT_API_URL, publicUrl } from "./config"
 import { useTheme } from "./hooks/useTheme"
-import { loadWorkplace, saveWorkplace as saveWorkplaceSession } from "./lib/workplace"
+import { DEFAULT_RADIUS_KM, RADIUS_OPTIONS_KM, kmBetween, loadWorkplace, saveWorkplace as saveWorkplaceSession } from "./lib/workplace"
 import { loadChatSession, saveChatSession } from "./lib/chatSession"
 import { PUBLIC_PROPERTIES_URL, isAvailable, sortByAvailability } from "./lib/properties"
 import { categoryCounts, categoryLabel, categoryOf } from "./lib/categories"
@@ -105,14 +105,28 @@ export default function App() {
   const chatEndRef = useRef<HTMLDivElement | null>(null)
   const commute = useCommute(workplaceLocation, selectedProperty)
 
-  // With a workplace set, the map recommends: only AVAILABLE listings (the
-  // visitor can still choose "Show all"). Choosing a new workplace resets it.
+  // With a workplace set, the map recommends: only AVAILABLE listings within
+  // the chosen radius of it (straight-line km), nearest first. The visitor can
+  // widen the radius or choose "Show all". A new workplace resets "Show all".
   const [showAllForWorkplace, setShowAllForWorkplace] = useState(false)
+  const [radiusKm, setRadiusKm] = useState<number>(DEFAULT_RADIUS_KM)
   const availableOnly = Boolean(workplaceLocation) && !isShowingRecommendations && !showAllForWorkplace
-  const scopedProperties = useMemo(
-    () => (availableOnly ? activeProperties.filter(isAvailable) : activeProperties),
-    [activeProperties, availableOnly],
-  )
+  const distanceFromWork = useMemo(() => {
+    const distances = new Map<string, number>()
+    if (!workplaceLocation) return distances
+    for (const property of activeProperties) {
+      if (property.lat != null && property.lng != null) {
+        distances.set(String(property.listing_id), kmBetween(workplaceLocation, { lat: property.lat, lng: property.lng }))
+      }
+    }
+    return distances
+  }, [activeProperties, workplaceLocation])
+  const scopedProperties = useMemo(() => {
+    if (!availableOnly) return activeProperties
+    const km = (property: Property) => distanceFromWork.get(String(property.listing_id)) ?? Infinity
+    return activeProperties.filter((property) => isAvailable(property) && km(property) <= radiusKm).sort((a, b) => km(a) - km(b))
+  }, [activeProperties, availableOnly, distanceFromWork, radiusKm])
+  const widerRadius = RADIUS_OPTIONS_KM.find((option) => option > radiusKm)
 
   const filteredProperties = useMemo(
     () =>
@@ -456,6 +470,7 @@ export default function App() {
       properties={filteredProperties}
       selectedProperty={selectedProperty}
       workplaceLocation={workplaceLocation}
+      workplaceRadiusKm={availableOnly ? radiusKm : null}
       onSelectProperty={selectOnMap}
       onClearNearby={clearSelection}
       theme={theme}
@@ -650,7 +665,7 @@ export default function App() {
       <div className="w-full shrink-0">
         <Header
           activeTab={activeTab}
-          activePropertiesCount={activeProperties.length}
+          activePropertiesCount={filteredProperties.length}
           onTabChange={setActiveTab}
         />
       </div>
@@ -733,9 +748,23 @@ export default function App() {
                     <div className="flex items-center justify-between gap-2 rounded-xl bg-ab-accent-soft px-3 py-2 text-xs text-ab-text">
                       <span className="flex min-w-0 items-center gap-1.5">
                         <Briefcase className="h-3.5 w-3.5 shrink-0 text-ab-accent" />
-                        <span className="truncate">
-                          {availableOnly ? "Available properties for your workplace" : "All properties, including reserved and sold"}
-                        </span>
+                        {availableOnly ? (
+                          <span className="flex min-w-0 flex-wrap items-center gap-1">
+                            <span>Available within</span>
+                            <label className="sr-only" htmlFor="workplace-radius">Distance from your workplace</label>
+                            <select
+                              id="workplace-radius"
+                              value={radiusKm}
+                              onChange={(event) => setRadiusKm(Number(event.target.value))}
+                              className="rounded-md border border-ab-border bg-ab-card px-1 py-0.5 font-semibold text-ab-text"
+                            >
+                              {RADIUS_OPTIONS_KM.map((option) => <option key={option} value={option}>{option} km</option>)}
+                            </select>
+                            <span className="truncate">of your workplace</span>
+                          </span>
+                        ) : (
+                          <span className="truncate">All properties, including reserved and sold</span>
+                        )}
                       </span>
                       <button type="button" onClick={() => setShowAllForWorkplace((value) => !value)} className="shrink-0 font-semibold text-ab-accent hover:underline">
                         {availableOnly ? "Show all" : "Available only"}
@@ -845,6 +874,12 @@ export default function App() {
                               </span>
                             </div>
                           </div>
+                          {!property.commute_info && distanceFromWork.has(String(property.listing_id)) && (
+                            <p className="mt-2 flex items-center gap-1 text-[11px] text-ab-muted">
+                              <Briefcase className="h-3 w-3 text-ab-faint" />
+                              About {distanceFromWork.get(String(property.listing_id))!.toFixed(1)} km from your workplace (straight line)
+                            </p>
+                          )}
                           {property.commute_info && (
                             <p className="mt-2 text-[11px] text-ab-muted">
                               By car to {workplaceLocation?.name ?? "workplace"}: {property.commute_info.distance_km} km ·{" "}
@@ -854,6 +889,20 @@ export default function App() {
                         </div>
                       )
                     })
+                  ) : availableOnly && scopedProperties.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-ab-border bg-ab-card p-5 text-center text-sm text-ab-muted">
+                      <p className="font-semibold text-ab-text">No available properties within {radiusKm} km of your workplace.</p>
+                      <div className="mt-3 flex flex-wrap justify-center gap-2">
+                        {widerRadius && (
+                          <button type="button" onClick={() => setRadiusKm(widerRadius)} className="rounded-lg bg-ab-accent px-3 py-1.5 text-xs font-semibold text-ab-ink">
+                            Widen to {widerRadius} km
+                          </button>
+                        )}
+                        <button type="button" onClick={() => setShowAllForWorkplace(true)} className="rounded-lg border border-ab-border-strong px-3 py-1.5 text-xs font-semibold text-ab-text">
+                          Show all properties
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <div className="rounded-2xl border border-dashed border-ab-border bg-ab-card p-5 text-center text-sm text-ab-muted">
                       No properties match this filter.

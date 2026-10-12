@@ -29,3 +29,16 @@ export function saveWorkplace(place: LocationPoint | null) {
     /* storage blocked: kept in memory for this page only */
   }
 }
+
+/** Straight-line distance in km between two points (haversine). */
+export function kmBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const rad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * rad
+  const dLng = (b.lng - a.lng) * rad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2
+  return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+/** "Near your workplace" radius choices (straight-line km); 20 km by default. */
+export const RADIUS_OPTIONS_KM = [5, 10, 20, 30, 50] as const
+export const DEFAULT_RADIUS_KM = 20

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
+import { Circle, MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { Layers, LocateFixed, MapPinOff, Minus, Plus } from 'lucide-react';
 import type { MapProps, NearbyEstablishmentsMap, RouteOption, TrafficLevel } from '../types';
@@ -180,6 +180,13 @@ const CameraController: React.FC<{
   return null;
 };
 
+/** The north-west and south-east corners of a circle (for framing it). */
+const radiusBounds = (center: { lat: number; lng: number }, km: number): [number, number][] => {
+  const dLat = km / 111.32;
+  const dLng = km / (111.32 * Math.cos((center.lat * Math.PI) / 180));
+  return [[center.lat + dLat, center.lng - dLng], [center.lat - dLat, center.lng + dLng]];
+};
+
 /** Frame every listed property whenever the result set changes (initial load,
  *  filters, assistant recommendations), unless a property is selected. */
 const FitToProperties: React.FC<{ points: [number, number][]; paused: boolean; topInset: number; bottomInset: number }> = ({
@@ -306,6 +313,7 @@ export const PropertyMap: React.FC<MapProps> = ({
   properties,
   selectedProperty,
   workplaceLocation,
+  workplaceRadiusKm = null,
   onSelectProperty,
   onClearNearby,
   theme,
@@ -429,7 +437,11 @@ export const PropertyMap: React.FC<MapProps> = ({
         />
         <CameraController route={activeRoute} target={focusTarget} bottomInset={bottomInset} />
         <FitToProperties
-          points={validProperties.map((p) => [p.lat!, p.lng!] as [number, number])}
+          points={[
+            ...validProperties.map((p) => [p.lat!, p.lng!] as [number, number]),
+            // With a radius, frame the whole circle around the workplace too.
+            ...(workplaceLocation && workplaceRadiusKm ? radiusBounds(workplaceLocation, workplaceRadiusKm) : []),
+          ]}
           paused={Boolean(selectedProperty)}
           topInset={80}
           bottomInset={bottomInset}
@@ -534,7 +546,15 @@ export const PropertyMap: React.FC<MapProps> = ({
           );
         })}
 
-        {/* 3. Workplace (route start) */}
+        {/* 3. Workplace (route start), with the "near your workplace" radius */}
+        {workplaceLocation && workplaceRadiusKm && (
+          <Circle
+            center={[workplaceLocation.lat, workplaceLocation.lng]}
+            radius={workplaceRadiusKm * 1000}
+            interactive={false}
+            pathOptions={{ color: theme === 'dark' ? '#C7F000' : '#5E7E00', weight: 2, dashArray: '6 6', fillColor: theme === 'dark' ? '#C7F000' : '#5E7E00', fillOpacity: 0.07 }}
+          />
+        )}
         {workplaceLocation && (
           <Marker position={[workplaceLocation.lat, workplaceLocation.lng]} icon={WorkplaceIcon} zIndexOffset={900}>
             <Popup>

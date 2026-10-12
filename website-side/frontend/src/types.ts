@@ -179,6 +179,8 @@ export interface MapProps {
   properties: Property[];
   selectedProperty: Property | null;
   workplaceLocation?: LocationPoint | null;
+  /** With a workplace: the "near your workplace" radius drawn on the map (km). */
+  workplaceRadiusKm?: number | null;
   onSelectProperty: (property: Property) => void;
   onClearNearby?: () => void;
   theme: 'dark' | 'light';
