@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { Download, X } from "lucide-react"
 import { useInstall, type AppArea, type InstallPlatform } from "@/lib/pwa"
+import { dialogOpen, nudgeDone, nudgeDue } from "@/lib/nudges"
 
 const NAMES: Record<AppArea, string> = { site: "Abellar Realty", manage: "Alty MSA" }
 
@@ -39,10 +40,34 @@ type Props = {
 export function InstallAppButton({ area, overlay = false, translate = (text) => text, className = "" }: Props) {
   const { hidden, canPrompt, platform, install } = useInstall(area)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [nudgeAt, setNudgeAt] = useState<HTMLElement | null>(null) // the button, while the callout shows
+  const button = useRef<HTMLButtonElement>(null)
   const tr = translate
+
+  // A few seconds after the page opens, point at the button once (again after
+  // a week if dismissed). Not where installing isn't possible, and never over a dialog.
+  const nudgeKey = `install-${area}`
+  const canNudge = !hidden && platform !== "firefox"
+  useEffect(() => {
+    if (!canNudge || !nudgeDue(nudgeKey, 7)) return
+    const timer = window.setInterval(() => {
+      const el = button.current
+      if (!el || !el.getBoundingClientRect().width || dialogOpen()) return
+      window.clearInterval(timer)
+      setNudgeAt(el)
+    }, 4000)
+    return () => window.clearInterval(timer)
+  }, [canNudge, nudgeKey])
+
+  const dismiss = () => {
+    nudgeDone(nudgeKey)
+    setNudgeAt(null)
+  }
+
   if (hidden) return null
 
   const onClick = async () => {
+    if (nudgeAt) dismiss()
     if (canPrompt && (await install())) return
     setHelpOpen(true)
   }
@@ -50,6 +75,7 @@ export function InstallAppButton({ area, overlay = false, translate = (text) => 
   return (
     <>
       <button
+        ref={button}
         type="button"
         onClick={onClick}
         title={tr(`Install ${NAMES[area]} as an app`)}
@@ -58,13 +84,73 @@ export function InstallAppButton({ area, overlay = false, translate = (text) => 
           overlay
             ? "border-white/30 bg-white/10 text-white hover:bg-white/20"
             : "border-ab-border-strong bg-ab-card-2 text-ab-text hover:bg-ab-hover"
-        } ${className}`}
+        } ${nudgeAt ? "ab-nudge-ring" : ""} ${className}`}
       >
         <Download className="h-4 w-4" />
         <span className="hidden sm:inline">{tr("Install app")}</span>
       </button>
+      {nudgeAt && <InstallNudge anchor={nudgeAt} tr={tr} onInstall={() => void onClick()} onDismiss={dismiss} />}
       {helpOpen && <InstallHelp name={NAMES[area]} steps={STEPS[platform]} tr={tr} onClose={() => setHelpOpen(false)} />}
     </>
+  )
+}
+
+/** "Install the app" callout under the button, with a pointer to it. */
+function InstallNudge({ anchor, tr, onInstall, onDismiss }: { anchor: HTMLElement; tr: (text: string) => string; onInstall: () => void; onDismiss: () => void }) {
+  const box = useRef<HTMLDivElement>(null)
+  const arrow = useRef<HTMLSpanElement>(null)
+
+  // Follow the button (the header can move on scroll or resize).
+  useLayoutEffect(() => {
+    const place = () => {
+      const a = anchor.getBoundingClientRect()
+      const el = box.current
+      if (!el || !arrow.current) return
+      const left = Math.max(12, Math.min(a.left + a.width / 2 - el.offsetWidth / 2, window.innerWidth - el.offsetWidth - 12))
+      el.style.top = `${a.bottom + 12}px`
+      el.style.left = `${left}px`
+      arrow.current.style.left = `${a.left + a.width / 2 - left - 6}px`
+    }
+    place()
+    window.addEventListener("resize", place)
+    window.addEventListener("scroll", place, true)
+    return () => {
+      window.removeEventListener("resize", place)
+      window.removeEventListener("scroll", place, true)
+    }
+  }, [anchor])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onDismiss()
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [onDismiss])
+
+  // Portal: headers with backdrop blur would otherwise trap a fixed element.
+  return createPortal(
+    <div ref={box} role="status" aria-live="polite"
+      className="ab-pop fixed z-[2500] w-[min(16rem,calc(100vw-24px))] rounded-2xl border border-ab-accent/50 bg-ab-card p-4 text-left text-ab-text shadow-2xl">
+      <span ref={arrow} aria-hidden className="absolute -top-1.5 h-3 w-3 rotate-45 border-l border-t border-ab-accent/50 bg-ab-card" />
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ab-accent-soft text-ab-accent"><Download className="h-4 w-4" /></span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold">{tr("Get the app")}</p>
+          <p className="mt-0.5 text-xs text-ab-muted">{tr("Faster access, one tap away.")}</p>
+        </div>
+        <button type="button" onClick={onDismiss} aria-label={tr("Dismiss")} className="-mr-1 -mt-1 rounded-lg p-1 text-ab-faint hover:bg-ab-hover hover:text-ab-text">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button type="button" onClick={onDismiss} className="flex-1 rounded-xl border border-ab-border-strong py-2 text-xs font-semibold text-ab-muted hover:bg-ab-hover hover:text-ab-text">
+          {tr("Not now")}
+        </button>
+        <button type="button" onClick={onInstall} className="flex-1 rounded-xl bg-ab-accent py-2 text-xs font-bold text-ab-ink hover:bg-ab-accent-hover">
+          {tr("Install")}
+        </button>
+      </div>
+    </div>,
+    document.body,
   )
 }
 

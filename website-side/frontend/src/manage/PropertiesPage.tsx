@@ -13,6 +13,7 @@ import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
 import { CancelReason } from "./cancellation"
 import { lotAreaLong, lotAreaShort } from "@/lib/area"
+import { useBlobUrl } from "./useBlobUrl"
 import { LotBoundarySection } from "./LotBoundarySection"
 
 type PartnerOption = { id: number; name: string; status: string }
@@ -22,6 +23,22 @@ type History = {
   status_changed_at: string | null
   transactions: { transaction_id: string; client_id: string; client_name: string | null; agent_id: string; agent_name: string | null; transaction_type: string; transaction_date: string; amount: number; status: string; cancellation_reason?: string | null; source: string }[]
   documents: { document_id?: string; id?: number; document_name?: string; document_type?: string; status?: string; created_at?: string }[]
+}
+
+/** A listing's photos: its photo URLs, then photos uploaded in Digital
+ *  Preview (as "media:<id>", fetched with the staff session). */
+function listingPhotos(listing: Listing): string[] {
+  return [...(listing.photos ?? []), ...(listing.media_ids ?? []).map((id) => `media:${id}`)]
+}
+
+function ListingPhoto({ src, alt = "", className }: { src: string; alt?: string; className: string }) {
+  const media = src.startsWith("media:") ? `/media/${src.slice(6)}/file` : null
+  const { url } = useBlobUrl(media)
+  const shown = media ? url : src
+  const [broken, setBroken] = useState("")
+  return shown && broken !== shown
+    ? <img src={shown} alt={alt} loading="lazy" onError={() => setBroken(shown)} className={className} />
+    : <span className={`${className} block bg-ab-card-2`} aria-hidden />
 }
 
 const STATUSES = ["AVAILABLE", "RESERVED", "SOLD", "ON_HOLD", "UNAVAILABLE"]
@@ -58,8 +75,8 @@ export function PropertiesPage() {
       key: "title", label: "Property", sort: (l) => l.title ?? "",
       render: (l) => (
         <span className="flex items-center gap-3">
-          {l.photos?.[0] ? (
-            <img src={l.photos[0]} alt="" loading="lazy" className="h-10 w-14 shrink-0 rounded-lg object-cover" />
+          {listingPhotos(l)[0] ? (
+            <ListingPhoto src={listingPhotos(l)[0]} className="h-10 w-14 shrink-0 rounded-lg object-cover" />
           ) : (
             <span className="h-10 w-14 shrink-0 rounded-lg bg-ab-card-2" aria-hidden />
           )}
@@ -152,7 +169,7 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
   const nearby = listing.nearby_establishments && typeof listing.nearby_establishments === "object" && !Array.isArray(listing.nearby_establishments)
     ? Object.entries(listing.nearby_establishments as Record<string, { name?: string; distance_km?: number }[]>)
     : []
-  const photos = listing.photos ?? []
+  const photos = listingPhotos(listing)
   const features = ([["Balcony", listing.has_balcony], ["Kitchen", listing.has_kitchen], ["Backyard", listing.has_backyard], ["Garage", listing.has_garage]] as const)
   const relatedClients = [...new Map((history.data?.transactions ?? []).map((tx) => [tx.client_id, tx.client_name])).entries()]
   const relatedAgents = [...new Map((history.data?.transactions ?? []).map((tx) => [tx.agent_id, tx.agent_name])).entries()]
@@ -174,13 +191,13 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
     >
       {photos.length > 0 && (
         <div>
-          <img src={photos[Math.min(photo, photos.length - 1)]} alt={t("Photo {n} of {name}", { n: photo + 1, name: listing.title ?? "" })} className="aspect-video w-full rounded-2xl object-cover" />
+          <ListingPhoto src={photos[Math.min(photo, photos.length - 1)]} alt={t("Photo {n} of {name}", { n: photo + 1, name: listing.title ?? "" })} className="aspect-video w-full rounded-2xl object-cover" />
           {photos.length > 1 && (
             <div className="mt-2 flex gap-2 overflow-x-auto">
               {photos.map((src, i) => (
                 <button key={src} type="button" onClick={() => setPhoto(i)} aria-label={t("Photo {n}", { n: i + 1 })}
                   className={`h-14 w-20 shrink-0 overflow-hidden rounded-lg border-2 ${i === photo ? "border-ab-accent" : "border-transparent"}`}>
-                  <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  <ListingPhoto src={src} className="h-full w-full object-cover" />
                 </button>
               ))}
             </div>

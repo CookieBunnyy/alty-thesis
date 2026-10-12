@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -145,6 +145,16 @@ class PropertyListing(Base):
         from app.services.lot_geometry import measure
 
         return measure(self.boundary)
+
+    # Photos uploaded in Digital Preview (property_media), oldest first.
+    uploaded_media: Mapped[list["PropertyMedia"]] = relationship(  # noqa: F821
+        "PropertyMedia", order_by="PropertyMedia.created_at", lazy="selectin", viewonly=True,
+    )
+
+    @property
+    def media_ids(self) -> list[int]:
+        """Uploaded photos that passed the quality check (shown on the listing)."""
+        return [m.id for m in self.uploaded_media if m.quality_status in ("GOOD", "ACCEPTABLE")]
 
     status: Mapped[str] = mapped_column(
         String(20),

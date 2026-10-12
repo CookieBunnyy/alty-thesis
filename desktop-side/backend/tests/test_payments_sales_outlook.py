@@ -201,3 +201,40 @@ def test_seasonal_months_are_considered():
     slope, intercept = np.polyfit(np.arange(24), values, 1)
     line = _trend(values)
     assert abs(line["slope"] - slope) < 1e-6 and abs(line["intercept"] - intercept) < 1e-4
+
+
+def test_outlook_diagnosis_explains_a_weak_month(api, admin, agents, db):
+    """A month that sold less than the one before gets its causes, biggest first."""
+    keys = _monthly_sales(db, agents, [1_000_000, 1_200_000, 900_000, 1_400_000, 1_300_000, 1_600_000, 1_500_000])
+    # Last month: two sales on top of the seeded one; this makes the month after look weak.
+    strong, weak = keys[-2], keys[-1]
+    year, month = map(int, strong.split("-"))
+    for index in range(2):
+        listing = PropertyListing(title=f"Extra {index}", category="Condominium", price_total=Decimal(2_000_000),
+                                  status="SOLD", sync_status="SYNCED")
+        client = Client(full_name=f"Extra buyer {index}", status="SOLD", source="SYNC", sync_status="SYNCED")
+        db.add_all([listing, client])
+        db.flush()
+        db.add(PropertyTransaction(client_id=client.client_id, property_id=listing.listing_id, agent_id=agents[1],
+                                   transaction_type="SOLD", status="COMPLETED", amount=Decimal(2_000_000),
+                                   transaction_date=datetime(year, month, 10, 4, tzinfo=timezone.utc),
+                                   source="SYNC", sync_status="SYNCED"))
+    db.commit()
+
+    path = "/api/v1/intelligence/outlook/diagnosis"
+    body = api.get(f"{path}?month={weak}&metric=revenue", headers=admin).json()
+    assert body["triggered"] and "BELOW_PREVIOUS" in body["reasons"]
+    assert body["now"]["sales"] == 1 and body["before"]["sales"] == 3
+    change = body["revenue_change"]
+    assert abs(change["from_sales_count"] + change["from_average_price"] - change["total"]) < 1  # parts add up
+    codes = [f["code"] for f in body["findings"]]
+    assert codes[0] == "FEWER_SALES"
+    drop = next(f for f in body["findings"] if f["code"] == "AGENT_DROP")
+    assert drop["params"]["agents"][0]["agent_id"] == str(agents[1])  # the agent who sold nothing this month
+    assert any(c["category"] == "Condominium" for c in next(
+        f for f in body["findings"] if f["code"] == "CATEGORY_DROP")["params"]["categories"])
+
+    # A month that did better than the one before (and met its range) needs no diagnosis.
+    calm = api.get(f"{path}?month={keys[-4]}&metric=revenue", headers=admin).json()
+    assert calm["triggered"] is False and calm["findings"] == []
+    assert api.get(f"{path}?month=2026-13", headers=admin).status_code == 422

@@ -55,7 +55,8 @@ export function MediaPage() {
       body.append("file", file)
       try {
         const saved = await api<Media>(`/media/properties/${listing}`, { method: "POST", body })
-        results.push(`${file.name}: ${statusLabel(saved.quality_status)}${saved.quality_issues?.length ? ` (${saved.quality_issues.map((issue) => t(issue)).join(", ")})` : ""}`)
+        const shown = saved.quality_status === "GOOD" || saved.quality_status === "ACCEPTABLE"
+        results.push(`${file.name}: ${statusLabel(saved.quality_status)}${saved.quality_issues?.length ? ` (${saved.quality_issues.map((issue) => t(issue)).join(", ")})` : ""}${shown ? "" : ` — ${t("not shown on the property; upload a clearer photo")}`}`)
       } catch (uploadError) {
         failed += 1
         results.push(`${file.name}: ${uploadError instanceof ApiError ? t(uploadError.message) : t("upload failed")}`)
@@ -155,6 +156,9 @@ function MediaCard({ media: m, title, canDelete, onDelete }: { media: Media; tit
         <p className="text-ab-faint">{m.width}×{m.height} · {fileSize(m.file_size)} · {date(m.created_at)}</p>
         <p className="text-ab-faint">{t("Sharpness")} {m.blur_score?.toFixed(0) ?? "—"} · {t("Brightness")} {m.brightness?.toFixed(0) ?? "—"} · {t("Contrast")} {m.contrast?.toFixed(0) ?? "—"}</p>
         {m.quality_issues?.length ? <p className="text-ab-warning">{m.quality_issues.map((issue) => t(issue)).join(" · ")}</p> : null}
+        {m.quality_status !== "GOOD" && m.quality_status !== "ACCEPTABLE" && (
+          <p className="font-semibold text-ab-danger">{t("Not shown on the property: the quality check failed.")}</p>
+        )}
         {canDelete && (
           <button type="button" onClick={onDelete} className="inline-flex items-center gap-1 font-semibold text-ab-danger hover:underline">
             <Trash2 className="h-3.5 w-3.5" /> {t("Remove")}

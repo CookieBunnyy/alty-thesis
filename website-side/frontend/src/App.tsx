@@ -37,6 +37,7 @@ import { RowSkeleton } from "./components/Skeleton"
 import { useCommute } from "./hooks/useCommute"
 import { formatKm, formatMinutes, getCapabilities, requestCurrentPosition, reversePlace, searchPlaces } from "./lib/mapApi"
 import { ChatBotIcon } from "./components/icons/ChatBotIcon"
+import { ChatNudge } from "./components/ChatNudge"
 import { lotAreaShort } from "./lib/area"
 
 // Live, AVAILABLE properties from the main Alty API (documents + central data).
@@ -1054,6 +1055,7 @@ export default function App() {
               >
                 <ChatBotIcon className="h-7 w-7" />
               </button>
+              <ChatNudge chatOpen={isChatOpen} onOpen={handleChatToggle} />
 
               {isChatOpen && (
                 <div className="absolute bottom-24 right-5 z-[1100] flex h-[480px] w-[340px] flex-col overflow-hidden rounded-[1.5rem] border border-ab-border bg-ab-card shadow-[0_20px_45px_rgba(12,53,41,0.18)]">

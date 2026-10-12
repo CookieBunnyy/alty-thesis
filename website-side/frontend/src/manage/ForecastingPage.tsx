@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react"
 import { ForecastChart, Legend, type BacktestPoint } from "./charts"
 import { peso, pesoShort, statusLabel, transactionDate } from "./format"
 import { InsightPanel, type Insight } from "./Insights"
+import { OutlookDiagnosis } from "./OutlookDiagnosis"
 import { LoadState, PageHeader, Section, Select } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
@@ -138,6 +139,8 @@ function MonthWorking({ month, metric, outlook }: { month: string; metric: Metri
 
   return (
     <Section title={t("How {month} was worked out", { month: monthName(month) })}>
+      {/* Scrolls inside its own frame so a long working doesn't stretch the page. */}
+      <div className="max-h-[32rem] overflow-y-auto overscroll-contain pr-1" tabIndex={0} aria-label={t("How {month} was worked out", { month: monthName(month) })}>
       <div className="grid gap-5 lg:grid-cols-2">
         {/* 1. The recorded figure, summed up */}
         <div className="min-w-0">
@@ -280,6 +283,7 @@ function MonthWorking({ month, metric, outlook }: { month: string; metric: Metri
           )}
         </div>
       </div>
+      </div>
     </Section>
   )
 }
@@ -377,6 +381,9 @@ export function ForecastingPage() {
           </Section>
 
           {month && <MonthWorking key={`${metric}:${month}`} month={month} metric={metric} outlook={f} />}
+          {month && f.history.some((h) => h.month === month) && (
+            <OutlookDiagnosis key={`diagnosis:${metric}:${month}`} month={month} metric={metric} monthName={monthName} format={look.format} />
+          )}
 
           <div className="ab-table-scroll rounded-2xl border border-ab-border bg-ab-card">
             <table className="w-full text-left text-sm">

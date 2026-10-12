@@ -332,6 +332,153 @@ def _pct_change(recent: float, previous: float) -> float | None:
     return round((recent - previous) / previous * 100, 1) if previous else None
 
 
+DIAG_PRICE_DROP = 0.10     # average sale price down by 10% or more counts as a cause
+DIAG_LOW_STOCK = 2         # a category that sells, with this many or fewer available listings
+
+
+def _month_stats(db: Session, month: str) -> dict:
+    """What happened in one month, in the pieces a drop can be traced to."""
+    key = func.to_char(func.timezone("UTC", PropertyTransaction.transaction_date), "YYYY-MM")
+    sales = db.execute(select(PropertyTransaction).where(key == month, SALE)).scalars().all()
+    revenue = sum(float(row.amount or 0) for row in sales)
+    reservations = db.scalar(select(func.count()).select_from(PropertyTransaction).where(
+        key == month, PropertyTransaction.transaction_type == "RESERVED")) or 0
+    cancelled_key = func.to_char(func.coalesce(PropertyTransaction.cancelled_at,
+                                               func.timezone("UTC", PropertyTransaction.transaction_date)), "YYYY-MM")
+    cancelled = db.execute(select(PropertyTransaction.cancellation_reason).where(
+        cancelled_key == month, PropertyTransaction.status == "CANCELLED")).scalars().all()
+    reasons: dict[str, int] = {}
+    for reason in cancelled:
+        label = (reason or "").strip() or "No reason recorded"
+        reasons[label] = reasons.get(label, 0) + 1
+    new_clients = db.scalar(select(func.count()).select_from(Client).where(
+        func.to_char(Client.created_at, "YYYY-MM") == month)) or 0
+    agents: dict[str, dict] = {}
+    categories: dict[str, dict] = {}
+    for row in sales:
+        amount = float(row.amount or 0)
+        agent = agents.setdefault(str(row.agent_id), {"name": row.agent.full_name if row.agent else None,
+                                                      "sales": 0, "revenue": 0.0})
+        agent["sales"] += 1
+        agent["revenue"] += amount
+        category = (row.property_listing.category if row.property_listing else None) or "Uncategorized"
+        group = categories.setdefault(category, {"sales": 0, "revenue": 0.0})
+        group["sales"] += 1
+        group["revenue"] += amount
+    return {
+        "sales": len(sales), "revenue": round(revenue, 2),
+        "average_sale": round(revenue / len(sales), 2) if sales else None,
+        "reservations": int(reservations), "cancellations": len(cancelled),
+        "cancellation_reasons": sorted(({"reason": r, "count": c} for r, c in reasons.items()),
+                                       key=lambda item: -item["count"])[:3],
+        "new_clients": int(new_clients), "agents": agents, "categories": categories,
+    }
+
+
+def _drops(before: dict, now: dict, label: str) -> list[dict]:
+    """Groups (agents or categories) whose sales revenue fell, biggest fall first."""
+    dropped = []
+    for key, was in before.items():
+        is_now = now.get(key, {"sales": 0, "revenue": 0.0})
+        if is_now["revenue"] < was["revenue"]:
+            item = {label: key, "before": round(was["revenue"], 2), "now": round(is_now["revenue"], 2),
+                    "sales_before": was["sales"], "sales_now": is_now["sales"]}
+            if "name" in was:
+                item["name"] = was["name"]
+            dropped.append(item)
+    return sorted(dropped, key=lambda item: item["now"] - item["before"])
+
+
+DIAG_ORDER = ["FEWER_SALES", "LOWER_PRICE", "CANCELLATIONS", "FEWER_RESERVATIONS", "FEWER_NEW_CLIENTS",
+              "AGENT_DROP", "CATEGORY_DROP", "LOW_STOCK", "SEASONAL_LOW", "NO_CLEAR_CAUSE"]
+
+
+def month_diagnosis(db: Session, month: str, metric: str = "revenue") -> dict:
+    """Decision support for a month that missed its likely range or did worse
+    than the month before. First what changed (fewer deals, lower prices, a
+    thinner pipeline, cancellations, agents, categories, stock), then the
+    causes, biggest first. Rule-based and computed from recorded data only;
+    the page turns each cause into a suggestion and management decides."""
+    if metric not in {"revenue", "transactions", "sales"}:
+        raise ValueError("metric must be revenue, transactions or sales")
+    previous_month = _shift_month(month, -1)
+    series = {row["month"]: row for row in monthly_series(db)}
+    actual = float(series.get(month, {}).get(metric, 0) or 0)
+    previous = float(series.get(previous_month, {}).get(metric, 0) or 0)
+    checked = next((b for b in outlook(db, metric, 1)["backtest"] if b["month"] == month), None)
+
+    reasons = []
+    if checked and checked["verdict"] == "BELOW":
+        reasons.append("BELOW_RANGE")
+    if previous_month in series and actual < previous:
+        reasons.append("BELOW_PREVIOUS")
+    base = {"month": month, "previous_month": previous_month, "metric": metric, "actual": actual,
+            "previous": previous, "change_pct": _pct_change(actual, previous),
+            "expected": ({"value": checked["value"], "lower": checked["lower"], "upper": checked["upper"]}
+                         if checked else None),
+            "reasons": reasons, "triggered": bool(reasons), "findings": []}
+    if not reasons:
+        return base
+
+    now, before = _month_stats(db, month), _month_stats(db, previous_month)
+    findings: list[dict] = []
+    # Revenue change = (change in number of sales × last month's average price)
+    #                + (this month's sales × change in average price); the two add up exactly.
+    before_avg = before["average_sale"] or 0.0
+    now_avg = now["average_sale"] if now["average_sale"] is not None else before_avg
+    from_count = (now["sales"] - before["sales"]) * before_avg
+    from_price = now["sales"] * (now_avg - before_avg)
+    if now["sales"] < before["sales"]:
+        findings.append({"code": "FEWER_SALES", "impact": round(-from_count, 2),
+                         "params": {"now": now["sales"], "before": before["sales"]}})
+    if before_avg and now["average_sale"] and now["average_sale"] < before_avg * (1 - DIAG_PRICE_DROP):
+        findings.append({"code": "LOWER_PRICE", "impact": round(-from_price, 2),
+                         "params": {"now": now["average_sale"], "before": before_avg,
+                                    "pct": round((before_avg - now["average_sale"]) / before_avg * 100)}})
+    if now["cancellations"] and now["cancellations"] >= before["cancellations"]:
+        findings.append({"code": "CANCELLATIONS", "impact": None,
+                         "params": {"now": now["cancellations"], "before": before["cancellations"],
+                                    "reasons": now["cancellation_reasons"]}})
+    if now["reservations"] < before["reservations"]:
+        findings.append({"code": "FEWER_RESERVATIONS", "impact": None,
+                         "params": {"now": now["reservations"], "before": before["reservations"]}})
+    if before["new_clients"] and now["new_clients"] < before["new_clients"]:
+        findings.append({"code": "FEWER_NEW_CLIENTS", "impact": None,
+                         "params": {"now": now["new_clients"], "before": before["new_clients"]}})
+    agents = _drops(before["agents"], now["agents"], "agent_id")
+    if agents:
+        findings.append({"code": "AGENT_DROP", "impact": round(sum(a["before"] - a["now"] for a in agents), 2),
+                         "params": {"agents": agents[:3]}})
+    categories = _drops(before["categories"], now["categories"], "category")
+    if categories:
+        findings.append({"code": "CATEGORY_DROP",
+                         "impact": round(sum(c["before"] - c["now"] for c in categories), 2),
+                         "params": {"categories": categories[:3]}})
+    stock = {category or "Uncategorized": int(count) for category, count in db.execute(
+        select(PropertyListing.category, func.count()).where(PropertyListing.status == "AVAILABLE")
+        .group_by(PropertyListing.category)).all()}
+    low = [{"category": c, "available": stock.get(c, 0)}
+           for c in sorted(set(before["categories"]) | set(now["categories"])) if stock.get(c, 0) <= DIAG_LOW_STOCK]
+    if low:
+        findings.append({"code": "LOW_STOCK", "impact": None, "params": {"categories": low}})
+    model = checked["model"] if checked else None
+    if model and model.get("seasonal") and (model.get("seasonal_factor") or 1) < 1:
+        findings.append({"code": "SEASONAL_LOW", "impact": None,
+                         "params": {"pct": round((1 - model["seasonal_factor"]) * 100)}})
+    if not findings:
+        findings.append({"code": "NO_CLEAR_CAUSE", "impact": None, "params": {}})
+
+    # The two parts of the revenue change first, the bigger one on top; then the rest in a fixed order.
+    money = {"FEWER_SALES", "LOWER_PRICE"}
+    findings.sort(key=lambda f: (f["code"] not in money, -(f["impact"] or 0) if f["code"] in money else 0,
+                                 DIAG_ORDER.index(f["code"])))
+    summary = lambda stats: {k: v for k, v in stats.items() if k not in {"agents", "categories"}}  # noqa: E731
+    return {**base, "now": summary(now), "before": summary(before),
+            "revenue_change": {"total": round(now["revenue"] - before["revenue"], 2),
+                               "from_sales_count": round(from_count, 2), "from_average_price": round(from_price, 2)},
+            "findings": findings}
+
+
 def dss_insights(db: Session) -> dict:
     """Decision support built only from stored data. Each item states whether
     it is DATA, ANALYSIS, or a SYSTEM-GENERATED RECOMMENDATION with its rule."""

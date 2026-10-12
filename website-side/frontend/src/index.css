@@ -478,6 +478,13 @@
 .is-visible .reveal-stagger .stagger-pop { transform: none; }
 
 .ab-pop { animation: ab-pop 0.22s ease-out both; }
+/* "Look here" pulse around a button a nudge points at (Install app). */
+@keyframes ab-nudge {
+  from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-ab-accent) 70%, transparent); }
+  to { box-shadow: 0 0 0 12px transparent; }
+}
+.ab-nudge-ring { outline: 2px solid var(--color-ab-accent); outline-offset: 2px; animation: ab-nudge 1.4s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .ab-nudge-ring { animation: none; } }
 .ab-card-in { opacity: 0; animation: ab-fade-up 0.5s ease-out forwards; }
 .route-draw { stroke-dasharray: 700; animation: ab-draw 2.4s ease-in-out 0.3s both; }
 /* Home route card: draw when it scrolls into view, redraw on hover/tap. */

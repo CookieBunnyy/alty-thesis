@@ -64,6 +64,15 @@ def get_outlook_month(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
     return analytics.month_breakdown(db, month, metric)
 
 
+@router.get("/outlook/diagnosis")
+def get_outlook_diagnosis(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+                          metric: str = Query(default="revenue", pattern="^(revenue|transactions|sales)$"),
+                          db: Session = Depends(get_db), _user: User = Depends(require_insight)):
+    """Why a month missed its likely range or fell below the month before,
+    and what the records point to."""
+    return analytics.month_diagnosis(db, month, metric)
+
+
 @router.get("/agent-forecasts")
 def get_agent_forecasts(horizon: int = Query(default=3, ge=1, le=12), db: Session = Depends(get_db),
                         _user: User = Depends(require_insight)):

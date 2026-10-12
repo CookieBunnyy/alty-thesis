@@ -27,6 +27,8 @@ export type Listing = {
   lat: number | null
   lng: number | null
   photos: string[] | null
+  /** Photos uploaded in Digital Preview that passed the quality check. */
+  media_ids?: number[]
   amenity_list: string[] | Record<string, unknown> | null
   nearby_places: unknown
   nearby_establishments: unknown

@@ -218,6 +218,9 @@ def test_media_quality_analysis(api, admin, db):
     public = api.get("/api/v1/public/properties").json()[0]
     assert public["media"] == [f"/api/v1/public/media/{sharp['id']}"]  # POOR images are not published
     assert api.get(public["media"][0]).status_code == 200
+    # Management sees the same accepted uploads on the listing itself.
+    managed = api.get(f"/api/v1/property-listings/{listing.listing_id}", headers=admin).json()
+    assert managed["media_ids"] == [sharp["id"]]
 
 
 def test_global_search_spans_entities(api, admin, agents):

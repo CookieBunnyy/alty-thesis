@@ -95,6 +95,7 @@ class PropertyListingResponse(BaseModel):
     lot_area_sqm: float | None = None
     boundary: dict | None = None
     boundary_measurements: dict | None = None
+    media_ids: list[int] = Field(default_factory=list)
     boundary_updated_at: datetime | None = None
     boundary_updated_by: str | None = None
     status: PropertyStatus = "AVAILABLE"
