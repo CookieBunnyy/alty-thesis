@@ -15,6 +15,39 @@ import type { Listing } from "./PropertyEditForm"
 
 const PH_CENTER: [number, number] = [14.5995, 120.9842]
 
+// The property's own map pin: a white outlined pin (seen on satellite and
+// street maps), shown for orientation only.
+const PIN_ICON = L.divIcon({
+  className: "lot-editor-pin",
+  html: `<svg width="34" height="44" viewBox="0 0 34 44" aria-hidden="true">
+    <path d="M17 42c-1.2-1.6-13-14.6-13-24.5a13 13 0 0 1 26 0C30 27.4 18.2 40.4 17 42Z" fill="rgba(0,0,0,0.28)" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+    <circle cx="17" cy="17" r="5" fill="none" stroke="#fff" stroke-width="3"/></svg>`,
+  iconSize: [34, 44],
+  iconAnchor: [17, 42],
+})
+
+/** The property's pin, for orientation. It never takes clicks, so corners can
+ *  be placed right on it, and the drawing tool ignores it (no snapping). */
+function PropertyPin({ position }: { position: [number, number] }) {
+  const map = useMap()
+  useEffect(() => {
+    const pin = L.marker(position, { icon: PIN_ICON, interactive: false, keyboard: false, pmIgnore: true, zIndexOffset: 1000 }).addTo(map)
+    return () => { pin.remove() }
+  }, [map, position])
+  return null
+}
+
+/** Ray casting: is the [lng, lat] point inside the outline's corners? */
+const contains = (corners: number[][], [x, y]: number[]) => {
+  let inside = false
+  for (let i = 0, j = corners.length - 1; i < corners.length; j = i++) {
+    const [xi, yi] = corners[i]
+    const [xj, yj] = corners[j]
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
+
 /** Corner points ([lng, lat]) of a Leaflet polygon layer. */
 const cornersOf = (layer: L.Polygon): number[][] => {
   const rings = layer.getLatLngs() as L.LatLng[][]
@@ -83,7 +116,12 @@ export function BoundaryEditor({ listing, onClose, onSaved }: { listing: Listing
   const shape = points && points.length >= 3 ? fromCorners(points) : null
   const measured = useMemo(() => (shape ? measure(shape) : null), [shape])
   const invalid = points && points.length >= 3 && crossesItself(points) ? t("The boundary crosses itself; move the points so the sides don't cross.") : ""
-  const center: [number, number] = listing.lat != null && listing.lng != null ? [Number(listing.lat), Number(listing.lng)] : PH_CENTER
+  const pin = useMemo<[number, number] | null>(
+    () => (listing.lat != null && listing.lng != null ? [Number(listing.lat), Number(listing.lng)] : null),
+    [listing.lat, listing.lng],
+  )
+  const center: [number, number] = pin ?? PH_CENTER
+  const pinOutside = Boolean(pin && points && points.length >= 3 && !contains(points, [pin[1], pin[0]]))
 
   const redraw = () => { setStart(null); setPoints(null); setError(""); setRound((n) => n + 1) }
   const save = async () => {
@@ -121,7 +159,9 @@ export function BoundaryEditor({ listing, onClose, onSaved }: { listing: Listing
           <h2 className="truncate text-lg font-extrabold">{t("Lot boundary")} · {listing.title}</h2>
           <p className="text-xs text-ab-muted">
             {points ? t("Drag the corners to adjust; drag a side's middle point to add a corner; right-click a corner to remove it.")
-              : t("Click each corner of the lot on the map, then click the first corner again to close the outline.")}
+              : pin
+                ? t("The white pin marks the property. Click each corner of its lot, then click the first corner again to close the outline.")
+                : t("This property has no map pin yet, so find its lot on the map. Click each corner, then click the first corner again to close the outline.")}
           </p>
         </div>
         <button type="button" onClick={() => setBasemap((value) => (value === "satellite" ? "map" : "satellite"))}
@@ -138,6 +178,7 @@ export function BoundaryEditor({ listing, onClose, onSaved }: { listing: Listing
             {basemap === "satellite"
               ? <TileLayer key="sat" url={SATELLITE_TILES} maxNativeZoom={SATELLITE_MAX_ZOOM} maxZoom={20} attribution={SATELLITE_ATTRIBUTION} />
               : <TileLayer key="osm" url={STREET_TILES} maxNativeZoom={19} maxZoom={20} attribution="&copy; OpenStreetMap contributors" />}
+            {pin && <PropertyPin position={pin} />}
             <DrawingLayer initial={start} round={round} onChange={setPoints} />
           </MapContainer>
         </div>
@@ -174,6 +215,11 @@ export function BoundaryEditor({ listing, onClose, onSaved }: { listing: Listing
             <span>{t("Also set the property's lot area to the measured area")}</span>
           </label>
 
+          {pinOutside && !invalid && (
+            <p className="rounded-xl bg-ab-warning/15 p-2.5 text-sm text-ab-text">
+              {t("The property's pin is outside this outline. Check that you traced the right lot (or that the pin is in the right place).")}
+            </p>
+          )}
           {(invalid || error) && <p role="alert" className="rounded-xl bg-ab-danger/10 p-2.5 text-sm text-ab-danger">{invalid || error}</p>}
 
           <div className="flex flex-wrap gap-2">

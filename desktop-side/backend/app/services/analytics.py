@@ -160,14 +160,92 @@ def overview(db: Session) -> dict:
     }
 
 
-def forecast(db: Session, metric: str = "revenue", horizon: int = 3, agent_id: str | None = None) -> dict:
-    """Linear-trend forecast over complete months, only with enough history.
-    With ``agent_id``, the forecast is for that agent's own activity."""
+SEASONAL_MIN_MONTHS = 12   # a seasonal pattern needs at least one full year
+
+
+def _trend(values: list[float]) -> dict:
+    """The straight line closest to the values at month numbers 0..n-1
+    (least squares), with the averages it is built from:
+        trend          = Σ(x − x̄)(y − ȳ) / Σ(x − x̄)²
+        starting level = ȳ − trend × x̄"""
+    n = len(values)
+    x = np.arange(n, dtype=float)
+    y = np.array(values, dtype=float)
+    mean_x, mean_y = float(x.mean()), float(y.mean())
+    spread_x = float(((x - mean_x) ** 2).sum())
+    slope = float(((x - mean_x) * (y - mean_y)).sum() / spread_x) if spread_x else 0.0
+    return {"intercept": mean_y - slope * mean_x, "slope": slope, "mean_x": mean_x, "mean_y": mean_y}
+
+
+def _seasonal(months: list[str], values: list[float], line: dict) -> dict[int, dict]:
+    """How each calendar month usually compares with the trend line.
+
+    For every past month: actual ÷ trend-line value. A calendar month's factor
+    is the average of those, damped toward 1 by n/(n+1) (half weight when the
+    month has been seen once, two-thirds when twice...), so one unusual year
+    can't swing the forecast. Factors are then scaled to average 1 across the
+    year, so the seasonal step only moves sales between months."""
+    ratios: dict[int, list[float]] = {}
+    for index, (key, value) in enumerate(zip(months, values)):
+        expected = line["intercept"] + line["slope"] * index
+        if expected > 0:
+            ratios.setdefault(int(key[5:7]), []).append(value / expected)
+    factors = {}
+    for month in range(1, 13):
+        seen = ratios.get(month, [])
+        raw = float(np.mean(seen)) if seen else 1.0
+        weight = len(seen) / (len(seen) + 1)
+        factors[month] = {"seen": len(seen), "raw": raw, "weight": weight, "factor": 1 + weight * (raw - 1)}
+    mean = float(np.mean([f["factor"] for f in factors.values()])) or 1.0
+    for item in factors.values():
+        item["factor"] /= mean
+    return factors
+
+
+def _predict(months: list[str], values: list[float], target_index: int, target_month: str, seasonal: bool) -> dict:
+    """Forecast one month from the months before it, with every input kept so
+    the page can show the working."""
+    line = _trend(values)
+    use_season = seasonal and len(values) >= SEASONAL_MIN_MONTHS
+    factors = _seasonal(months, values, line) if use_season else {}
+    fitted = []
+    for index, key in enumerate(months):
+        base = line["intercept"] + line["slope"] * index
+        fitted.append(base * (factors[int(key[5:7])]["factor"] if use_season else 1.0))
+    residuals = np.array(values) - np.array(fitted)
+    sigma = float(np.std(residuals, ddof=1)) if len(values) > 2 else 0.0
+    trend_value = line["intercept"] + line["slope"] * target_index
+    season = factors.get(int(target_month[5:7])) if use_season else None
+    value = max(0.0, trend_value * (season["factor"] if season else 1.0))
+    return {
+        "value": value, "lower": max(0.0, value - 1.96 * sigma), "upper": value + 1.96 * sigma,
+        "model": {
+            "months_used": len(values), "first_month": months[0], "last_month": months[-1],
+            "average_month_number": round(line["mean_x"], 2), "average_value": round(line["mean_y"], 2),
+            "intercept": round(line["intercept"], 2), "slope": round(line["slope"], 2), "x": target_index,
+            "trend_value": round(trend_value, 2),
+            "seasonal": bool(season),
+            "seasonal_months_needed": SEASONAL_MIN_MONTHS,
+            "seasonal_factor": round(season["factor"], 4) if season else None,
+            "seasonal_seen": season["seen"] if season else 0,
+            "seasonal_raw": round(season["raw"], 4) if season else None,
+            "seasonal_weight": round(season["weight"], 4) if season else None,
+            "sigma": round(sigma, 2),
+        },
+    }
+
+
+def forecast(db: Session, metric: str = "revenue", horizon: int = 3, agent_id: str | None = None,
+             seasonal: bool = True) -> dict:
+    """Trend line plus each calendar month's usual pattern, over complete
+    months, only with enough history. With ``agent_id``, the forecast is for
+    that agent's own activity (trend only: too few sales for a pattern)."""
     if metric not in {"revenue", "transactions", "sales"}:
         raise ValueError("metric must be revenue, transactions or sales")
     current = _month_key(_now())
     history = [row for row in monthly_series(db, agent_id=agent_id) if row["month"] != current]  # complete months
     values = [float(row[metric]) for row in history]
+    months = [row["month"] for row in history]
     nonzero = sum(1 for value in values if value > 0)
     base = {"metric": metric, "observations": len(values), "nonzero_months": nonzero,
             "minimum_required": settings.FORECAST_MIN_MONTHS,
@@ -176,78 +254,52 @@ def forecast(db: Session, metric: str = "revenue", horizon: int = 3, agent_id: s
         return {**base, "status": "insufficient_data", "message": INSUFFICIENT_FORECAST,
                 "forecast": []}
 
-    from sklearn.linear_model import LinearRegression
-
-    x = np.arange(len(values)).reshape(-1, 1)
-    y = np.array(values)
-    model = LinearRegression().fit(x, y)
-    fitted = model.predict(x)
-    residual_std = float(np.std(y - fitted, ddof=1)) if len(values) > 2 else 0.0
-    r2 = float(model.score(x, y)) if np.var(y) > 0 else None
-    future_x = np.arange(len(values), len(values) + horizon).reshape(-1, 1)
-    predictions = model.predict(future_x)
-    next_month = _shift_month(current, 0)
+    seasonal = seasonal and agent_id is None
     points = []
-    for step, value in enumerate(predictions):
-        point = max(0.0, float(value))
-        points.append({
-            "month": _shift_month(next_month, step),
-            "value": round(point, 2),
-            "lower": round(max(0.0, point - 1.96 * residual_std), 2),
-            "upper": round(point + 1.96 * residual_std, 2),
-        })
+    for step in range(horizon):
+        month = _shift_month(current, step)
+        predicted = _predict(months, values, len(values) + step, month, seasonal)
+        points.append({"month": month, "value": round(predicted["value"], 2), "lower": round(predicted["lower"], 2),
+                       "upper": round(predicted["upper"], 2), "model": predicted["model"]})
+    line = _trend(values)
+    y = np.array(values)
+    fitted = line["intercept"] + line["slope"] * np.arange(len(values))
+    r2 = float(1 - ((y - fitted) ** 2).sum() / ((y - y.mean()) ** 2).sum()) if np.var(y) > 0 else None
+    uses_season = bool(points and points[0]["model"]["seasonal"])
     return {
         **base,
         "status": "estimated",
-        "method": "Ordinary least-squares linear trend over complete months (scikit-learn)",
-        "slope_per_month": round(float(model.coef_[0]), 2),
+        "method": ("Least-squares trend line over complete months, adjusted by each calendar month's usual "
+                   "pattern" if uses_season else "Least-squares trend line over complete months"),
+        "seasonal": uses_season,
+        "slope_per_month": round(line["slope"], 2),
         "r_squared": round(r2, 4) if r2 is not None else None,
-        "interval": "approximate 95% band from residual standard deviation",
+        "interval": "approximate 95% band from the spread of past months around the forecast line",
         "forecast": points,
     }
-
-
-def _fit(values: list[float]) -> tuple[float, float, float]:
-    """Least-squares line through the values at x = 0..n-1: (intercept, slope, residual std)."""
-    from sklearn.linear_model import LinearRegression
-
-    x = np.arange(len(values)).reshape(-1, 1)
-    y = np.array(values)
-    model = LinearRegression().fit(x, y)
-    sigma = float(np.std(y - model.predict(x), ddof=1)) if len(values) > 2 else 0.0
-    return float(model.intercept_), float(model.coef_[0]), sigma
 
 
 def outlook(db: Session, metric: str = "revenue", horizon: int = 3) -> dict:
     """The forecast plus a look back: for each past complete month with
     enough earlier history, what the same method would have predicted from
     the months before it, and whether the recorded value landed in its range.
-    Every point carries its formula inputs, so the page can show the working."""
+    Every point carries its inputs, so the page can show the working."""
     result = forecast(db, metric, horizon)
     values = [float(point["value"]) for point in result["history"]]
+    months = [point["month"] for point in result["history"]]
     backtest = []
-    for index, point in enumerate(result["history"]):
+    for index, month in enumerate(months):
         prior = values[:index]
         if len(prior) < settings.FORECAST_MIN_MONTHS or sum(1 for v in prior if v > 0) < 3:
             continue
-        intercept, slope, sigma = _fit(prior)
-        predicted = max(0.0, intercept + slope * index)
-        lower, upper = max(0.0, predicted - 1.96 * sigma), predicted + 1.96 * sigma
+        predicted = _predict(months[:index], prior, index, month, True)
         actual = values[index]
+        lower, upper = predicted["lower"], predicted["upper"]
         verdict = "WITHIN" if lower <= actual <= upper else ("ABOVE" if actual > upper else "BELOW")
         backtest.append({
-            "month": point["month"], "actual": round(actual, 2), "value": round(predicted, 2),
-            "lower": round(lower, 2), "upper": round(upper, 2), "verdict": verdict,
-            "model": {"months_used": len(prior), "first_month": result["history"][0]["month"],
-                      "intercept": round(intercept, 2), "slope": round(slope, 2), "x": index,
-                      "sigma": round(sigma, 2)},
+            "month": month, "actual": round(actual, 2), "value": round(predicted["value"], 2),
+            "lower": round(lower, 2), "upper": round(upper, 2), "verdict": verdict, "model": predicted["model"],
         })
-    if result.get("status") == "estimated":
-        intercept, slope, sigma = _fit(values)
-        for step, point in enumerate(result["forecast"]):
-            point["model"] = {"months_used": len(values), "first_month": result["history"][0]["month"],
-                              "intercept": round(intercept, 2), "slope": round(slope, 2),
-                              "x": len(values) + step, "sigma": round(sigma, 2)}
     result["backtest"] = backtest
     result["accuracy"] = {"months": len(backtest), "within": sum(1 for b in backtest if b["verdict"] == "WITHIN"),
                           "above": sum(1 for b in backtest if b["verdict"] == "ABOVE"),
@@ -470,7 +522,7 @@ def agent_forecasts(db: Session, horizon: int = 3, agent_id: str | None = None) 
         statement = select(Agent).where(Agent.agent_id == agent_id)
     results = []
     for agent in db.execute(statement).scalars():
-        result = forecast(db, "sales", horizon, agent_id=agent.agent_id)
+        result = forecast(db, "sales", horizon, agent_id=agent.agent_id, seasonal=False)
         results.append({
             "agent_id": agent.agent_id, "full_name": agent.full_name, "status": result["status"],
             "observations": result["observations"], "nonzero_months": result["nonzero_months"],

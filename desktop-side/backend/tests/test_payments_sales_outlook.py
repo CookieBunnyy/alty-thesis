@@ -171,3 +171,33 @@ def test_outlook_looks_back_and_explains_a_month(api, admin, agents, db):
     detail = month.json()
     assert detail["count"] == 1 and detail["total"] == 9_000_000 and detail["items"][0]["client"] == "Buyer 7"
     assert api.get("/api/v1/intelligence/outlook/month?month=2026-13", headers=admin).status_code == 422
+
+
+def test_seasonal_months_are_considered():
+    """Two years where every December sells about double: the next December
+    is forecast above the plain trend line, and the working shows why."""
+    from app.services.analytics import _predict, _trend
+
+    months, values = [], []
+    year, month = 2024, 1
+    for _ in range(24):
+        months.append(f"{year:04d}-{month:02d}")
+        values.append(2_000_000.0 * (2 if month == 12 else 1) + 10_000 * len(values))
+        month += 1
+        if month == 13:
+            year, month = year + 1, 1
+    december = _predict(months, values, 35, "2026-12", seasonal=True)["model"]
+    assert december["seasonal"] and december["seasonal_seen"] == 2
+    assert december["seasonal_factor"] > 1.3                       # Decembers sell more
+    assert december["seasonal_weight"] == round(2 / 3, 4)          # seen twice: two-thirds weight
+    assert abs(december["trend_value"] - (december["intercept"] + december["slope"] * 35)) < 1
+    june = _predict(months, values, 29, "2026-06", seasonal=True)["model"]
+    assert june["seasonal_factor"] < 1                             # other months a little below the line
+    # Under a year of history: trend only, and the page is told why.
+    short = _predict(months[:8], values[:8], 8, "2024-09", seasonal=True)["model"]
+    assert short["seasonal"] is False and short["seasonal_months_needed"] == 12
+    # The trend line is the least-squares line (same as numpy's fit).
+    import numpy as np
+    slope, intercept = np.polyfit(np.arange(24), values, 1)
+    line = _trend(values)
+    assert abs(line["slope"] - slope) < 1e-6 and abs(line["intercept"] - intercept) < 1e-4

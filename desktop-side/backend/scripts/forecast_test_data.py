@@ -169,7 +169,7 @@ def add(db) -> None:
     print(f"Added {totals['listings']} listings and buyers, {totals['reservations']} reservations "
           f"({totals['cancelled']} cancelled) and {totals['sales']} completed sales "
           f"(₱{totals['revenue']:,.0f}) from {first[1]:02d}/{first[0]} to {last[1]:02d}/{last[0]}.")
-    print("Open Forecasting (or Analytics) to see them. Remove with: "
+    print("Open Business Outlook (or Analytics) to see them. Remove with: "
           "python scripts/forecast_test_data.py --remove")
 
 

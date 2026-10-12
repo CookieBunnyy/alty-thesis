@@ -8,7 +8,12 @@ import { useApiData } from "./useApiData"
 import { locale, t } from "./i18n"
 import { Link } from "@/components/Link"
 
-type Model = { months_used: number; first_month: string; intercept: number; slope: number; x: number; sigma: number }
+type Model = {
+  months_used: number; first_month: string; last_month: string; average_month_number: number; average_value: number
+  intercept: number; slope: number; x: number; trend_value: number; sigma: number
+  seasonal: boolean; seasonal_months_needed: number; seasonal_factor: number | null; seasonal_seen: number
+  seasonal_raw: number | null; seasonal_weight: number | null
+}
 type Point = { month: string; value: number; lower: number; upper: number; model?: Model }
 type Outlook = {
   metric: string; status: "estimated" | "insufficient_data"; message?: string
@@ -35,11 +40,6 @@ type Metric = keyof typeof METRICS
 const monthName = (key: string) => {
   const [year, month] = key.split("-").map(Number)
   return new Date(year, month - 1, 1).toLocaleDateString(locale(), { month: "long", year: "numeric" })
-}
-const shiftMonth = (key: string, delta: number) => {
-  const [year, month] = key.split("-").map(Number)
-  const index = year * 12 + (month - 1) + delta
-  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`
 }
 
 const VERDICT = {
@@ -91,29 +91,57 @@ function AgentOutlook() {
   )
 }
 
-/** "How this month was worked out": the records behind the figure, the
- *  forecast formula with its numbers, and whether the month met the range. */
+/** One step of the working (a titled box). */
+function Step({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0 rounded-xl bg-ab-card-2 p-3">
+      <p className="text-sm font-bold">{title}</p>
+      <div className="mt-1.5 space-y-1.5 break-words text-sm text-ab-muted">{children}</div>
+    </div>
+  )
+}
+
+/** A labelled number, with what it means underneath (wraps on phones). */
+function Line({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+      <span className="min-w-0 text-ab-muted">{label}</span>
+      <span className="font-semibold tabular-nums text-ab-text">{value}</span>
+      {note && <span className="w-full text-xs text-ab-faint">{note}</span>}
+    </div>
+  )
+}
+
+/** "How this month was worked out", in plain words: the records behind the
+ *  figure, the trend line and seasonal step with their numbers, and the verdict. */
 function MonthWorking({ month, metric, outlook }: { month: string; metric: Metric; outlook: Outlook }) {
   const { api } = useStaffAuth()
   const look = METRICS[metric]
+  // Counts keep one decimal in the working (averages like 2.4 sales a month).
+  const num = metric === "revenue" ? peso : (v: number) => v.toLocaleString(locale(), { maximumFractionDigits: 1 })
   const recorded = outlook.history.find((h) => h.month === month)
   const past = outlook.backtest.find((b) => b.month === month)
   const future = outlook.forecast.find((f) => f.month === month)
   const point: Point | undefined = past ?? future
+  const model = point?.model
   const hasRecord = Boolean(recorded)
   const load = useCallback(
     () => (hasRecord ? api<MonthDetail>(`/intelligence/outlook/month?month=${month}&metric=${metric}`) : Promise.resolve(null)),
     [api, month, metric, hasRecord],
   )
   const { data, error, loading, reload } = useApiData(load, `outlook-month:${metric}:${month}`)
-  const signed = (v: number) => `${v < 0 ? "−" : "+"} ${look.format(Math.abs(v))}`
+  const [showMonths, setShowMonths] = useState(false)
+  const used = model ? outlook.history.filter((h) => h.month >= model.first_month && h.month <= model.last_month) : []
+  const monthOnly = (key: string) => new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, 1).toLocaleDateString(locale(), { month: "long" })
+  const weightWords = (w: number | null) => (w == null ? "" : Math.abs(w - 0.5) < 0.01 ? t("half") : Math.abs(w - 2 / 3) < 0.01 ? t("two-thirds") : `${Math.round(w * 100)}%`)
+
 
   return (
     <Section title={t("How {month} was worked out", { month: monthName(month) })}>
       <div className="grid gap-5 lg:grid-cols-2">
         {/* 1. The recorded figure, summed up */}
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-ab-faint">{t("1. What was recorded")}</p>
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-wide text-ab-faint">{t("1. What actually happened")}</p>
           {!recorded ? (
             <p className="mt-2 text-sm text-ab-muted">{t("This month hasn't happened yet, so there is nothing recorded to compare.")}</p>
           ) : (
@@ -123,10 +151,10 @@ function MonthWorking({ month, metric, outlook }: { month: string; metric: Metri
                 <>
                   <p className="mt-2 text-sm text-ab-muted">
                     {metric === "revenue"
-                      ? t("Sales revenue is the sum of the completed sales dated in this month (reservations and cancelled records are left out).")
+                      ? t("We added up every sale finished this month. Reservations and cancelled deals don't count.")
                       : metric === "sales"
-                        ? t("Completed sales are counted when the sale is dated in this month.")
-                        : t("Every reservation and sale dated in this month, except cancelled ones.")}
+                        ? t("We counted every sale finished this month.")
+                        : t("We counted every reservation and sale this month, except cancelled ones.")}
                   </p>
                   {data.items.length === 0 ? (
                     <p className="mt-3 rounded-xl bg-ab-card-2 p-3 text-sm text-ab-muted">{t("Nothing was recorded this month, so the figure is {v}.", { v: look.format(0) })}</p>
@@ -134,17 +162,17 @@ function MonthWorking({ month, metric, outlook }: { month: string; metric: Metri
                     <ol className="mt-3 max-h-72 space-y-1 overflow-y-auto rounded-xl bg-ab-card-2 p-3 text-sm">
                       {data.items.map((item, index) => (
                         <li key={item.transaction_id} className="flex items-baseline justify-between gap-3">
-                          <span className="min-w-0">
+                          <span className="min-w-0 flex-1">
                             <span className="text-ab-faint">{index === 0 ? "" : "+ "}</span>
-                            <span className="font-medium">{item.property ?? t("Property")}</span>
-                            <span className="block truncate text-xs text-ab-faint">{transactionDate(item.date)} · {item.client ?? "—"} · {item.agent ?? "—"}{metric === "transactions" ? ` · ${statusLabel(item.type)}` : ""}</span>
+                            <span className="break-words font-medium">{item.property ?? t("Property")}</span>
+                            <span className="block break-words text-xs text-ab-faint">{transactionDate(item.date)} · {item.client ?? "—"} · {item.agent ?? "—"}{metric === "transactions" ? ` · ${statusLabel(item.type)}` : ""}</span>
                           </span>
                           <span className="shrink-0 tabular-nums">{metric === "revenue" ? peso(item.amount) : "1"}</span>
                         </li>
                       ))}
                       <li className="mt-1 flex items-baseline justify-between gap-3 border-t border-ab-border pt-2 font-bold">
                         <span>{t("Total for the month")}</span>
-                        <span className="tabular-nums">{look.format(data.total)}</span>
+                        <span className="shrink-0 tabular-nums">{look.format(data.total)}</span>
                       </li>
                     </ol>
                   )}
@@ -154,45 +182,99 @@ function MonthWorking({ month, metric, outlook }: { month: string; metric: Metri
           )}
         </div>
 
-        {/* 2. The forecast for it, and 3. the verdict */}
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-ab-faint">{t("2. What the forecast said")}</p>
-          {!point?.model ? (
-            <p className="mt-2 text-sm text-ab-muted">
-              {t("No forecast for this month: a forecast needs at least {min} earlier complete months, with activity in 3 or more of them.", { min: outlook.minimum_required })}
+        {/* 2. What we expected and how; 3. the verdict */}
+        <div className="min-w-0 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-ab-faint">{t("2. What we expected, and how")}</p>
+          {!model || !point ? (
+            <p className="text-sm text-ab-muted">
+              {t("No forecast for this month: we need at least {min} earlier months, with sales in 3 or more of them.", { min: outlook.minimum_required })}
             </p>
           ) : (
-            <div className="mt-2 space-y-2 text-sm">
-              <p className="text-ab-muted">
-                {t("A straight trend line was fitted to the {n} complete months before it ({from} to {to}), months numbered 0, 1, 2…", {
-                  n: point.model.months_used, from: monthName(point.model.first_month), to: monthName(shiftMonth(point.model.first_month, point.model.months_used - 1)),
-                })}
-              </p>
-              <div className="space-y-1 rounded-xl bg-ab-card-2 p-3 font-mono text-[12px] leading-relaxed">
-                <p>{t("forecast = starting level + trend × month number")}</p>
-                <p>= {look.format(point.model.intercept)} {signed(point.model.slope)} × {point.model.x}</p>
-                <p className="font-bold">= {look.format(point.value)}{point.model.intercept + point.model.slope * point.model.x < 0 ? ` ${t("(never below zero)")}` : ""}</p>
-                <p className="pt-1">{t("likely range = forecast ± 1.96 × spread")}</p>
-                <p>{t("spread (how far past months sat from the line) = {s}", { s: look.format(point.model.sigma) })}</p>
-                <p className="font-bold">= {look.format(point.lower)} – {look.format(point.upper)}</p>
-              </div>
-            </div>
+            <>
+              <Step title={t("Step A · The trend line")}>
+                <p>
+                  {t("We lined up the {n} months before it ({from} to {to}) and drew the one straight line that comes closest to all of them. That line shows the general direction of sales.", {
+                    n: model.months_used, from: monthName(model.first_month), to: monthName(model.last_month),
+                  })}
+                </p>
+                <button type="button" onClick={() => setShowMonths((v) => !v)} aria-expanded={showMonths} className="text-xs font-semibold text-ab-accent hover:underline">
+                  {showMonths ? t("Hide the months used") : t("See the months used")}
+                </button>
+                {showMonths && (
+                  <ol className="max-h-56 overflow-y-auto rounded-lg border border-ab-border bg-ab-card p-2 text-xs">
+                    {used.map((h, i) => (
+                      <li key={h.month} className="flex justify-between gap-2">
+                        <span>{t("Month {n}", { n: i })} · {monthName(h.month)}</span>
+                        <span className="tabular-nums text-ab-text">{num(h.value)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                <Line label={t("Average sales per month")} value={num(model.average_value)} note={t("All {n} months added up, divided by {n}.", { n: model.months_used })} />
+                <Line label={t("Trend")} value={`${model.slope >= 0 ? "+" : "−"}${num(Math.abs(model.slope))} ${t("a month")}`}
+                  note={model.slope >= 0 ? t("On average, sales grew by this much from one month to the next.") : t("On average, sales dropped by this much from one month to the next.")} />
+                <Line label={t("Starting level")} value={num(model.intercept)}
+                  note={t("Where the line starts, at month 0 ({from}): the average ({avg}) minus the trend times the middle month ({mid}).", {
+                    from: monthName(model.first_month), avg: num(model.average_value), mid: model.average_month_number,
+                  })} />
+                <Line label={t("Trend line for {month} (month {x})", { month: monthOnly(month), x: model.x })}
+                  value={num(model.trend_value)}
+                  note={`${num(model.intercept)} ${model.slope >= 0 ? "+" : "−"} ${num(Math.abs(model.slope))} × ${model.x} = ${num(model.trend_value)}`} />
+              </Step>
+
+              <Step title={t("Step B · The usual pattern for {month}", { month: monthOnly(month) })}>
+                {model.seasonal && model.seasonal_factor != null && model.seasonal_raw != null ? (
+                  <>
+                    <p>
+                      {model.seasonal_raw >= 1
+                        ? t("Before, {month} sold {pct}% more than the trend line (seen {n} time(s)).", { month: monthOnly(month), pct: Math.round((model.seasonal_raw - 1) * 100), n: model.seasonal_seen })
+                        : t("Before, {month} sold {pct}% less than the trend line (seen {n} time(s)).", { month: monthOnly(month), pct: Math.round((1 - model.seasonal_raw) * 100), n: model.seasonal_seen })}
+                      {" "}
+                      {model.seasonal_seen > 0
+                        ? t("One year can be a fluke, so we count only {w} of that difference until we have seen more years.", { w: weightWords(model.seasonal_weight) })
+                        : t("We haven't seen this month before, so it gets no adjustment.")}
+                    </p>
+                    {model.seasonal_weight != null && Math.abs(1 + model.seasonal_weight * (model.seasonal_raw - 1) - model.seasonal_factor) > 0.005 && (
+                      <p className="text-xs text-ab-faint">
+                        {t("That gives × {damped}; the 12 months are then evened out so the whole year still adds up to the trend line, which makes it × {factor}.", {
+                          damped: (1 + model.seasonal_weight * (model.seasonal_raw - 1)).toFixed(2), factor: model.seasonal_factor.toFixed(2),
+                        })}
+                      </p>
+                    )}
+                    <Line label={t("Seasonal factor")} value={`× ${model.seasonal_factor.toFixed(2)}`} />
+                    <Line label={t("Expected for {month}", { month: monthOnly(month) })} value={look.format(point.value)}
+                      note={`${num(model.trend_value)} × ${model.seasonal_factor.toFixed(2)} = ${look.format(point.value)}`} />
+                  </>
+                ) : (
+                  <>
+                    <p>{t("Not used yet: spotting a seasonal pattern needs at least {need} months of history, and this forecast had {n}. Expected = the trend line.", { need: model.seasonal_months_needed, n: model.months_used })}</p>
+                    <Line label={t("Expected for {month}", { month: monthOnly(month) })} value={look.format(point.value)} />
+                  </>
+                )}
+              </Step>
+
+              <Step title={t("Step C · The likely range")}>
+                <p>{t("Real months never sit exactly on the line. Past months were usually about {s} above or below it. Allowing about twice that either way covers normal months 95 times out of 100.", { s: num(model.sigma) })}</p>
+                <Line label={t("Likely range")} value={`${look.format(point.lower)} – ${look.format(point.upper)}`}
+                  note={`${look.format(point.value)} ± 1.96 × ${num(model.sigma)}`} />
+              </Step>
+            </>
           )}
 
-          <p className="mt-4 text-xs font-bold uppercase tracking-wide text-ab-faint">{t("3. Did it meet the range?")}</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-ab-faint">{t("3. Did it land in the range?")}</p>
           {past ? (
-            <div className={`mt-2 rounded-xl px-3 py-2.5 text-sm ${VERDICT[past.verdict].tone}`}>
+            <div className={`rounded-xl px-3 py-2.5 text-sm ${VERDICT[past.verdict].tone}`}>
               <p className="font-bold">{t(VERDICT[past.verdict].label)}</p>
-              <p className="mt-0.5">
+              <p className="mt-0.5 break-words">
                 {past.verdict === "WITHIN"
-                  ? t("Recorded {a}, inside {low} – {high}.", { a: look.format(past.actual), low: look.format(past.lower), high: look.format(past.upper) })
+                  ? t("Yes. {a} landed inside {low} – {high}: a normal month.", { a: look.format(past.actual), low: look.format(past.lower), high: look.format(past.upper) })
                   : past.verdict === "ABOVE"
-                    ? t("Recorded {a}, {d} more than the top of the range ({high}).", { a: look.format(past.actual), d: look.format(past.actual - past.upper), high: look.format(past.upper) })
-                    : t("Recorded {a}, {d} less than the bottom of the range ({low}).", { a: look.format(past.actual), d: look.format(past.lower - past.actual), low: look.format(past.lower) })}
+                    ? t("Better than expected: {a}, which is {d} above the high end ({high}).", { a: look.format(past.actual), d: look.format(past.actual - past.upper), high: look.format(past.upper) })
+                    : t("Lower than expected: {a}, which is {d} below the low end ({low}).", { a: look.format(past.actual), d: look.format(past.lower - past.actual), low: look.format(past.lower) })}
               </p>
             </div>
           ) : (
-            <p className="mt-2 text-sm text-ab-muted">
+            <p className="text-sm text-ab-muted">
               {future ? t("Not yet: check back after {month} ends.", { month: monthName(month) }) : t("There was no forecast to compare with.")}
             </p>
           )}
