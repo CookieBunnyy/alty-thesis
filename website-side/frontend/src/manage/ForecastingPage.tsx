@@ -27,7 +27,7 @@ type Outlook = {
 }
 type MonthDetail = {
   month: string; metric: string; count: number; total: number
-  items: { transaction_id: string; date: string; type: string; status: string; amount: number; client: string | null; property: string | null; agent: string | null }[]
+  items: { transaction_id: string; date: string; type: string; status: string; amount: number; sale_amount?: number; commission_rate?: number | null; client: string | null; property: string | null; agent: string | null }[]
 }
 
 const count = (v: number) => String(Math.round(v))
@@ -35,6 +35,7 @@ const METRICS = {
   revenue: { label: "Sales revenue", format: peso, axis: pesoShort, unit: "sales revenue" },
   transactions: { label: "Transactions", format: count, axis: count, unit: "transactions" },
   sales: { label: "Completed sales", format: count, axis: count, unit: "completed sales" },
+  commission: { label: "Commission", format: peso, axis: pesoShort, unit: "agent commission" },
 } as const
 type Metric = keyof typeof METRICS
 
@@ -119,7 +120,8 @@ function MonthWorking({ month, metric, outlook }: { month: string; metric: Metri
   const { api } = useStaffAuth()
   const look = METRICS[metric]
   // Counts keep one decimal in the working (averages like 2.4 sales a month).
-  const num = metric === "revenue" ? peso : (v: number) => v.toLocaleString(locale(), { maximumFractionDigits: 1 })
+  const money = metric === "revenue" || metric === "commission"
+  const num = money ? peso : (v: number) => v.toLocaleString(locale(), { maximumFractionDigits: 1 })
   const recorded = outlook.history.find((h) => h.month === month)
   const past = outlook.backtest.find((b) => b.month === month)
   const future = outlook.forecast.find((f) => f.month === month)
@@ -153,7 +155,9 @@ function MonthWorking({ month, metric, outlook }: { month: string; metric: Metri
               {data && (
                 <>
                   <p className="mt-2 text-sm text-ab-muted">
-                    {metric === "revenue"
+                    {metric === "commission"
+                      ? t("We added up the commission on every sale finished this month: the sale price × the agent's commission rate (3% when the agent has no recorded rate).")
+                      : metric === "revenue"
                       ? t("We added up every sale finished this month. Reservations and cancelled deals don't count.")
                       : metric === "sales"
                         ? t("We counted every sale finished this month.")
@@ -168,9 +172,9 @@ function MonthWorking({ month, metric, outlook }: { month: string; metric: Metri
                           <span className="min-w-0 flex-1">
                             <span className="text-ab-faint">{index === 0 ? "" : "+ "}</span>
                             <span className="break-words font-medium">{item.property ?? t("Property")}</span>
-                            <span className="block break-words text-xs text-ab-faint">{transactionDate(item.date)} · {item.client ?? "—"} · {item.agent ?? "—"}{metric === "transactions" ? ` · ${statusLabel(item.type)}` : ""}</span>
+                            <span className="block break-words text-xs text-ab-faint">{transactionDate(item.date)} · {item.client ?? "—"} · {item.agent ?? "—"}{metric === "transactions" ? ` · ${statusLabel(item.type)}` : ""}{metric === "commission" && item.commission_rate != null ? ` · ${t("{r}% of {v}", { r: (item.commission_rate * 100).toFixed(1), v: peso(item.sale_amount ?? 0) })}` : ""}</span>
                           </span>
-                          <span className="shrink-0 tabular-nums">{metric === "revenue" ? peso(item.amount) : "1"}</span>
+                          <span className="shrink-0 tabular-nums">{money ? peso(item.amount) : "1"}</span>
                         </li>
                       ))}
                       <li className="mt-1 flex items-baseline justify-between gap-3 border-t border-ab-border pt-2 font-bold">

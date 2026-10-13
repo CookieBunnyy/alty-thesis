@@ -14,6 +14,7 @@ import { CallButton } from "@/components/CallButton"
 import { useToast } from "./toastContext"
 import { AgentAvatar, PhotoControls } from "./avatars"
 import { photoBody } from "./photoBody"
+import { AgentAssessments, AgentAssignment, AgentCommission } from "./agentWorkforce"
 
 type Agent = {
   agent_id: string; full_name: string; phone_number: string | null; agent_location: string | null
@@ -25,6 +26,7 @@ type Agent = {
   assigned_clients: number; recorded_transactions: number; open_reservations: number
   recorded_completed_sales: number; recorded_sales_value: number
   recorded_deals: number; performance_rate: number | null; photo_version: number | null
+  branch_id: number | null; branch_name: string | null; designation: string | null; work_area: string | null; hired_on: string | null
   last_synced_at: string | null; created_at: string | null; updated_at: string | null
 }
 type Activity = {
@@ -51,12 +53,14 @@ export function AgentsPage() {
   const { id, open, close } = useOpenRecord()
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
+  const [branch, setBranch] = useState("")
   const load = useCallback(() => api<Agent[]>("/agents"), [api])
   const { data, error, loading, reload } = useApiData(load, "agents")
   const agents = useMemo(() => data ?? [], [data])
   const shown = useMemo(
-    () => agents.filter((a) => (!status || a.status === status) && contains([a.full_name, a.agent_id, a.agent_location, a.phone_number], search)),
-    [agents, status, search],
+    () => agents.filter((a) => (!status || a.status === status) && (!branch || (branch === "NONE" ? !a.branch_id : String(a.branch_id) === branch)) &&
+      contains([a.full_name, a.agent_id, a.agent_location, a.phone_number, a.branch_name, a.designation], search)),
+    [agents, status, branch, search],
   )
   const selected = id ? agents.find((a) => a.agent_id === id) ?? null : null
   const active = agents.filter((a) => a.status === "ACTIVE").length
@@ -70,12 +74,13 @@ export function AgentsPage() {
           <AgentAvatar agentId={a.agent_id} name={a.full_name} version={a.photo_version} />
           <span className="min-w-0">
             <span className="block truncate font-semibold">{a.full_name}</span>
-            <span className="block truncate text-xs text-ab-faint">{a.agent_id} · {text(a.agent_location)}</span>
+            <span className="block truncate text-xs text-ab-faint">{a.agent_id} · {a.designation ? t(a.designation) : text(a.agent_location)}</span>
           </span>
         </span>
       ),
     },
     { key: "status", label: "Status", sort: (a) => a.status, render: (a) => <Badge value={a.status} /> },
+    { key: "branch", label: "Branch", sort: (a) => a.branch_name ?? "", render: (a) => text(a.branch_name), hideOnPhone: true },
     { key: "client", label: "Client rating", sort: (a) => a.client_rating ?? -1, render: (a) => <span>{<Stars value={a.client_rating} />}{a.review_count ? <span className="ml-1 text-xs text-ab-faint">({a.review_count})</span> : null}</span> },
     { key: "clients", label: "Assigned clients", align: "right", sort: (a) => a.assigned_clients, render: (a) => a.assigned_clients, hideOnPhone: true },
     { key: "open", label: "Open reservations", align: "right", sort: (a) => a.open_reservations, render: (a) => a.open_reservations },
@@ -108,6 +113,9 @@ export function AgentsPage() {
       <div className="flex flex-wrap gap-2 sm:flex-nowrap">
         <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, agent ID, location or phone" /></div>
         <Select label="Status" value={status} onChange={setStatus} options={[{ value: "", label: "All statuses" }, ...[...new Set(agents.map((a) => a.status))].map((s) => ({ value: s, label: statusLabel(s) }))]} />
+        <Select label="Branch" value={branch} onChange={setBranch} options={[{ value: "", label: "All branches" },
+          ...[...new Map(agents.filter((a) => a.branch_id).map((a) => [String(a.branch_id), a.branch_name ?? ""])).entries()].map(([value, label]) => ({ value, label })),
+          { value: "NONE", label: "No branch" }]} />
       </div>
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
@@ -247,7 +255,10 @@ function AgentDrawer({ agent, onClose, onChanged }: { agent: Agent; onClose: () 
       </div>
       <p className="text-xs text-ab-faint">{t("Counted from the clients, reservations and sales recorded in ALTY; cancelled transactions are left out. Client rating comes only from verified client reviews. Performance is the share of recorded deals (one client and one property) that became completed sales.")}</p>
 
+      <AgentAssignment agent={agent} canManage={canManage} onChanged={onChanged} />
       {canManage && <AgentForecast agentId={agent.agent_id} />}
+      {canManage && <AgentCommission agentId={agent.agent_id} />}
+      {canManage && <AgentAssessments agent={agent} />}
       {canManage && (
         <SubjectInsights path={`/intelligence/agents/${encodeURIComponent(agent.agent_id)}`} empty={t("Nothing needs attention for this agent right now.")} />
       )}

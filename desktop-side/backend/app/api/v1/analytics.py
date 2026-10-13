@@ -24,7 +24,7 @@ def get_monthly(months: int | None = Query(default=None, ge=1, le=120),
 
 
 @router.get("/forecast")
-def get_forecast(metric: str = Query(default="revenue", pattern="^(revenue|transactions|sales)$"),
+def get_forecast(metric: str = Query(default="revenue", pattern="^(revenue|transactions|sales|commission)$"),
                  horizon: int = Query(default=3, ge=1, le=12),
                  db: Session = Depends(get_db), _user: User = Depends(require_insight)):
     return analytics.forecast(db, metric, horizon)

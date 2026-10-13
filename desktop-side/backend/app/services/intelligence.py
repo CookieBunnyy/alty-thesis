@@ -225,7 +225,8 @@ def market_insights(db: Session, data: dict | None = None) -> list[dict]:
 # --------------------------------------------------------------------- forecast
 
 def forecast_insights(db: Session, metric: str, result: dict) -> list[dict]:
-    names = {"revenue": "sales revenue", "transactions": "transactions", "sales": "completed sales"}
+    names = {"revenue": "sales revenue", "transactions": "transactions", "sales": "completed sales",
+             "commission": "agent commission"}
     name = names.get(metric, metric)
     if result["status"] != "estimated":
         return [_insight(f"forecast-{metric}", "forecast", "info", "No forecast yet",

@@ -54,11 +54,36 @@ def _shift_month(key: str, delta: int) -> str:
     return f"{index // 12:04d}-{index % 12 + 1:02d}"
 
 
-def monthly_series(db: Session, months: int | None = None, agent_id: str | None = None) -> list[dict]:
-    """Per-month transaction counts and sales revenue. ``months`` limits the
-    window to the last N months (including the current one). With ``agent_id``
-    only that agent's transactions are counted, over the company's full
-    history (months with nothing for the agent count as zero)."""
+def commission_rates(db: Session) -> dict[str, float]:
+    """Each agent's commission rate: recorded total commission ÷ recorded
+    total sales when both are known, else DEFAULT_COMMISSION_RATE."""
+    rates = {}
+    for agent_id, total_sales, total_commission in db.execute(
+            select(Agent.agent_id, Agent.total_sales, Agent.total_commission)).all():
+        sales, commission = float(total_sales or 0), float(total_commission or 0)
+        rates[agent_id] = commission / sales if sales > 0 and commission > 0 else settings.DEFAULT_COMMISSION_RATE
+    return rates
+
+
+def _branch_filter(statement, branch_id: int | None):
+    """Transactions of one branch: the agent's branch, else the listing's.
+    ``branch_id`` 0 means transactions with no branch at all."""
+    if branch_id is None:
+        return statement
+    agent_branch = select(Agent.branch_id).where(Agent.agent_id == PropertyTransaction.agent_id).scalar_subquery()
+    listing_branch = select(PropertyListing.branch_id).where(
+        PropertyListing.listing_id == PropertyTransaction.property_id).scalar_subquery()
+    branch = func.coalesce(agent_branch, listing_branch)
+    return statement.where(branch.is_(None) if branch_id == 0 else branch == branch_id)
+
+
+def monthly_series(db: Session, months: int | None = None, agent_id: str | None = None,
+                   branch_id: int | None = None) -> list[dict]:
+    """Per-month transaction counts, sales revenue and estimated commission.
+    ``months`` limits the window to the last N months (including the current
+    one). With ``agent_id`` (or ``branch_id``) only that agent's (branch's)
+    transactions are counted, over the company's full history (months with
+    nothing for them count as zero)."""
     month = func.to_char(func.timezone("UTC", PropertyTransaction.transaction_date), "YYYY-MM")
     statement = select(
         month,
@@ -69,15 +94,27 @@ def monthly_series(db: Session, months: int | None = None, agent_id: str | None 
     ).where(LIVE)
     if agent_id is not None:
         statement = statement.where(PropertyTransaction.agent_id == agent_id)
+    statement = _branch_filter(statement, branch_id)
     rows = db.execute(statement.group_by(month)).all()
     data = {
         str(key): {"transactions": int(count), "reservations": int(reservations),
-                   "sales": int(sales), "revenue": float(revenue or 0)}
+                   "sales": int(sales), "revenue": float(revenue or 0), "commission": 0.0}
         for key, count, reservations, sales, revenue in rows
     }
+    # Commission: each completed sale × its agent's commission rate.
+    rates = commission_rates(db)
+    sales_statement = select(month, PropertyTransaction.agent_id, func.sum(PropertyTransaction.amount)).where(SALE)
+    if agent_id is not None:
+        sales_statement = sales_statement.where(PropertyTransaction.agent_id == agent_id)
+    sales_statement = _branch_filter(sales_statement, branch_id)
+    for key, sale_agent, amount in db.execute(sales_statement.group_by(month, PropertyTransaction.agent_id)).all():
+        if str(key) in data:
+            data[str(key)]["commission"] += float(amount or 0) * rates.get(sale_agent, settings.DEFAULT_COMMISSION_RATE)
+    for entry in data.values():
+        entry["commission"] = round(entry["commission"], 2)
     current = _month_key(_now())
     first = min(data) if data else None
-    if agent_id is not None and not months:
+    if (agent_id is not None or branch_id is not None) and not months:
         first = db.scalar(select(func.min(month)).where(LIVE))
     if months:
         keys = _month_range(_shift_month(current, -(months - 1)), current)
@@ -85,7 +122,7 @@ def monthly_series(db: Session, months: int | None = None, agent_id: str | None 
         keys = _month_range(str(first), current)
     else:
         keys = []
-    empty = {"transactions": 0, "reservations": 0, "sales": 0, "revenue": 0.0}
+    empty = {"transactions": 0, "reservations": 0, "sales": 0, "revenue": 0.0, "commission": 0.0}
     series = []
     for key in keys:
         entry = {"month": key, **data.get(key, empty)}
@@ -161,6 +198,7 @@ def overview(db: Session) -> dict:
 
 
 SEASONAL_MIN_MONTHS = 12   # a seasonal pattern needs at least one full year
+METRICS = {"revenue", "transactions", "sales", "commission"}
 
 
 def _trend(values: list[float]) -> dict:
@@ -236,14 +274,15 @@ def _predict(months: list[str], values: list[float], target_index: int, target_m
 
 
 def forecast(db: Session, metric: str = "revenue", horizon: int = 3, agent_id: str | None = None,
-             seasonal: bool = True) -> dict:
+             seasonal: bool = True, branch_id: int | None = None) -> dict:
     """Trend line plus each calendar month's usual pattern, over complete
     months, only with enough history. With ``agent_id``, the forecast is for
     that agent's own activity (trend only: too few sales for a pattern)."""
-    if metric not in {"revenue", "transactions", "sales"}:
-        raise ValueError("metric must be revenue, transactions or sales")
+    if metric not in METRICS:
+        raise ValueError("metric must be revenue, transactions, sales or commission")
     current = _month_key(_now())
-    history = [row for row in monthly_series(db, agent_id=agent_id) if row["month"] != current]  # complete months
+    history = [row for row in monthly_series(db, agent_id=agent_id, branch_id=branch_id)
+               if row["month"] != current]  # complete months
     values = [float(row[metric]) for row in history]
     months = [row["month"] for row in history]
     nonzero = sum(1 for value in values if value > 0)
@@ -311,7 +350,8 @@ def month_breakdown(db: Session, month: str, metric: str = "revenue") -> dict:
     """The records behind one month's figure: completed sales for revenue and
     sales, every live transaction for transactions (same rules as the chart)."""
     key = func.to_char(func.timezone("UTC", PropertyTransaction.transaction_date), "YYYY-MM")
-    condition = SALE if metric in {"revenue", "sales"} else LIVE
+    condition = SALE if metric in {"revenue", "sales", "commission"} else LIVE
+    rates = commission_rates(db) if metric == "commission" else {}
     rows = db.execute(select(PropertyTransaction).where(key == month, condition)
                       .order_by(PropertyTransaction.transaction_date)).scalars().all()
     items = [{
@@ -319,12 +359,15 @@ def month_breakdown(db: Session, month: str, metric: str = "revenue") -> dict:
         "date": row.transaction_date,
         "type": row.transaction_type,
         "status": row.status,
-        "amount": float(row.amount or 0),
+        "amount": round(float(row.amount or 0) * rates.get(row.agent_id, settings.DEFAULT_COMMISSION_RATE), 2)
+        if metric == "commission" else float(row.amount or 0),
+        "sale_amount": float(row.amount or 0),
+        "commission_rate": rates.get(row.agent_id, settings.DEFAULT_COMMISSION_RATE) if metric == "commission" else None,
         "client": row.client.full_name if row.client else None,
         "property": row.property_listing.title if row.property_listing else None,
         "agent": row.agent.full_name if row.agent else None,
     } for row in rows]
-    total = sum(item["amount"] for item in items) if metric == "revenue" else float(len(items))
+    total = sum(item["amount"] for item in items) if metric in {"revenue", "commission"} else float(len(items))
     return {"month": month, "metric": metric, "count": len(items), "total": round(total, 2), "items": items}
 
 
@@ -399,8 +442,8 @@ def month_diagnosis(db: Session, month: str, metric: str = "revenue") -> dict:
     thinner pipeline, cancellations, agents, categories, stock), then the
     causes, biggest first. Rule-based and computed from recorded data only;
     the page turns each cause into a suggestion and management decides."""
-    if metric not in {"revenue", "transactions", "sales"}:
-        raise ValueError("metric must be revenue, transactions or sales")
+    if metric not in METRICS:
+        raise ValueError("metric must be revenue, transactions, sales or commission")
     previous_month = _shift_month(month, -1)
     series = {row["month"]: row for row in monthly_series(db)}
     actual = float(series.get(month, {}).get(metric, 0) or 0)

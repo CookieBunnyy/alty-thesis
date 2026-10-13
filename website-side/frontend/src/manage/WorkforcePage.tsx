@@ -3,6 +3,7 @@ import { Link } from "@/components/Link"
 import { BarList } from "./charts"
 import { dateTime } from "./format"
 import { InsightPanel, type Insight } from "./Insights"
+import { WorkforcePlan } from "./WorkforcePlan"
 import { Badge, DataTable, LoadState, PageHeader, Section, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
@@ -65,6 +66,7 @@ export function WorkforcePage() {
               </ul>
             </Section>
           </div>
+          <div data-tour="workforce-plan"><WorkforcePlan /></div>
           <InsightPanel title="Workforce Recommendation" insights={agentInsights} empty={t("No agent needs attention right now — workload and performance are within the normal range.")} />
           <div>
             <h2 className="mb-2 font-bold">{t("Agent workload")}</h2>

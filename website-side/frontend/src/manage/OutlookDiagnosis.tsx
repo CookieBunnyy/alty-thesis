@@ -161,7 +161,7 @@ function Evidence({ f }: { f: Finding }) {
 
 export function OutlookDiagnosis({ month, metric, monthName, format }: {
   month: string
-  metric: "revenue" | "transactions" | "sales"
+  metric: "revenue" | "transactions" | "sales" | "commission"
   monthName: (key: string) => string
   format: (value: number) => string
 }) {

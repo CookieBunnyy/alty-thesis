@@ -46,6 +46,7 @@ class PropertyListingCreate(BaseModel):
     has_garage: bool = False
     garage_spaces: int = Field(default=0, ge=0)
     lot_area_sqm: Decimal | None = Field(default=None, gt=0, le=100_000_000, max_digits=14, decimal_places=2)
+    branch_id: int | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -96,6 +97,7 @@ class PropertyListingResponse(BaseModel):
     boundary: dict | None = None
     boundary_measurements: dict | None = None
     media_ids: list[int] = Field(default_factory=list)
+    branch_id: int | None = None
     boundary_updated_at: datetime | None = None
     boundary_updated_by: str | None = None
     status: PropertyStatus = "AVAILABLE"
@@ -138,6 +140,7 @@ class PropertyListingUpdate(BaseModel):
     has_garage: bool | None = None
     garage_spaces: int | None = Field(default=None, ge=0)
     lot_area_sqm: Decimal | None = Field(default=None, gt=0, le=100_000_000, max_digits=14, decimal_places=2)
+    branch_id: int | None = None
     status: str | None = None
     partner_id: int | None = None
 

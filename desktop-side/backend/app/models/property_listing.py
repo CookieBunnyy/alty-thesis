@@ -198,3 +198,7 @@ class PropertyListing(Base):
     partner_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("partners.id", ondelete="SET NULL"), nullable=True, index=True,
     )
+    # The branch that handles this listing (ALTY only).
+    branch_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True,
+    )

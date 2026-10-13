@@ -16,7 +16,7 @@ const PAGE_NAMES: Record<string, string> = {
   dashboard: "Dashboard", properties: "Properties", clients: "Buyers & Sellers", transactions: "Transactions",
   agents: "Agents", partners: "Partners / Developers", analytics: "Analytics", forecasting: "Business Outlook",
   dss: "Recommendations", media: "Digital Preview", documents: "Document Repository", workforce: "Workforce",
-  users: "Users & Access", audit: "Audit Logs", settings: "Settings",
+  users: "Users & Access", audit: "Audit Logs", settings: "Settings", branches: "Branches", recruitment: "Recruitment",
 }
 
 const field = "mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2.5 text-sm focus:border-ab-accent focus:outline-none"

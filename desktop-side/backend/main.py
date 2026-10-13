@@ -19,6 +19,8 @@ from app.api.v1.maps import router as maps_router
 from app.api.v1.media import router as media_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.partners import router as partners_router
+from app.api.v1.branches import router as branches_router
+from app.api.v1.recruitment import router as recruitment_router
 from app.api.v1.property_listings import router as property_listings_router
 from app.api.v1.public import router as public_router
 from app.api.v1.search import router as search_router
@@ -100,6 +102,8 @@ for router in (
     notifications_router,
     intelligence_router,
     partners_router,
+    branches_router,
+    recruitment_router,
 ):
     app.include_router(router, prefix="/api/v1")
 

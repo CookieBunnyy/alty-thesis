@@ -35,7 +35,7 @@ FILING_ROLES = MANAGEMENT_ROLES | {FILING_MANAGER}
 _ALL_PAGES = [
     "dashboard", "properties", "partners", "clients", "transactions",
     "documents", "media", "agents", "workforce", "analytics",
-    "forecasting", "dss", "users", "audit", "settings",
+    "forecasting", "dss", "users", "audit", "settings", "branches", "recruitment",
 ]
 # Desktop navigation keys each role may open. The API enforces the same
 # boundaries independently; this list only drives what the UI shows.

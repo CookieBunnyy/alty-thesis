@@ -78,6 +78,7 @@ from main import app  # noqa: E402
 BUSINESS_TABLES = (
     "auth_attempts", "password_reset_tokens", "notification_reads", "agent_reviews", "audit_events", "document_audit_events", "property_media", "transactions", "clients",
     "documents", "document_folders", "property_listings", "partners", "agents", "users",
+    "agent_assessments", "agent_applicants", "branches",
 )
 
 # Synthetic agents used by the ingestion test documents (test DB only).

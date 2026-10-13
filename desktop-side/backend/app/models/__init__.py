@@ -14,6 +14,7 @@ from app.models.notification import NotificationRead
 from app.models.partner import Partner
 from app.models.auth_security import AuthAttempt, PasswordResetToken
 from app.models.payment import TransactionPayment
+from app.models.workforce import AgentApplicant, AgentAssessment
 
 __all__ = [
 	"Branch",
@@ -35,4 +36,6 @@ __all__ = [
 	"AuthAttempt",
 	"PasswordResetToken",
 	"TransactionPayment",
+	"AgentApplicant",
+	"AgentAssessment",
 ]

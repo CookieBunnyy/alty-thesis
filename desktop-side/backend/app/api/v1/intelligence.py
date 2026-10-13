@@ -12,6 +12,7 @@ from app.core.security import MANAGEMENT_ROLES, require_roles
 from app.models.agent import Agent
 from app.models.property_listing import PropertyListing
 from app.models.user import User
+from app.services import workforce_planning
 from app.services import analytics, intelligence
 
 router = APIRouter(prefix="/intelligence", tags=["Intelligence"])
@@ -33,7 +34,7 @@ def get_analytics(months: int = Query(default=12, ge=3, le=60), db: Session = De
 
 
 @router.get("/forecast")
-def get_forecast(metric: str = Query(default="revenue", pattern="^(revenue|transactions|sales)$"),
+def get_forecast(metric: str = Query(default="revenue", pattern="^(revenue|transactions|sales|commission)$"),
                  horizon: int = Query(default=3, ge=1, le=12), db: Session = Depends(get_db),
                  _user: User = Depends(require_insight)):
     result = analytics.outlook(db, metric, horizon)  # the forecast plus the look back
@@ -58,7 +59,7 @@ def get_agent_insights(agent_id: str, db: Session = Depends(get_db), _user: User
 
 @router.get("/outlook/month")
 def get_outlook_month(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
-                      metric: str = Query(default="revenue", pattern="^(revenue|transactions|sales)$"),
+                      metric: str = Query(default="revenue", pattern="^(revenue|transactions|sales|commission)$"),
                       db: Session = Depends(get_db), _user: User = Depends(require_insight)):
     """The records that make up one month's figure on Business Outlook."""
     return analytics.month_breakdown(db, month, metric)
@@ -66,11 +67,20 @@ def get_outlook_month(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
 
 @router.get("/outlook/diagnosis")
 def get_outlook_diagnosis(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
-                          metric: str = Query(default="revenue", pattern="^(revenue|transactions|sales)$"),
+                          metric: str = Query(default="revenue", pattern="^(revenue|transactions|sales|commission)$"),
                           db: Session = Depends(get_db), _user: User = Depends(require_insight)):
     """Why a month missed its likely range or fell below the month before,
     and what the records point to."""
     return analytics.month_diagnosis(db, month, metric)
+
+
+@router.get("/workforce-plan")
+def get_workforce_plan(capacity: float | None = Query(default=None, gt=0, le=100), db: Session = Depends(get_db),
+                       _user: User = Depends(require_insight)):
+    """Agents needed next month against active agents, per branch, with
+    recommendations to reallocate or recruit. ``capacity`` overrides the
+    deals one agent handles in a month (otherwise measured from history)."""
+    return workforce_planning.capacity_plan(db, capacity)
 
 
 @router.get("/agent-forecasts")

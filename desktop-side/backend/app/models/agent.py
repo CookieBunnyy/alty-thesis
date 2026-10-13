@@ -1,10 +1,15 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Integer, Numeric, String
-from sqlalchemy.orm import Mapped, mapped_column
+from datetime import date
+
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+
+DESIGNATIONS = ("Trainee Agent", "Sales Agent", "Senior Sales Agent", "Team Leader", "Branch Manager", "Broker")
 
 
 class Agent(Base):
@@ -36,6 +41,19 @@ class Agent(Base):
         String(24), default="PENDING", nullable=False
     )
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Assignment (ALTY only; not part of the Supabase agent record): where the
+    # agent works, their position, and the area they cover.
+    branch_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True)
+    designation: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    work_area: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    hired_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    branch = relationship("Branch", lazy="selectin", viewonly=True)
+
+    @property
+    def branch_name(self) -> str | None:
+        return self.branch.name if self.branch else None
+
     # Profile photo (ALTY only; not part of the Supabase agent record).
     photo_bucket: Mapped[str | None] = mapped_column(String(120), nullable=True)
     photo_path: Mapped[str | None] = mapped_column(String(300), nullable=True)

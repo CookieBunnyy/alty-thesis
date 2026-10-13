@@ -15,6 +15,7 @@ from app.services import lot_geometry
 from app.core.security import FILING_ROLES, get_current_user, require_management, require_roles
 from app.core.supabase import supabase
 from app.models.document import Document
+from app.models.branch import Branch
 from app.models.partner import Partner
 from app.models.property_listing import PropertyListing
 from app.models.transaction import PropertyTransaction
@@ -134,6 +135,8 @@ def update_property_listing(listing_id: int, payload: PropertyListingUpdate,
     cancellation_reason = (values.pop("cancellation_reason", None) or "").strip() or None
     if values.get("partner_id") is not None and db.get(Partner, values["partner_id"]) is None:
         raise HTTPException(status_code=422, detail="Unknown partner / developer")
+    if values.get("branch_id") is not None and db.get(Branch, values["branch_id"]) is None:
+        raise HTTPException(status_code=422, detail="Unknown branch")
     for field in ("layout_type", "village_name", "details"):
         if isinstance(values.get(field), str):
             values[field] = values[field].strip() or None

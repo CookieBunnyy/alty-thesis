@@ -37,6 +37,8 @@ class Settings(BaseSettings):
 
     # Forecasting requires at least this many monthly observations.
     FORECAST_MIN_MONTHS: int = 6
+    # Used for agents without a recorded commission rate (total commission ÷ total sales).
+    DEFAULT_COMMISSION_RATE: float = 0.03
 
     # Comma-separated origins allowed to call the API from a browser.
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"

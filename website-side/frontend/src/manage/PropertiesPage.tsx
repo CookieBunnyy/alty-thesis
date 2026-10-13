@@ -15,6 +15,7 @@ import { CancelReason } from "./cancellation"
 import { lotAreaLong, lotAreaShort } from "@/lib/area"
 import { useBlobUrl } from "./useBlobUrl"
 import { LotBoundarySection } from "./LotBoundarySection"
+import { useBranchOptions } from "./branches"
 
 type PartnerOption = { id: number; name: string; status: string }
 type Summary = { available: number; reserved: number; sold: number; on_hold: number; unavailable: number; total: number }
@@ -143,6 +144,7 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
   listing: Listing; partners: PartnerOption[]; onClose: () => void; onSaved: (l: Listing) => void; onDeleted: () => void
 }) {
   const developer = partners.find((p) => p.id === listing.partner_id)
+  const branchName = useBranchOptions().find((b) => b.id === listing.branch_id)?.name ?? null
   const { api, user } = useStaffAuth()
   const toast = useToast()
   const [editing, setEditing] = useState(false)
@@ -221,6 +223,7 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
       <Section title="Details">
         <Facts items={[
           ["Developer / partner", developer ? <Link to={`/manage/partners?id=${developer.id}`} className="hover:underline">{developer.name}</Link> : null],
+          ["Branch", branchName],
           ["Village / project", listing.village_name],
           ["Layout", listing.layout_type],
           ["Bedrooms", listing.num_bedrooms],

@@ -127,6 +127,13 @@ const BADGE: Record<string, string> = {
   FAILED: "bg-ab-danger/15 text-ab-danger",
   UNAVAILABLE: "bg-ab-hover text-ab-muted",
   INACTIVE: "bg-ab-hover text-ab-muted",
+  APPLIED: "bg-ab-info/15 text-ab-info",
+  SCREENING: "bg-ab-warning/15 text-ab-warning",
+  INTERVIEW: "bg-ab-warning/15 text-ab-warning",
+  APPROVED: "bg-ab-accent/15 text-ab-accent",
+  ONBOARDED: "bg-ab-success/15 text-ab-success",
+  REJECTED: "bg-ab-danger/15 text-ab-danger",
+  WITHDRAWN: "bg-ab-hover text-ab-muted",
 }
 
 export function Badge({ value }: { value: unknown }) {

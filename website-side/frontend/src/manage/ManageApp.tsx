@@ -11,6 +11,8 @@ import { PartnersPage } from "./PartnersPage"
 import { SettingsPage } from "./SettingsPage"
 import { UsersPage } from "./UsersPage"
 import { WorkforcePage } from "./WorkforcePage"
+import { BranchesPage } from "./BranchesPage"
+import { RecruitmentPage } from "./RecruitmentPage"
 import { AnalyticsPage } from "./AnalyticsPage"
 import { ForecastingPage } from "./ForecastingPage"
 import { InsightsPage } from "./InsightsPage"
@@ -44,6 +46,8 @@ const PAGES: Record<string, [string, string, () => React.ReactNode]> = {
   "/manage/forecasting": ["forecasting", "Business Outlook", () => <ForecastingPage />],
   "/manage/insights": ["dss", "Recommendations", () => <InsightsPage />],
   "/manage/workforce": ["workforce", "Workforce", () => <WorkforcePage />],
+  "/manage/branches": ["branches", "Branches", () => <BranchesPage />],
+  "/manage/recruitment": ["recruitment", "Recruitment", () => <RecruitmentPage />],
   "/manage/users": ["users", "Users & Access", () => <UsersPage />],
   "/manage/audit": ["audit", "Audit Logs", () => <AuditPage />],
   "/manage/settings": ["settings", "Settings", () => <SettingsPage />],

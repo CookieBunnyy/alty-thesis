@@ -85,7 +85,18 @@ export const TOURS: Record<string, (user: StaffUser | null) => TourStep[]> = {
   "/manage/workforce": () => [
     { target: "page-header", title: "Workforce", body: "Who is on the team, staff accounts by role, and how client work is shared across agents." },
     { target: "tiles", title: "Summary at a glance", body: "Totals for staff accounts and agents, and recent completed sales." },
+    { target: "workforce-plan", title: "Demand vs capacity", body: "Expected deals next month divided by the deals one agent handles gives the agents needed, per branch. When a branch is short, ALTY suggests moving agents from a branch with spare capacity first, then recruiting. You can change the deals-per-agent figure and recalculate." },
   ],
+
+  "/manage/branches": () => listPage("Branches", "Your offices side by side: agents, listings, revenue, commission, the month-to-month change, the trend and next month's forecast. A sale counts for its agent's branch.", {
+    actions: "Add a branch here. Then give each agent a branch on the Agents page and each listing a branch on the Properties page.",
+    table: "Select a branch to see its monthly revenue, forecast and agents. Sort by any column to rank the branches.",
+  }),
+
+  "/manage/recruitment": () => listPage("Recruitment", "Agent applicants from application to onboarding: Applied, Screening, Interview, Approved, then Onboarded. Onboarding creates the agent record with a branch and designation.", {
+    actions: "Record a new applicant here.",
+    table: "Select an applicant to move them to the next stage, reject them (with a reason), or onboard them once approved.",
+  }),
 
   "/manage/users": (user) => listPage("Users & Access", "Staff accounts for the desktop app and this website — one account works in both. Each role opens only the pages it's allowed to.", {
     actions: user?.role === "Administrator" ? "Add a new staff account here." : undefined,

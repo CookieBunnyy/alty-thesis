@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -32,6 +32,12 @@ class AgentResponse(BaseModel):
     recorded_deals: int = 0
     # Completed sales ÷ recorded deals, in percent (None without any deal).
     performance_rate: float | None = None
+    # Assignment (ALTY only).
+    branch_id: int | None = None
+    branch_name: str | None = None
+    designation: str | None = None
+    work_area: str | None = None
+    hired_on: date | None = None
     # Changes whenever the profile photo changes; None when there is no photo.
     photo_version: int | None = None
     status: str

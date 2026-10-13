@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react"
+import { useBranchOptions } from "./branches"
 import { LoaderCircle, X } from "lucide-react"
 import { CATEGORIES } from "@/lib/categories"
 import { statusLabel } from "./format"
@@ -40,6 +41,7 @@ export type Listing = {
   garage_spaces: number | null
   status: string
   partner_id: number | null
+  branch_id?: number | null
   sync_status: string
   last_synced_at: string | null
   created_at: string | null
@@ -92,11 +94,13 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
     garage_spaces: String(listing.garage_spaces ?? 0),
     status: listing.status,
     partner_id: listing.partner_id == null ? "" : String(listing.partner_id),
+    branch_id: listing.branch_id == null ? "" : String(listing.branch_id),
     cancellation_reason: "",
   })
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }))
+  const branches = useBranchOptions()
   const locked = listing.status === "SOLD"
   const statusOptions = [...new Set([listing.status, ...MANUAL])]
   // Moving a reserved property back cancels its open reservation: ask why.
@@ -130,6 +134,7 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
       has_balcony: form.has_balcony, has_kitchen: form.has_kitchen, has_backyard: form.has_backyard, has_garage: form.has_garage,
       status: form.status,
       partner_id: form.partner_id ? Number(form.partner_id) : null,
+      branch_id: form.branch_id ? Number(form.branch_id) : null,
     }
     const current: Record<string, unknown> = { ...listing, amenity_list: amenities, photos: listing.photos ?? [] }
     const changes = Object.fromEntries(
@@ -177,6 +182,12 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
               <span className="mt-1 block text-xs font-normal text-ab-faint">{t("Saved on the cancelled reservation so everyone can see why.")}</span>
             </label>
           )}
+          <Field label="Branch">
+            <select className={field} value={form.branch_id} onChange={(e) => set("branch_id", e.target.value)}>
+              <option value="">{t("Not set")}</option>
+              {branches.filter((b) => b.is_active || String(b.id) === form.branch_id).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </Field>
           <Field label="Developer / partner">
             <select className={field} value={form.partner_id} onChange={(e) => set("partner_id", e.target.value)}>
               <option value="">{t("Not set")}</option>
