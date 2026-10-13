@@ -40,6 +40,18 @@ class Settings(BaseSettings):
     # Used for agents without a recorded commission rate (total commission ÷ total sales).
     DEFAULT_COMMISSION_RATE: float = 0.03
 
+    # Closing-cost estimate on the transaction page (services/closing_costs.py).
+    TRANSFER_TAX_METRO: float = 0.0075
+    TRANSFER_TAX_PROVINCE: float = 0.005
+    DST_RATE: float = 0.015
+    REGISTRATION_FEE_RATE: float = 0.0025
+    NOTARIAL_FEE_RATE: float = 0.01
+    VAT_RATE: float = 0.12
+    # Residential dwellings sold for this much or less are VAT-exempt (BIR
+    # threshold, adjusted every 3 years; update it when the BIR does).
+    VAT_EXEMPT_DWELLING_MAX: float = 3_199_200
+    CAPITAL_GAINS_TAX_RATE: float = 0.06
+
     # Comma-separated origins allowed to call the API from a browser.
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     # Optional pattern for origins that change per deploy, e.g. every Vercel

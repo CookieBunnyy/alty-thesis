@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_management
+from app.models.partner import Partner
 from app.models.payment import TransactionPayment
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
@@ -18,6 +19,7 @@ from app.schemas.transaction import (
     TransactionSummary,
     TransactionSyncResult,
 )
+from app.services import closing_costs
 from app.services.audit import record_audit
 from app.services.payment_plan import build_plan
 from app.services.client_sync import cancel_reservation
@@ -192,6 +194,19 @@ def _plan_response(db: Session, transaction: PropertyTransaction) -> dict:
 def get_payment_plan(transaction_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     """A reservation's payment schedule (from the listing's terms) and the payments recorded for it."""
     return _plan_response(db, _reservation_or_404(db, transaction_id))
+
+
+@router.get("/{transaction_id}/cost-breakdown")
+def get_cost_breakdown(transaction_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+    """The property price plus the estimated taxes and fees of buying it
+    (transfer tax, documentary stamp tax, registration, notarial, VAT)."""
+    transaction = _reservation_or_404(db, transaction_id)
+    listing = transaction.property_listing
+    price = (listing.price_total if listing is not None and listing.price_total else None) or transaction.amount
+    if transaction.transaction_type == "SOLD" and transaction.amount:
+        price = transaction.amount  # the recorded sale price
+    partner = db.get(Partner, listing.partner_id) if listing is not None and listing.partner_id else None
+    return closing_costs.breakdown(listing, Decimal(price or 0), partner)
 
 
 @router.post("/{transaction_id}/payments", status_code=201)

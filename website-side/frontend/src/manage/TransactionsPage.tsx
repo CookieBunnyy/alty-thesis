@@ -10,6 +10,7 @@ import { useToast } from "./toastContext"
 import { CancellationDetails, CancelReason, CancelReservationDialog } from "./cancellation"
 import { GrossSalesRecap } from "./GrossSalesRecap"
 import { PaymentSchedule, ProceedToSaleDialog } from "./reservationPayments"
+import { CostBreakdown } from "./costBreakdown"
 import { locale } from "./i18n"
 
 // Philippine-time month of a transaction ("2026-09").
@@ -143,6 +144,7 @@ function TransactionDrawer({ transaction: tx, related, onClose, canCancel, onCha
           ["Amount", peso(tx.amount)],
         ]} />
       </Section>
+      {tx.status !== "CANCELLED" && <CostBreakdown transactionId={tx.transaction_id} />}
       {tx.transaction_type === "RESERVED" && tx.status !== "CANCELLED" && (
         <PaymentSchedule transactionId={tx.transaction_id} canRecord={canCancel} />
       )}
