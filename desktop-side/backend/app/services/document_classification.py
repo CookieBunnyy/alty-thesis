@@ -27,6 +27,7 @@ DOCUMENT_TYPES: dict[str, tuple[str, str]] = {
     "VOUCHER": ("Voucher", "Validates the payment and links it to its transaction"),
     "PROOF_OF_PAYMENT": ("Proof of Payment", "Validates the payment and links it to its transaction"),
     "INVOICE": ("Invoice", "Validates the billed amount and links it to its transaction"),
+    "COMMISSION_VOUCHER": ("Commission Voucher", "Reads every field for review; linked to its commission after a person verifies it"),
     "OTHER": ("Other", "Stored in the repository without business-record processing"),
 }
 
@@ -79,6 +80,7 @@ _TITLE_RULES: list[tuple[str, str]] = [
     (r"\bproperty (information|details|profile|listing)\b|\blisting information\b", "PROPERTY_INFORMATION"),
     (r"\bproof of payment\b|\bpayment confirmation\b|\bdeposit slip\b", "PROOF_OF_PAYMENT"),
     (r"\b(official|acknowledg(e)?ment|cash|payment) receipt\b|^receipt\b", "RECEIPT"),
+    (r"\bcommission (voucher|release|disbursement)\b|\bvoucher for commission\b", "COMMISSION_VOUCHER"),
     (r"\b(cash|check|cheque|disbursement|payment)? ?voucher\b", "VOUCHER"),
     (r"\binvoice\b|\bbilling statement\b|\bstatement of account\b", "INVOICE"),
     (r"\btransaction (record|document|summary|form)\b", "TRANSACTION_DOCUMENT"),

@@ -14,8 +14,8 @@ from collections import defaultdict, deque
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, func, select
+from sqlalchemy.orm import Session, object_session
 
 from app.core.database import get_db
 from app.core.security import get_optional_client
@@ -28,6 +28,7 @@ from app.models.media import PropertyMedia
 from app.models.property_listing import PropertyListing
 from app.models.user import User
 from app.services.document_storage import StorageError, read_file
+from app.services.accreditation import marketable_clause, marketing_of
 
 router = APIRouter(prefix="/public", tags=["Public website"])
 
@@ -110,6 +111,8 @@ def _public_listing(listing: PropertyListing, media: list[str]) -> dict:
         "lot_area_sqm": number(listing.lot_area_sqm),
         "boundary": listing.boundary,
         "boundary_measurements": listing.boundary_measurements,
+        "project_name": listing.project_name,
+        "floor_area_sqm": number(listing.floor_area_sqm),
         "status": listing.status,
     }
 
@@ -120,8 +123,18 @@ TEST_DATA = "TEST_DATA"
 NOT_TEST_DATA = PropertyListing.sync_status != TEST_DATA
 
 
+def _visible():
+    """Listings the public may see: not test data, approved for marketing with
+    valid developer accreditation (services/accreditation.py)."""
+    return and_(NOT_TEST_DATA, marketable_clause())
+
+
 def _is_public(listing: PropertyListing | None) -> bool:
-    return listing is not None and listing.status in PUBLIC_STATUSES and listing.sync_status != TEST_DATA
+    if listing is None or listing.status not in PUBLIC_STATUSES or listing.sync_status == TEST_DATA:
+        return False
+    session = object_session(listing)
+    partner = session.get(Partner, listing.partner_id) if session is not None and listing.partner_id else None
+    return marketing_of(listing, partner)["public"]
 
 
 @router.get("/properties")
@@ -130,7 +143,7 @@ def list_public_properties(status: str = "AVAILABLE", mapped_only: bool = False,
     wanted = {part.strip().upper() for part in status.split(",")} & PUBLIC_STATUSES
     if not wanted:
         raise HTTPException(status_code=422, detail="status must be AVAILABLE, RESERVED or SOLD")
-    statement = select(PropertyListing).where(PropertyListing.status.in_(wanted), NOT_TEST_DATA)
+    statement = select(PropertyListing).where(PropertyListing.status.in_(wanted), _visible())
     if mapped_only:
         statement = statement.where(PropertyListing.lat.is_not(None), PropertyListing.lng.is_not(None))
     listings = db.execute(statement.order_by(PropertyListing.listing_id)).scalars().all()
@@ -201,7 +214,7 @@ def get_public_agent(agent_id: str, limit: int = 10, offset: int = 0, db: Sessio
 @router.get("/home")
 def public_home(db: Session = Depends(get_db)):
     """Everything the home page shows, in one request, from live data only."""
-    available = (PropertyListing.status == "AVAILABLE") & NOT_TEST_DATA
+    available = (PropertyListing.status == "AVAILABLE") & _visible()
     # Listings with photos first: the home page is a showcase.
     with_photos = func.coalesce(func.cardinality(PropertyListing.photos), 0) > 0
     featured = db.execute(

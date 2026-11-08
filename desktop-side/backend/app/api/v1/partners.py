@@ -6,6 +6,7 @@ so listing history keeps its developer.
 """
 
 import re
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -13,11 +14,12 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_management
-from app.models.partner import PARTNER_STATUSES, PARTNER_TYPES, Partner
+from app.core.security import get_current_user, require_management, get_company_user
+from app.models.partner import ACCREDITATION_STATUSES, PARTNER_STATUSES, PARTNER_TYPES, Partner
 from app.models.property_listing import PropertyListing
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
+from app.services.accreditation import accreditation_of
 from app.services.audit import record_audit
 from app.services.partner_logos import logo_bytes, logo_version, remove_logo, save_logo
 
@@ -37,6 +39,11 @@ class PartnerInput(BaseModel):
     website: str | None = Field(default=None, max_length=500)
     address: str | None = Field(default=None, max_length=500)
     notes: str | None = None
+    accreditation_status: str | None = None
+    accreditation_reference: str | None = Field(default=None, max_length=120)
+    accreditation_valid_from: date | None = None
+    accreditation_valid_until: date | None = None
+    accreditation_notes: str | None = None
 
     @field_validator("*", mode="before")
     @classmethod
@@ -58,6 +65,13 @@ class PartnerInput(BaseModel):
     def known_status(cls, value):
         if value is not None and value.upper() not in PARTNER_STATUSES:
             raise ValueError("Status must be ACTIVE or INACTIVE")
+        return value.upper() if value else value
+
+    @field_validator("accreditation_status")
+    @classmethod
+    def known_accreditation(cls, value):
+        if value is not None and value.upper() not in ACCREDITATION_STATUSES:
+            raise ValueError(f"Accreditation status must be one of: {', '.join(ACCREDITATION_STATUSES)}")
         return value.upper() if value else value
 
     @field_validator("email")
@@ -110,6 +124,14 @@ def _serialize(partner: Partner, stats: dict) -> dict:
         "website": partner.website, "address": partner.address, "notes": partner.notes,
         "created_at": partner.created_at, "updated_at": partner.updated_at,
         "logo_version": logo_version(partner),
+        "accreditation_status": partner.accreditation_status,
+        "accreditation_reference": partner.accreditation_reference,
+        "accreditation_valid_from": partner.accreditation_valid_from,
+        "accreditation_valid_until": partner.accreditation_valid_until,
+        "accreditation_notes": partner.accreditation_notes,
+        "accreditation_verified_by": partner.accreditation_verified_by,
+        "accreditation_verified_at": partner.accreditation_verified_at,
+        "accreditation": accreditation_of(partner),
         **stats.get(partner.id, {"listings": 0, "available_listings": 0, "transactions": 0,
                                  "completed_sales": 0, "sales_value": 0.0}),
     }
@@ -129,15 +151,22 @@ def _name_taken(db: Session, name: str, exclude: int | None = None) -> bool:
     return db.scalar(statement) is not None
 
 
+def _stamp_accreditation(partner: Partner, actor: User) -> None:
+    """Who verified the developer's accreditation of Abellar, and when."""
+    if partner.accreditation_status == "VERIFIED":
+        partner.accreditation_verified_by = actor.full_name or actor.username
+        partner.accreditation_verified_at = datetime.utcnow()
+
+
 @router.get("")
-def list_partners(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def list_partners(db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     partners = db.execute(select(Partner).order_by(func.lower(Partner.name))).scalars().all()
     stats = _stats(db, [p.id for p in partners])
     return [_serialize(p, stats) for p in partners]
 
 
 @router.get("/{partner_id}")
-def get_partner(partner_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_partner(partner_id: int, db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     partner = _partner_or_404(db, partner_id)
     listings = db.execute(
         select(PropertyListing).where(PropertyListing.partner_id == partner_id).order_by(PropertyListing.title)
@@ -156,7 +185,9 @@ def create_partner(payload: PartnerInput, db: Session = Depends(get_db), actor: 
         raise HTTPException(status_code=422, detail="Enter the partner's name")
     if _name_taken(db, payload.name):
         raise HTTPException(status_code=409, detail="A partner with that name already exists")
-    partner = Partner(**{**payload.model_dump(), "status": payload.status or "ACTIVE"})
+    partner = Partner(**{**payload.model_dump(), "status": payload.status or "ACTIVE",
+                         "accreditation_status": payload.accreditation_status or "NONE"})
+    _stamp_accreditation(partner, actor)
     db.add(partner)
     db.flush()
     record_audit(db, "PARTNER_CREATED", actor=actor, entity_type="partners", entity_id=partner.id,
@@ -176,11 +207,15 @@ def update_partner(partner_id: int, payload: PartnerInput, db: Session = Depends
         raise HTTPException(status_code=409, detail="A partner with that name already exists")
     if "status" in values and values["status"] is None:
         values.pop("status")
+    if values.get("accreditation_status") is None:
+        values.pop("accreditation_status", None)
     changes = {}
     for field, value in values.items():
         if getattr(partner, field) != value:
             changes[field] = {"old": getattr(partner, field), "new": value}
             setattr(partner, field, value)
+    if "accreditation_status" in changes:
+        _stamp_accreditation(partner, actor)
     if changes:
         record_audit(db, "PARTNER_UPDATED", actor=actor, entity_type="partners", entity_id=partner_id,
                      details={"name": partner.name, "changes": changes})
@@ -189,7 +224,7 @@ def update_partner(partner_id: int, payload: PartnerInput, db: Session = Depends
 
 
 @router.get("/{partner_id}/logo")
-def get_partner_logo(partner_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_partner_logo(partner_id: int, db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     return Response(content=logo_bytes(_partner_or_404(db, partner_id)), media_type="image/png",
                     headers={"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"})
 

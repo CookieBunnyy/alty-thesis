@@ -23,6 +23,8 @@ from app.models.client import Client
 from app.models.document import Document
 from app.models.property_listing import PropertyListing
 from app.models.transaction import PropertyTransaction
+from app.services import deal_pipeline, document_review
+from app.services.document_review import REVIEWED_TYPES
 from app.services import entity_matching as matching
 from app.services.document_classification import (
     AUTO,
@@ -114,6 +116,7 @@ class Context:
     links: dict[str, Any] = field(default_factory=dict)
     events: list[dict] = field(default_factory=list)
     source: str = "DOCUMENT"
+    text: str = ""  # the extracted text (documents verified by a person keep all of it)
 
     @property
     def source_document_id(self) -> str | None:
@@ -464,6 +467,7 @@ def apply_transaction(ctx: Context, transaction_type: str) -> None:
     )
     db.add(transaction)
     db.flush()
+    deal_pipeline.record_transaction(db, transaction, "Document")
     ctx.result["matched_entities"]["transaction"] = {"id": transaction.transaction_id, "matched_by": "CREATED"}
     ctx.created("transactions", transaction.transaction_id, "TRANSACTION_CREATED",
                 {"type": transaction_type, "amount": str(amount), "property_id": listing.listing_id,
@@ -616,6 +620,18 @@ def _link(ctx: Context, *, listing: PropertyListing | None = None, client: Clien
         )
 
 
+def _apply_reviewed(ctx: Context) -> None:
+    """Commission vouchers: keep everything read for a person to verify; no
+    business record changes until then (see services/document_review.py)."""
+    if ctx.document is None or ctx.document.id is None:
+        raise ProcessingError(DATABASE_WRITE, "The document must be stored before it can be reviewed")
+    review = document_review.extract(ctx.db, ctx.document.id, ctx.document_type, ctx.text)
+    ctx.result["review"] = {"status": review.verification_status, "pairs_found": len(review.detected_pairs),
+                            "mapped_fields": review.mapped_fields}
+    ctx.warn("Waiting for a person to verify the extracted fields and link the commission")
+    ctx.result["idempotent"] = True
+
+
 def _dispatch(ctx: Context) -> None:
     document_type = ctx.document_type
     if document_type == "PROPERTY_INFORMATION":
@@ -637,6 +653,8 @@ def _dispatch(ctx: Context) -> None:
         _apply_links_only(ctx, property_required=True)
     elif document_type in FINANCIAL_TYPES or document_type == "CONTRACT":
         _apply_links_only(ctx, property_required=False)
+    elif document_type in REVIEWED_TYPES:
+        _apply_reviewed(ctx)
     elif document_type == "OTHER":
         ctx.warn("OTHER documents are stored without business-record processing")
         ctx.result["idempotent"] = True
@@ -716,11 +734,11 @@ def process_document_content(
             if name in _CRITICAL_FIELDS:
                 validation.add(name, "the document states different values: " + ", ".join(values))
         result["validation_result"] = validation.as_dict()
-        if not validation.valid:
+        if not validation.valid and document_type not in REVIEWED_TYPES:
             raise ProcessingError(VALIDATION, validation.summary(), validation.fields)
 
         stage = ENTITY_MATCHING
-        context = Context(db, document, document_type, fields, result)
+        context = Context(db, document, document_type, fields, result, text=extraction.text)
         savepoint = db.begin_nested()
         try:
             _dispatch(context)

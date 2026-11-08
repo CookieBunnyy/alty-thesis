@@ -30,6 +30,15 @@ class AgentApplicant(Base):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    birthday: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Who recruited the applicant: a seller in ALTY, or a name when not in ALTY.
+    recruiter_agent_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("agents.agent_id", ondelete="SET NULL"), nullable=True, index=True)
+    recruiter_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Declaration that the recruit is not actively bound to another broker.
+    not_bound_to_other_broker: Mapped[bool | None] = mapped_column(nullable=True)
+    declaration_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # The team / cluster (stored in the branches table).
     branch_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True)
     desired_designation: Mapped[str | None] = mapped_column(String(60), nullable=True)

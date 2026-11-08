@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_current_user, require_filing
+from app.core.security import get_current_user, require_filing, require_management, get_company_user
 from app.models.document import Document, DocumentAuditEvent, DocumentFolder
 from app.models.property_listing import PropertyListing
 from app.models.user import User
@@ -30,6 +30,13 @@ from app.services.document_filing import (
     folder_path,
     is_category_folder,
 )
+from pydantic import BaseModel, Field
+
+from app.models.agent import Agent
+from app.models.commission import CommissionRecord
+from app.models.transaction import PropertyTransaction
+from app.models.extraction import DocumentExtraction, DocumentSchema
+from app.services import document_review
 from app.services.audit import record_audit
 from app.services.cloud_sync import try_push_pending
 from app.services.document_classification import AUTO, canonical_type, type_catalog
@@ -361,15 +368,159 @@ def _upload_record(db: Session, actor: User, upload: UploadFile, document_name: 
 # ---------------------------------------------------------------------------
 
 @router.get("/types")
-def get_document_types(_actor: User = Depends(get_current_user)):
+def get_document_types(_actor: User = Depends(get_company_user)):
     """Document types the processing engine supports (drives the UI list)."""
     return [{"code": AUTO, "label": "Auto-detect", "processing": "Classified from content"},
             *type_catalog()]
 
 
+# ---- reviewed extraction (commission vouchers) -----------------------------------------
+
+class SchemaField(BaseModel):
+    key: str = Field(min_length=1, max_length=60, pattern=r"^[a-z][a-z0-9_]*$")
+    label: str = Field(min_length=1, max_length=120)
+    aliases: list[str] = Field(default_factory=list, max_length=20)
+    type: str = Field(default="text", pattern="^(text|money|date|number)$")
+    required: bool = False
+
+
+class SchemaInput(BaseModel):
+    fields: list[SchemaField] = Field(default_factory=list, max_length=60)
+
+
+class VerificationInput(BaseModel):
+    fields: dict[str, str | None] = Field(default_factory=dict)
+    commission_id: int | None = None
+    agent_id: str | None = None
+    listing_id: int | None = None
+    transaction_id: str | None = None
+    verify: bool = True
+
+
+def _extraction_body(db: Session, document: Document, row: DocumentExtraction | None) -> dict:
+    schema = document_review.schema_for(db, document.document_type)
+    linked = db.execute(select(CommissionRecord.id).where(CommissionRecord.voucher_document_id == document.id)
+                        ).scalars().all()
+    return {
+        "document_id": document.document_id, "document_type": document.document_type, "schema": schema,
+        "detected_pairs": row.detected_pairs if row else [], "mapped_fields": row.mapped_fields if row else {},
+        "verified_fields": row.verified_fields if row else {}, "links": row.links if row else {},
+        "verification_status": row.verification_status if row else None,
+        "verified_by": row.verified_by if row else None, "verified_at": row.verified_at if row else None,
+        "linked_commissions": linked,
+    }
+
+
+@router.get("/schemas")
+def list_document_schemas(db: Session = Depends(get_db), _actor: User = Depends(get_company_user)):
+    """Configurable extraction fields per document type."""
+    return [{"document_type": row.document_type, "fields": row.fields, "updated_by": row.updated_by,
+             "updated_at": row.updated_at} for row in db.execute(select(DocumentSchema)).scalars()]
+
+
+@router.put("/schemas/{document_type}")
+def save_document_schema(document_type: str, payload: SchemaInput, db: Session = Depends(get_db),
+                         actor: User = Depends(require_management)):
+    """Set the printed labels to look for, once a real document sample is available."""
+    code = canonical_type(document_type)
+    if code is None:
+        raise HTTPException(status_code=422, detail="Unknown document type")
+    keys = [f.key for f in payload.fields]
+    if len(keys) != len(set(keys)):
+        raise HTTPException(status_code=422, detail="Each field needs a different key")
+    row = db.execute(select(DocumentSchema).where(DocumentSchema.document_type == code)).scalar_one_or_none()
+    if row is None:
+        row = DocumentSchema(document_type=code)
+        db.add(row)
+    row.fields = [f.model_dump() for f in payload.fields]
+    row.updated_by = actor.full_name or actor.username
+    record_audit(db, "DOCUMENT_SCHEMA_UPDATED", actor=actor, entity_type="document_schemas", entity_id=code,
+                 details={"fields": keys})
+    db.commit()
+    return {"document_type": code, "fields": row.fields, "updated_by": row.updated_by, "updated_at": row.updated_at}
+
+
+@router.get("/{document_id}/extraction")
+def get_document_extraction(document_id: str, db: Session = Depends(get_db), _actor: User = Depends(get_company_user)):
+    document = _document_or_404(db, document_id)
+    row = db.execute(select(DocumentExtraction).where(DocumentExtraction.document_row_id == document.id)
+                     ).scalar_one_or_none()
+    return _extraction_body(db, document, row)
+
+
+@router.post("/{document_id}/extraction/remap")
+def remap_document_extraction(document_id: str, db: Session = Depends(get_db), actor: User = Depends(require_filing)):
+    """Fill the schema fields again from the pairs already read (after the schema changed)."""
+    document = _document_or_404(db, document_id)
+    row = db.execute(select(DocumentExtraction).where(DocumentExtraction.document_row_id == document.id)
+                     ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="This document has no extraction to review")
+    row.mapped_fields = document_review.map_fields(row.detected_pairs, document_review.schema_for(db, row.document_type))
+    db.commit()
+    return _extraction_body(db, document, row)
+
+
+@router.put("/{document_id}/extraction")
+def verify_document_extraction(document_id: str, payload: VerificationInput, db: Session = Depends(get_db),
+                               actor: User = Depends(require_filing)):
+    """Save corrected values and links; with ``verify``, confirm them and
+    attach the voucher to its commission record. The original file is unchanged."""
+    document = _document_or_404(db, document_id)
+    row = db.execute(select(DocumentExtraction).where(DocumentExtraction.document_row_id == document.id)
+                     ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="This document has no extraction to review")
+    schema = document_review.schema_for(db, row.document_type)
+    allowed = {f["key"] for f in schema}
+    unknown = sorted(set(payload.fields) - allowed)
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Not fields of this document type: {', '.join(unknown)}")
+    values = {k: (v.strip() if isinstance(v, str) else v) for k, v in payload.fields.items()}
+    if payload.verify:
+        missing = document_review.missing_required(schema, {**row.mapped_fields, **values})
+        if missing:
+            raise HTTPException(status_code=422, detail=f"Fill in the required fields: {', '.join(missing)}")
+    commission = None
+    if payload.commission_id is not None:
+        commission = db.get(CommissionRecord, payload.commission_id)
+        if commission is None:
+            raise HTTPException(status_code=422, detail="Unknown commission record")
+    if payload.agent_id and db.get(Agent, payload.agent_id) is None:
+        raise HTTPException(status_code=422, detail="Unknown seller")
+    if payload.listing_id and db.get(PropertyListing, payload.listing_id) is None:
+        raise HTTPException(status_code=422, detail="Unknown property")
+    if payload.transaction_id and db.get(PropertyTransaction, payload.transaction_id) is None:
+        raise HTTPException(status_code=422, detail="Unknown transaction")
+    before = {"fields": dict(row.verified_fields or {}), "links": dict(row.links or {})}
+    row.verified_fields = {**(row.verified_fields or {}), **values}
+    links = {"commission_id": payload.commission_id, "agent_id": payload.agent_id,
+             "listing_id": payload.listing_id, "transaction_id": payload.transaction_id}
+    if commission is not None:
+        links["agent_id"] = links["agent_id"] or commission.agent_id
+        links["listing_id"] = links["listing_id"] or commission.listing_id
+        links["transaction_id"] = links["transaction_id"] or commission.transaction_id
+        commission.voucher_document_id = document.id
+    row.links = {k: v for k, v in links.items() if v is not None}
+    if links.get("listing_id"):
+        document.property_listing_id = links["listing_id"]
+    if links.get("transaction_id"):
+        document.transaction_reference = str(links["transaction_id"])
+    if payload.verify:
+        row.verification_status = "VERIFIED"
+        row.verified_by, row.verified_at = actor.full_name or actor.username, datetime.utcnow()
+    _record_event(db, "DOCUMENT_VERIFIED" if payload.verify else "DOCUMENT_REVIEW_SAVED", actor, document,
+                  details={"before": before, "after": {"fields": row.verified_fields, "links": row.links}})
+    record_audit(db, "DOCUMENT_VERIFIED" if payload.verify else "DOCUMENT_REVIEW_SAVED", actor=actor,
+                 entity_type="documents", entity_id=document.document_id,
+                 details={"links": row.links, "corrected": sorted(values)})
+    db.commit()
+    return _extraction_body(db, document, row)
+
+
 @router.get("/folders", response_model=list[DocumentFolderResponse])
 def get_folders(include_archived: bool = False, db: Session = Depends(get_db),
-                actor: User = Depends(get_current_user)):
+                actor: User = Depends(get_company_user)):
     parents: dict[str, DocumentFolder] = {}
     created = False
     # One query for the top-level folders and one for Financial's, rather than
@@ -410,7 +561,7 @@ def get_folders(include_archived: bool = False, db: Session = Depends(get_db),
 
 @router.post("/folders", response_model=DocumentFolderResponse, status_code=201)
 def create_folder(payload: DocumentFolderCreate, db: Session = Depends(get_db),
-                  actor: User = Depends(get_current_user)):
+                  actor: User = Depends(get_company_user)):
     parent = _validate_folder(db, payload.parent_id)
     name = payload.name.strip()
     existing = db.execute(select(DocumentFolder).where(
@@ -431,7 +582,7 @@ def create_folder(payload: DocumentFolderCreate, db: Session = Depends(get_db),
 
 @router.put("/folders/{folder_id}", response_model=DocumentFolderResponse)
 def update_folder(folder_id: int, payload: DocumentFolderUpdate, db: Session = Depends(get_db),
-                  actor: User = Depends(get_current_user)):
+                  actor: User = Depends(get_company_user)):
     folder = db.get(DocumentFolder, folder_id)
     if folder is None:
         raise HTTPException(status_code=404, detail="Folder not found")
@@ -460,7 +611,7 @@ def update_folder(folder_id: int, payload: DocumentFolderUpdate, db: Session = D
 
 @router.delete("/folders/{folder_id}")
 def delete_folder(folder_id: int, db: Session = Depends(get_db),
-                  actor: User = Depends(get_current_user)):
+                  actor: User = Depends(get_company_user)):
     """Delete a folder and its sub-folders. Documents are never deleted with
     it: they move to the folder's parent (or to no folder at the top level).
     The standard category folders can't be deleted — filing relies on them."""
@@ -505,7 +656,7 @@ def get_documents(
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    _actor: User = Depends(get_current_user),
+    _actor: User = Depends(get_company_user),
 ):
     latest = select(
         Document.document_id.label("document_id"),
@@ -544,7 +695,7 @@ def get_documents(
 
 
 @router.get("/summary")
-def get_document_summary(db: Session = Depends(get_db), _actor: User = Depends(get_current_user)):
+def get_document_summary(db: Session = Depends(get_db), _actor: User = Depends(get_company_user)):
     latest = select(Document.document_id, func.max(Document.version).label("version")).group_by(
         Document.document_id).subquery()
     rows = db.execute(
@@ -566,7 +717,7 @@ def upload_document(
     description: str | None = Form(default=None),
     allow_duplicate: bool = Form(default=False),
     db: Session = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(get_company_user),
 ):
     """Store the file, then process it automatically.
 
@@ -580,7 +731,7 @@ def upload_document(
 
 @router.get("/{document_id}/versions", response_model=list[DocumentResponse])
 def get_document_versions(document_id: str, db: Session = Depends(get_db),
-                          _actor: User = Depends(get_current_user)):
+                          _actor: User = Depends(get_company_user)):
     versions = db.execute(
         select(Document).where(Document.document_id == document_id).order_by(Document.version.desc())
     ).scalars().all()
@@ -591,7 +742,7 @@ def get_document_versions(document_id: str, db: Session = Depends(get_db),
 
 @router.get("/{document_id}/audit")
 def get_document_audit(document_id: str, db: Session = Depends(get_db),
-                       _actor: User = Depends(get_current_user)):
+                       _actor: User = Depends(get_company_user)):
     versions = db.execute(select(Document.id, Document.version).where(
         Document.document_id == document_id)).all()
     if not versions:
@@ -618,7 +769,7 @@ def get_document_audit(document_id: str, db: Session = Depends(get_db),
 
 @router.get("/{document_id}", response_model=DocumentResponse)
 def get_document(document_id: str, db: Session = Depends(get_db),
-                 _actor: User = Depends(get_current_user)):
+                 _actor: User = Depends(get_company_user)):
     return _serialize_document(db, _document_or_404(db, document_id))
 
 
@@ -742,7 +893,7 @@ def create_document_version(
 
 @router.get("/{document_id}/download")
 def download_document(document_id: str, version: int | None = Query(default=None, ge=1),
-                      db: Session = Depends(get_db), _actor: User = Depends(get_current_user)):
+                      db: Session = Depends(get_db), _actor: User = Depends(get_company_user)):
     statement = select(Document).where(Document.document_id == document_id)
     if version is not None:
         statement = statement.where(Document.version == version)

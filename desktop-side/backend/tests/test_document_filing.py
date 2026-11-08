@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from tests import documents as build
+from tests.conftest import _make_user, login
 from tests.test_document_pipeline import assert_success, upload
 
 
@@ -104,5 +105,6 @@ def test_standard_folders_cannot_be_deleted(api, admin, employee):
     refused = api.delete(f"/api/v1/documents/folders/{tree['Buyers']['id']}", headers=admin)
     assert refused.status_code == 409
     custom = api.post("/api/v1/documents/folders", headers=admin, json={"name": "Scratch"}).json()
-    assert api.delete(f"/api/v1/documents/folders/{custom['id']}", headers=employee).status_code == 403
+    _make_user("seller", "Seller")
+    assert api.delete(f"/api/v1/documents/folders/{custom['id']}", headers=login(api, "seller")).status_code == 403
     assert api.delete("/api/v1/documents/folders/999999", headers=admin).status_code == 404

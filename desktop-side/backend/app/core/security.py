@@ -17,41 +17,45 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 # Canonical role names (users.role). Comparisons are case-insensitive.
-ADMINISTRATOR = "Administrator"
-GENERAL_MANAGER = "General Manager"
-PRESIDENT = "President"
-FILING_MANAGER = "Filing Manager"
-AGENT = "Agent"
-EMPLOYEE = "Employee"
-ROLES = (ADMINISTRATOR, GENERAL_MANAGER, PRESIDENT, FILING_MANAGER, AGENT, EMPLOYEE)
+# The four user groups confirmed in the Abellar Realty interview:
+ADMINISTRATOR = "Administrator"   # Admin / Marketing staff: runs the system day to day
+BROKER = "Broker"                 # Broker / company owner: company-wide authority
+FILING_MANAGER = "Filing Manager" # sales reports, commission vouchers, documents
+SELLER = "Seller"                 # seller / agent: own listings and records only
+ROLES = (ADMINISTRATOR, BROKER, FILING_MANAGER, SELLER)
 # Website client accounts share the users table, hashing and tokens, but are
 # not an internal role: they cannot use any internal endpoint (see
-# get_current_user) and cannot be assigned from the desktop Users page.
+# get_current_user) and cannot be assigned from the Users page. Developers
+# never get an account.
 CLIENT = "Client"
 
-MANAGEMENT_ROLES = {ADMINISTRATOR, GENERAL_MANAGER, PRESIDENT}
-FILING_ROLES = MANAGEMENT_ROLES | {FILING_MANAGER}
+# Names used before the interview, still accepted on read (tokens, old rows,
+# the retired desktop client). Migration 0016 rewrites the stored values.
+LEGACY_ROLES = {
+    "president": BROKER,
+    "general manager": ADMINISTRATOR,
+    "employee": FILING_MANAGER,
+    "agent": SELLER,
+}
 
-_ALL_PAGES = [
-    "dashboard", "properties", "partners", "clients", "transactions",
-    "documents", "media", "agents", "workforce", "analytics",
-    "forecasting", "dss", "users", "audit", "settings", "branches", "recruitment",
+MANAGEMENT_ROLES = {ADMINISTRATOR, BROKER}
+# Company staff: everyone except sellers (company-wide records and reports).
+COMPANY_ROLES = MANAGEMENT_ROLES | {FILING_MANAGER}
+FILING_ROLES = COMPANY_ROLES
+
+# Page keys each role may open in the Management System. The API enforces the
+# same boundaries independently; this list only drives what the menu shows.
+_COMPANY_PAGES = [
+    "dashboard", "reports", "properties", "partners", "clients", "transactions", "commissions",
+    "documents", "media", "agents", "recruitment", "branches", "workforce", "analytics",
+    "forecasting", "dss", "users", "audit", "settings",
 ]
-# Desktop navigation keys each role may open. The API enforces the same
-# boundaries independently; this list only drives what the UI shows.
-# Audit Logs are for the Administrator only. Every role keeps "settings",
-# but only the Administrator sees system settings there (the rest see
-# appearance and language).
 ROLE_PERMISSIONS: dict[str, list[str]] = {
-    ADMINISTRATOR: _ALL_PAGES,
-    GENERAL_MANAGER: [page for page in _ALL_PAGES if page != "audit"],
-    PRESIDENT: [page for page in _ALL_PAGES if page not in {"users", "audit"}],
-    FILING_MANAGER: ["dashboard", "properties", "partners", "clients", "transactions",
-                     "documents", "media", "agents", "settings"],
-    AGENT: ["dashboard", "properties", "partners", "clients", "transactions",
-            "documents", "media", "agents", "settings"],
-    EMPLOYEE: ["dashboard", "properties", "partners", "clients", "transactions",
-               "documents", "media", "agents", "settings"],
+    ADMINISTRATOR: _COMPANY_PAGES,
+    # The owner sees everything; the Users page is read-only for the Broker.
+    BROKER: _COMPANY_PAGES,
+    FILING_MANAGER: ["dashboard", "reports", "transactions", "commissions", "documents", "properties", "settings"],
+    SELLER: ["my-work", "my-listings", "my-deals", "my-commissions", "settings"],
 }
 
 
@@ -62,7 +66,8 @@ def canonical_role(role: str | None) -> str:
     for name in ROLES:
         if name.casefold() == lowered:
             return name
-    return EMPLOYEE
+    # Unknown or legacy names: the legacy mapping, otherwise the least access.
+    return LEGACY_ROLES.get(lowered, SELLER)
 
 
 def permissions_for(role: str | None) -> list[str]:
@@ -205,3 +210,24 @@ def require_roles(*roles: str):
 require_management = require_roles(*MANAGEMENT_ROLES)
 require_filing = require_roles(*FILING_ROLES)
 require_admin = require_roles(ADMINISTRATOR)
+
+
+def get_company_user(user: User = Depends(get_current_user)) -> User:
+    """Company staff (Administrator, Broker, Filing Manager). Seller accounts
+    are refused: company-wide records and reports are not theirs to see."""
+    if canonical_role(user.role) not in COMPANY_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Seller accounts can only open their own listings and records.",
+        )
+    return user
+
+
+def get_seller_user(user: User = Depends(get_current_user)) -> User:
+    """A seller account linked to its seller (agent) record."""
+    if canonical_role(user.role) != SELLER or not user.agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This page is for seller accounts linked to a seller record.",
+        )
+    return user

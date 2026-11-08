@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react"
 import { ImagePlus, LoaderCircle, Trash2 } from "lucide-react"
 import { Link } from "@/components/Link"
 import { ApiError } from "@/lib/auth"
-import { canFile, date, fileSize, statusLabel } from "./format"
+import { canEditListings, date, fileSize, statusLabel } from "./format"
 import { Badge, Button, Confirm, LoadState, PageHeader, Select, Tiles } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
@@ -14,7 +14,7 @@ type Media = {
   id: number; listing_id: number; file_name: string; mime_type: string; file_size: number
   width: number | null; height: number | null; orientation: string | null
   blur_score: number | null; brightness: number | null; contrast: number | null
-  quality_status: string; quality_issues: string[] | null; created_at: string
+  quality_status: string; quality_issues: string[] | null; created_at: string; media_kind?: string
 }
 type Summary = { total: number; by_quality: Record<string, number>; listings_with_media: number }
 type Thresholds = { min_resolution: string; blur_variance_poor_below: number; blur_variance_good_above: number; brightness_range: [number, number]; min_contrast_std: number; note: string }
@@ -29,10 +29,11 @@ export function MediaPage() {
   const picker = useRef<HTMLInputElement | null>(null)
   const [listing, setListing] = useState("")
   const [quality, setQuality] = useState("")
+  const [kind, setKind] = useState("PHOTO")
   const [uploading, setUploading] = useState("")
   const [toDelete, setToDelete] = useState<Media | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const editable = canFile(user?.role)
+  const editable = canEditListings(user?.role)
 
   const load = useCallback(() => Promise.all([
     api<Media[]>(`/media${listing ? `?listing_id=${listing}` : ""}`),
@@ -53,6 +54,7 @@ export function MediaPage() {
       setUploading(t("Uploading {n} of {total}…", { n: index + 1, total: files.length }))
       const body = new FormData()
       body.append("file", file)
+      body.append("kind", kind)
       try {
         const saved = await api<Media>(`/media/properties/${listing}`, { method: "POST", body })
         const shown = saved.quality_status === "GOOD" || saved.quality_status === "ACCEPTABLE"
@@ -90,6 +92,7 @@ export function MediaPage() {
         subtitle="Property photos uploaded to ALTY. Each image is checked for resolution, sharpness, brightness and contrast; only photos that pass are shown on the website."
         actions={editable && (
           <>
+            <Select label="Image type" value={kind} onChange={setKind} options={[{ value: "PHOTO", label: "Property photo" }, { value: "PERSPECTIVE", label: "Architectural perspective / project image" }]} />
             <input ref={picker} type="file" accept={IMAGE_ACCEPT} multiple className="sr-only" aria-label={t("Property photos")} onChange={(e) => void upload(e.target.files)} />
             <Button variant="primary" disabled={!listing || !!uploading} onClick={() => picker.current?.click()}
               title={listing ? t("Upload photos to the selected property") : t("Choose a property first")}>
@@ -148,7 +151,7 @@ function MediaCard({ media: m, title, canDelete, onDelete }: { media: Media; tit
         {url ? <img src={url} alt={m.file_name} className="h-full w-full object-cover" /> : (
           <div className="flex h-full items-center justify-center text-xs text-ab-faint">{error || <LoaderCircle className="h-5 w-5 animate-spin text-ab-accent" />}</div>
         )}
-        <span className="absolute left-2 top-2"><Badge value={m.quality_status} /></span>
+        <span className="absolute left-2 top-2 flex flex-wrap gap-1"><Badge value={m.quality_status} />{m.media_kind === "PERSPECTIVE" && <span className="rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">{t("Perspective")}</span>}</span>
       </div>
       <div className="space-y-1.5 p-3 text-xs">
         <p className="truncate text-sm font-semibold">{m.file_name}</p>

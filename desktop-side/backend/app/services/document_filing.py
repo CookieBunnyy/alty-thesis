@@ -22,7 +22,7 @@ from app.models.agent import Agent
 from app.models.document import Document, DocumentFolder
 
 # Category folders (also created by GET /documents/folders).
-DEFAULT_FOLDERS = ("Properties", "Buyers", "Sellers", "Agents", "Transactions",
+DEFAULT_FOLDERS = ("Commission Vouchers", "Properties", "Buyers", "Sellers", "Agents", "Transactions",
                    "Financial", "Contracts", "Archived")
 FINANCIAL_SUBFOLDERS = ("Receipts", "Vouchers", "Proof of Payment", "Invoices")
 
@@ -40,6 +40,8 @@ CATEGORY_BY_TYPE: dict[str, tuple[str, ...]] = {
     "PROPERTY_INFORMATION": ("Properties",),
     "RECEIPT": ("Financial", "Receipts"),
     "VOUCHER": ("Financial", "Vouchers"),
+    # The primary document Abellar Realty keeps (interview).
+    "COMMISSION_VOUCHER": ("Commission Vouchers",),
     "PROOF_OF_PAYMENT": ("Financial", "Proof of Payment"),
     "INVOICE": ("Financial", "Invoices"),
 }

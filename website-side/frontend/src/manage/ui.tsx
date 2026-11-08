@@ -134,6 +134,11 @@ const BADGE: Record<string, string> = {
   ONBOARDED: "bg-ab-success/15 text-ab-success",
   REJECTED: "bg-ab-danger/15 text-ab-danger",
   WITHDRAWN: "bg-ab-hover text-ab-muted",
+  INQUIRY: "bg-ab-info/15 text-ab-info",
+  VIEWING: "bg-ab-warning/15 text-ab-warning",
+  DEVELOPER_PROCESSING: "bg-ab-accent/15 text-ab-accent",
+  CLOSED: "bg-ab-success/15 text-ab-success",
+  LOST: "bg-ab-danger/15 text-ab-danger",
 }
 
 export function Badge({ value }: { value: unknown }) {

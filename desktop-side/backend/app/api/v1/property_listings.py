@@ -7,15 +7,18 @@ Information documents or from the central (Supabase) listing sync.
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.services import lot_geometry
-from app.core.security import FILING_ROLES, get_current_user, require_management, require_roles
+from app.core.security import MANAGEMENT_ROLES, get_current_user, require_management, require_roles, get_company_user
 from app.core.supabase import supabase
 from app.models.document import Document
 from app.models.branch import Branch
+from app.models.agent import Agent
+from app.models.listing_assignment import ListingAssignment
 from app.models.partner import Partner
 from app.models.property_listing import PropertyListing
 from app.models.transaction import PropertyTransaction
@@ -26,6 +29,7 @@ from app.schemas.property_listing import (
     PropertyListingStatusSummary,
     PropertyListingUpdate,
 )
+from app.services.accreditation import marketing_of
 from app.services.audit import record_audit
 from app.services.client_sync import reconcile_property_status
 from app.services.cloud_sync import cloud_sync_enabled, try_push_pending
@@ -35,7 +39,7 @@ router = APIRouter(prefix="/property-listings", tags=["Property Listings"])
 
 PROPERTY_STATUSES = ("AVAILABLE", "RESERVED", "SOLD", "ON_HOLD", "UNAVAILABLE")
 MANUAL_STATUSES = {"AVAILABLE", "ON_HOLD", "UNAVAILABLE"}
-require_editor = require_roles(*FILING_ROLES)
+require_editor = require_roles(*MANAGEMENT_ROLES)  # listings are managed by Admin / Marketing staff and the Broker
 
 
 def _listing_or_404(db: Session, listing_id: int) -> PropertyListing:
@@ -52,7 +56,7 @@ def get_property_listings(
     limit: int = Query(default=1000, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_company_user),
 ):
     statement = select(PropertyListing)
     if status_filter:
@@ -69,7 +73,7 @@ def get_property_listings(
 
 
 @router.get("/status-summary", response_model=PropertyListingStatusSummary)
-def get_property_status_summary(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_property_status_summary(db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     rows = db.execute(
         select(func.upper(PropertyListing.status), func.count()).group_by(func.upper(PropertyListing.status))
     ).all()
@@ -80,13 +84,13 @@ def get_property_status_summary(db: Session = Depends(get_db), _user: User = Dep
 
 @router.get("/{listing_id}", response_model=PropertyListingResponse)
 def get_property_listing(listing_id: int, db: Session = Depends(get_db),
-                         _user: User = Depends(get_current_user)):
+                         _user: User = Depends(get_company_user)):
     return _listing_or_404(db, listing_id)
 
 
 @router.get("/{listing_id}/history")
 def get_property_history(listing_id: int, db: Session = Depends(get_db),
-                         _user: User = Depends(get_current_user)):
+                         _user: User = Depends(get_company_user)):
     """Transactions (reservation -> sale) and documents for one property."""
     listing = _listing_or_404(db, listing_id)
     transactions = db.execute(
@@ -262,3 +266,94 @@ def sync_property_listings(db: Session = Depends(get_db), user: User = Depends(r
     db.commit()
     return {**pulled, "pushed": pushed}
 
+
+# ---- marketing approval and seller assignments ------------------------------------------
+
+class MarketingInput(BaseModel):
+    action: str = Field(pattern="^(approve|withdraw)$")
+    note: str | None = Field(default=None, max_length=500)
+
+
+class AssignmentInput(BaseModel):
+    agent_id: str = Field(min_length=1, max_length=32)
+
+
+def _partner_of(db: Session, listing: PropertyListing) -> Partner | None:
+    return db.get(Partner, listing.partner_id) if listing.partner_id else None
+
+
+def _assignments(db: Session, listing_id: int) -> list[dict]:
+    rows = db.execute(select(ListingAssignment, Agent.full_name).join(Agent, Agent.agent_id == ListingAssignment.agent_id)
+                      .where(ListingAssignment.listing_id == listing_id, ListingAssignment.removed_at.is_(None))
+                      .order_by(ListingAssignment.assigned_at)).all()
+    return [{"agent_id": a.agent_id, "full_name": name, "assigned_by": a.assigned_by, "assigned_at": a.assigned_at}
+            for a, name in rows]
+
+
+def _marketing_response(db: Session, listing: PropertyListing) -> dict:
+    return {**marketing_of(listing, _partner_of(db, listing)), "sellers": _assignments(db, listing.listing_id)}
+
+
+@router.get("/{listing_id}/marketing")
+def get_marketing(listing_id: int, db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
+    """Accreditation, marketing approval and the sellers marketing this listing."""
+    return _marketing_response(db, _listing_or_404(db, listing_id))
+
+
+@router.post("/{listing_id}/marketing")
+def set_marketing(listing_id: int, payload: MarketingInput, db: Session = Depends(get_db),
+                  user: User = Depends(require_editor)):
+    """Approve a listing for marketing (needs verified, unexpired developer
+    accreditation) or withdraw it from marketing."""
+    listing = _listing_or_404(db, listing_id)
+    state = marketing_of(listing, _partner_of(db, listing))
+    if payload.action == "approve":
+        if not state["can_approve"]:
+            raise HTTPException(status_code=409, detail="This listing can't be approved for marketing: "
+                                + (state["accreditation"]["reason"] or "accreditation is not verified"))
+        listing.marketing_status = "APPROVED"
+        listing.marketing_approved_by = user.full_name or user.username
+        listing.marketing_approved_at = datetime.utcnow()
+    else:
+        listing.marketing_status = "WITHDRAWN"
+    record_audit(db, "PROPERTY_MARKETING_" + ("APPROVED" if payload.action == "approve" else "WITHDRAWN"),
+                 actor=user, entity_type="property_listings", entity_id=listing_id,
+                 details={"note": payload.note, "accreditation": state["accreditation"]["status"]})
+    db.commit()
+    return _marketing_response(db, listing)
+
+
+@router.post("/{listing_id}/sellers", status_code=201)
+def assign_seller(listing_id: int, payload: AssignmentInput, db: Session = Depends(get_db),
+                  user: User = Depends(require_editor)):
+    """Give a listing to a seller to market."""
+    listing = _listing_or_404(db, listing_id)
+    agent = db.get(Agent, payload.agent_id)
+    if agent is None:
+        raise HTTPException(status_code=422, detail="Unknown seller")
+    active = db.execute(select(ListingAssignment).where(
+        ListingAssignment.listing_id == listing_id, ListingAssignment.agent_id == agent.agent_id,
+        ListingAssignment.removed_at.is_(None))).scalar_one_or_none()
+    if active is None:
+        db.add(ListingAssignment(listing_id=listing_id, agent_id=agent.agent_id,
+                                 assigned_by=user.full_name or user.username))
+        record_audit(db, "LISTING_ASSIGNED", actor=user, entity_type="property_listings", entity_id=listing_id,
+                     details={"agent_id": agent.agent_id, "seller": agent.full_name})
+        db.commit()
+    return _marketing_response(db, listing)
+
+
+@router.delete("/{listing_id}/sellers/{agent_id}")
+def unassign_seller(listing_id: int, agent_id: str, db: Session = Depends(get_db),
+                    user: User = Depends(require_editor)):
+    listing = _listing_or_404(db, listing_id)
+    active = db.execute(select(ListingAssignment).where(
+        ListingAssignment.listing_id == listing_id, ListingAssignment.agent_id == agent_id,
+        ListingAssignment.removed_at.is_(None))).scalar_one_or_none()
+    if active is None:
+        raise HTTPException(status_code=404, detail="This seller isn't assigned to the listing")
+    active.removed_at, active.removed_by = datetime.utcnow(), user.full_name or user.username
+    record_audit(db, "LISTING_UNASSIGNED", actor=user, entity_type="property_listings", entity_id=listing_id,
+                 details={"agent_id": agent_id})
+    db.commit()
+    return _marketing_response(db, listing)

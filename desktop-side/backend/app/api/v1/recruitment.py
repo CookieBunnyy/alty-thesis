@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import require_management
+from app.core.security import SELLER, get_password_hash, require_management
 from app.models.agent import DESIGNATIONS, Agent
 from app.models.branch import Branch
 from app.models.user import User
@@ -34,6 +34,11 @@ class ApplicantInput(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     phone_number: str | None = Field(default=None, max_length=40)
     address: str | None = Field(default=None, max_length=500)
+    birthday: date | None = None
+    recruiter_agent_id: str | None = Field(default=None, max_length=32)
+    recruiter_name: str | None = Field(default=None, max_length=200)
+    not_bound_to_other_broker: bool | None = None
+    declaration_date: date | None = None
     branch_id: int | None = None
     desired_designation: str | None = None
     source: str | None = None
@@ -45,7 +50,7 @@ class ApplicantInput(BaseModel):
     notes: str | None = None
 
     @field_validator("full_name", "email", "phone_number", "address", "desired_designation", "source",
-                     "license_number", "notes", mode="before")
+                     "license_number", "notes", "recruiter_agent_id", "recruiter_name", mode="before")
     @classmethod
     def blank_is_none(cls, value):
         if isinstance(value, str):
@@ -90,6 +95,14 @@ class StageInput(BaseModel):
         return value
 
 
+class SellerAccountInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=3, max_length=100)
+    password: str = Field(min_length=8, max_length=128)
+    email: str | None = Field(default=None, max_length=254)
+
+
 class OnboardInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -97,6 +110,8 @@ class OnboardInput(BaseModel):
     branch_id: int | None = None
     work_area: str | None = Field(default=None, max_length=255)
     hired_on: date | None = None
+    # Optionally create the seller's own login, linked to the new seller record.
+    account: SellerAccountInput | None = None
 
     @field_validator("designation")
     @classmethod
@@ -106,10 +121,15 @@ class OnboardInput(BaseModel):
         return value
 
 
-def _serialize(applicant: AgentApplicant, branches: dict[int, str]) -> dict:
+def _serialize(applicant: AgentApplicant, branches: dict[int, str], recruiters: dict[str, str] | None = None) -> dict:
+    recruiters = recruiters or {}
     return {
         "id": applicant.id, "full_name": applicant.full_name, "email": applicant.email,
-        "phone_number": applicant.phone_number, "address": applicant.address,
+        "phone_number": applicant.phone_number, "address": applicant.address, "birthday": applicant.birthday,
+        "recruiter_agent_id": applicant.recruiter_agent_id,
+        "recruiter_name": applicant.recruiter_name or recruiters.get(applicant.recruiter_agent_id),
+        "not_bound_to_other_broker": applicant.not_bound_to_other_broker,
+        "declaration_date": applicant.declaration_date,
         "branch_id": applicant.branch_id, "branch_name": branches.get(applicant.branch_id),
         "desired_designation": applicant.desired_designation, "source": applicant.source,
         "experience_years": float(applicant.experience_years) if applicant.experience_years is not None else None,
@@ -130,6 +150,15 @@ def _applicant_or_404(db: Session, applicant_id: int) -> AgentApplicant:
     if applicant is None:
         raise HTTPException(status_code=404, detail="Applicant not found")
     return applicant
+
+
+def _recruiter_names(db: Session) -> dict[str, str]:
+    return dict(db.execute(select(Agent.agent_id, Agent.full_name)).all())
+
+
+def _check_recruiter(db: Session, agent_id: str | None) -> None:
+    if agent_id is not None and db.get(Agent, agent_id) is None:
+        raise HTTPException(status_code=422, detail="That recruiter isn't a seller in ALTY")
 
 
 def _check_branch(db: Session, branch_id: int | None) -> None:
@@ -157,7 +186,8 @@ def next_agent_id(db: Session) -> str:
 def list_applicants(db: Session = Depends(get_db), _user: User = Depends(require_management)):
     names = _branch_names(db)
     rows = db.execute(select(AgentApplicant).order_by(AgentApplicant.created_at.desc())).scalars()
-    return [_serialize(a, names) for a in rows]
+    recruiters = _recruiter_names(db)
+    return [_serialize(a, names, recruiters) for a in rows]
 
 
 @router.get("/summary")
@@ -179,6 +209,7 @@ def create_applicant(payload: ApplicantInput, db: Session = Depends(get_db),
     if not payload.full_name:
         raise HTTPException(status_code=422, detail="Enter the applicant's name")
     _check_branch(db, payload.branch_id)
+    _check_recruiter(db, payload.recruiter_agent_id)
     values = payload.model_dump()
     values["has_license"] = bool(values["has_license"])
     applicant = AgentApplicant(**values, status="APPLIED", history=[],
@@ -189,7 +220,7 @@ def create_applicant(payload: ApplicantInput, db: Session = Depends(get_db),
     record_audit(db, "APPLICANT_CREATED", actor=actor, entity_type="agent_applicants", entity_id=applicant.id,
                  details={"name": applicant.full_name})
     db.commit()
-    return _serialize(applicant, _branch_names(db))
+    return _serialize(applicant, _branch_names(db), _recruiter_names(db))
 
 
 @router.put("/applicants/{applicant_id}")
@@ -200,6 +231,7 @@ def update_applicant(applicant_id: int, payload: ApplicantInput, db: Session = D
     if "full_name" in values and not values["full_name"]:
         raise HTTPException(status_code=422, detail="The name can't be empty")
     _check_branch(db, values.get("branch_id"))
+    _check_recruiter(db, values.get("recruiter_agent_id"))
     if "has_license" in values:
         values["has_license"] = bool(values["has_license"])
     changes = {}
@@ -211,7 +243,7 @@ def update_applicant(applicant_id: int, payload: ApplicantInput, db: Session = D
         record_audit(db, "APPLICANT_UPDATED", actor=actor, entity_type="agent_applicants", entity_id=applicant.id,
                      details=changes)
     db.commit()
-    return _serialize(applicant, _branch_names(db))
+    return _serialize(applicant, _branch_names(db), _recruiter_names(db))
 
 
 @router.post("/applicants/{applicant_id}/stage")
@@ -227,13 +259,16 @@ def move_applicant(applicant_id: int, payload: StageInput, db: Session = Depends
                                                     f"{NEXT.get(applicant.status, 'onboarding')}")
     if target == "REJECTED" and not payload.note:
         raise HTTPException(status_code=422, detail="Give a reason for rejecting the applicant")
+    if target == "APPROVED" and applicant.not_bound_to_other_broker is not True:
+        raise HTTPException(status_code=409, detail="Record the applicant's declaration that they are not bound to "
+                                                    "another broker before approving")
     previous = applicant.status
     applicant.status = target
     _log(applicant, target, actor, payload.note)
     record_audit(db, "APPLICANT_STAGE_CHANGED", actor=actor, entity_type="agent_applicants", entity_id=applicant.id,
                  details={"from": previous, "to": target, "note": payload.note})
     db.commit()
-    return _serialize(applicant, _branch_names(db))
+    return _serialize(applicant, _branch_names(db), _recruiter_names(db))
 
 
 @router.post("/applicants/{applicant_id}/onboard")
@@ -248,9 +283,13 @@ def onboard_applicant(applicant_id: int, payload: OnboardInput, db: Session = De
     agent = Agent(agent_id=next_agent_id(db), full_name=applicant.full_name, phone_number=applicant.phone_number,
                   agent_location=applicant.address, status="ACTIVE", sync_status="PENDING",
                   branch_id=branch_id, designation=payload.designation or applicant.desired_designation or "Trainee Agent",
-                  work_area=payload.work_area, hired_on=payload.hired_on or date.today())
+                  work_area=payload.work_area, hired_on=payload.hired_on or date.today(),
+                  recruited_by_agent_id=applicant.recruiter_agent_id, recruiter_name=applicant.recruiter_name)
     db.add(agent)
     db.flush()
+    account = None
+    if payload.account is not None:
+        account = _create_seller_account(db, agent, applicant, payload.account)
     applicant.status = "ONBOARDED"
     applicant.agent_id = agent.agent_id
     _log(applicant, "ONBOARDED", actor, f"Agent record {agent.agent_id} created")
@@ -258,8 +297,26 @@ def onboard_applicant(applicant_id: int, payload: OnboardInput, db: Session = De
                  details={"agent_id": agent.agent_id, "name": agent.full_name})
     db.commit()
     try_push_pending(db)
-    return {**_serialize(applicant, _branch_names(db)), "agent": {"agent_id": agent.agent_id,
-                                                                  "full_name": agent.full_name}}
+    return {**_serialize(applicant, _branch_names(db), _recruiter_names(db)),
+            "agent": {"agent_id": agent.agent_id, "full_name": agent.full_name},
+            "account": {"username": account.username} if account else None}
+
+
+def _create_seller_account(db: Session, agent: Agent, applicant: AgentApplicant, data: SellerAccountInput) -> User:
+    """The seller's own login (role Seller), linked to their seller record."""
+    username = data.username.strip()
+    if db.scalar(select(User.id).where(func.lower(User.username) == username.lower())):
+        raise HTTPException(status_code=409, detail="That username is already taken")
+    email = (data.email or applicant.email or "").strip().lower() or None
+    if email and not EMAIL.match(email):
+        raise HTTPException(status_code=422, detail="Enter a valid email address")
+    if email and db.scalar(select(User.id).where(func.lower(User.email) == email)):
+        raise HTTPException(status_code=409, detail="Another account already uses that email")
+    user = User(username=username, full_name=agent.full_name, role=SELLER, agent_id=agent.agent_id, email=email,
+                password_hash=get_password_hash(data.password), is_active=True)
+    db.add(user)
+    db.flush()
+    return user
 
 
 @router.delete("/applicants/{applicant_id}", status_code=204)

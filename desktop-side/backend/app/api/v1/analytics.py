@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import MANAGEMENT_ROLES, get_current_user, require_roles
+from app.core.security import MANAGEMENT_ROLES, get_current_user, require_roles, get_company_user
 from app.models.user import User
 from app.services import analytics
 
@@ -13,13 +13,13 @@ require_insight = require_roles(*MANAGEMENT_ROLES)
 
 
 @router.get("/overview")
-def get_overview(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_overview(db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     return analytics.overview(db)
 
 
 @router.get("/monthly")
 def get_monthly(months: int | None = Query(default=None, ge=1, le=120),
-                db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+                db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     return analytics.monthly_series(db, months)
 
 

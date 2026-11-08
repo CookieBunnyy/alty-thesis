@@ -8,7 +8,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.core.config import settings
 from app.core.supabase import supabase
@@ -52,6 +52,11 @@ def cancel_reservation(reservation: PropertyTransaction, reason: str, cancelled_
     reservation.cancelled_at = _utcnow()
     reservation.cancelled_by = cancelled_by
     reservation.sync_status = "PENDING"
+    session = object_session(reservation)
+    if session is not None:
+        from app.services import deal_pipeline  # imported here: deal_pipeline doesn't depend on client_sync
+
+        deal_pipeline.record_cancellation(session, reservation, reason, cancelled_by)
     client = reservation.client
     if client.property_id == reservation.property_id and client.status == "RESERVED":
         client.status = "CANCELLED"

@@ -98,6 +98,11 @@ class PropertyListingResponse(BaseModel):
     boundary_measurements: dict | None = None
     media_ids: list[int] = Field(default_factory=list)
     branch_id: int | None = None
+    project_name: str | None = None
+    floor_area_sqm: float | None = None
+    marketing_status: str = "DRAFT"
+    marketing_approved_by: str | None = None
+    marketing_approved_at: datetime | None = None
     boundary_updated_at: datetime | None = None
     boundary_updated_by: str | None = None
     status: PropertyStatus = "AVAILABLE"
@@ -141,6 +146,8 @@ class PropertyListingUpdate(BaseModel):
     garage_spaces: int | None = Field(default=None, ge=0)
     lot_area_sqm: Decimal | None = Field(default=None, gt=0, le=100_000_000, max_digits=14, decimal_places=2)
     branch_id: int | None = None
+    project_name: str | None = Field(default=None, max_length=200)
+    floor_area_sqm: Decimal | None = Field(default=None, gt=0, le=10_000_000, max_digits=14, decimal_places=2)
     status: str | None = None
     partner_id: int | None = None
 

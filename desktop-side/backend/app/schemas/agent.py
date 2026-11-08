@@ -38,6 +38,9 @@ class AgentResponse(BaseModel):
     designation: str | None = None
     work_area: str | None = None
     hired_on: date | None = None
+    recruited_by_agent_id: str | None = None
+    recruiter_name: str | None = None
+    commission_visible: bool = False
     # Changes whenever the profile photo changes; None when there is no photo.
     photo_version: int | None = None
     status: str

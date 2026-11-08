@@ -2,11 +2,22 @@
 
 from decimal import Decimal
 
+import pytest
+
 from app.models.partner import Partner
 from app.models.property_listing import PropertyListing
 from app.services.closing_costs import breakdown, location_of
 from tests.test_cancellations import _reserve
 
+
+
+@pytest.fixture(autouse=True)
+def financial_features_on(monkeypatch):
+    """Off by default until Abellar confirms them; these tests exercise them."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "PAYMENT_SCHEDULE_ENABLED", True)
+    monkeypatch.setattr(settings, "COST_ESTIMATE_ENABLED", True)
 
 def _listing(village, category="House and Lot"):
     return PropertyListing(title="Home", village_name=village, category=category)

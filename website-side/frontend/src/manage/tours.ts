@@ -47,7 +47,7 @@ export const TOURS: Record<string, (user: StaffUser | null) => TourStep[]> = {
 
   "/manage/transactions": (user) => listPage("Transactions", "Every reservation and sale. Transactions come from processed documents and are never typed in by hand, so each one stays tied to the documents that prove it.", { actions: isManagement(user?.role) ? SYNC : undefined }),
 
-  "/manage/agents": (user) => listPage("Agents", "Your agents and the work recorded for each one: clients, reservations, sales and verified client reviews.", { actions: isManagement(user?.role) ? SYNC : undefined }),
+  "/manage/agents": (user) => listPage("Sellers", "Your sellers (agents) and the work recorded for each one: clients, reservations, sales, verified client reviews, team and assessments.", { actions: isManagement(user?.role) ? SYNC : undefined }),
 
   "/manage/partners": () => listPage("Partners / Developers", "Developers and partner companies Abellar Realty works with. Active partners appear on the website's home page.", { actions: "Add a new partner here. To link a listing to its developer, open the listing on the Properties page." }),
 
@@ -88,9 +88,23 @@ export const TOURS: Record<string, (user: StaffUser | null) => TourStep[]> = {
     { target: "workforce-plan", title: "Demand vs capacity", body: "Expected deals next month divided by the deals one agent handles gives the agents needed, per branch. When a branch is short, ALTY suggests moving agents from a branch with spare capacity first, then recruiting. You can change the deals-per-agent figure and recalculate." },
   ],
 
-  "/manage/branches": () => listPage("Branches", "Your offices side by side: agents, listings, revenue, commission, the month-to-month change, the trend and next month's forecast. A sale counts for its agent's branch.", {
-    actions: "Add a branch here. Then give each agent a branch on the Agents page and each listing a branch on the Properties page.",
-    table: "Select a branch to see its monthly revenue, forecast and agents. Sort by any column to rank the branches.",
+  "/manage/reports": () => [
+    { target: "page-header", title: "Reports", body: "Recorded sales and recruitment, the two things management monitors. Choose the period, how to group it (day, month or year), and a seller, recruiter, team or project." },
+    { target: "page-actions", title: "Print", body: "Print the whole report, or use Export PDF on any table." },
+  ],
+
+  "/manage/commissions": () => listPage("Commissions", "Each sale or rental commission with its agreed amount, approval, release and supporting commission voucher. ALTY never assumes a commission rate.", {
+    actions: "Record a new commission. Choose a commission structure only if Abellar has confirmed one; otherwise enter the agreed amount.",
+    table: "Select a commission to approve it, record its release, or attach its voucher.",
+  }),
+
+  "/manage/my-listings": () => listPage("My listings", "Listings assigned to you, and every other listing approved for marketing. You can update the description and amenities of listings assigned to you."),
+
+  "/manage/my-deals": () => listPage("My deals", "Your buyers from inquiry to closing. Record an inquiry, arrange a physical or virtual viewing, or mark a deal lost; reservation and closing are recorded by Abellar Realty."),
+
+  "/manage/branches": () => listPage("Teams / Clusters", "Each team or cluster of sellers and its recorded sales. A sale counts for its seller's team.", {
+    actions: "Add a team or cluster here. Then give each seller a team on the Sellers page.",
+    table: "Select a team to see its monthly sales, forecast and sellers.",
   }),
 
   "/manage/recruitment": () => listPage("Recruitment", "Agent applicants from application to onboarding: Applied, Screening, Interview, Approved, then Onboarded. Onboarding creates the agent record with a branch and designation.", {

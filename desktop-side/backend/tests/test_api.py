@@ -35,7 +35,7 @@ def test_protected_endpoints_require_authentication(api):
 
 def test_me_returns_real_role_and_permissions(api, employee):
     me = api.get("/api/v1/auth/me", headers=employee).json()
-    assert me["role"] == "Employee"
+    assert me["role"] == "Filing Manager"  # stored as the legacy "Employee"
     assert "users" not in me["permissions"] and "documents" in me["permissions"]
 
 
@@ -47,15 +47,15 @@ def test_role_restrictions(api, admin, employee):
 
 
 def test_audit_and_system_settings_are_administrator_only(api, admin, employee):
-    _make_user("gm", "General Manager")
+    # The Broker (company owner; the legacy "President") sees the audit trail
+    # but system settings stay with the Administrator.
     _make_user("pres", "President")
-    for username in ("gm", "pres"):
-        headers = login(api, username)
-        me = api.get("/api/v1/auth/me", headers=headers).json()
-        assert "audit" not in me["permissions"] and "settings" in me["permissions"]
-        assert api.get("/api/v1/audit", headers=headers).status_code == 403
-        assert api.get("/api/v1/system/settings", headers=headers).status_code == 403
-        assert api.post("/api/v1/system/sync/push", headers=headers).status_code == 403
+    headers = login(api, "pres")
+    me = api.get("/api/v1/auth/me", headers=headers).json()
+    assert me["role"] == "Broker" and "audit" in me["permissions"] and "settings" in me["permissions"]
+    assert api.get("/api/v1/system/settings", headers=headers).status_code == 403
+    assert api.post("/api/v1/system/sync/push", headers=headers).status_code == 403
+    assert api.get("/api/v1/audit", headers=employee).status_code == 403
     assert api.get("/api/v1/system/settings", headers=employee).status_code == 403
     # Everyone still sees the sync status shown in the header.
     assert api.get("/api/v1/system/sync", headers=employee).status_code == 200
@@ -85,7 +85,7 @@ def test_user_management_and_last_admin_protection(api, admin):
     login = api.post("/api/v1/auth/login", data={"username": "filing", "password": "password123"})
     assert login.status_code == 403
     me = api.get("/api/v1/auth/me", headers=admin).json()
-    demote = api.put(f"/api/v1/users/{me['id']}", headers=admin, json={"role": "Employee"})
+    demote = api.put(f"/api/v1/users/{me['id']}", headers=admin, json={"role": "Filing Manager"})
     assert demote.status_code == 409
     assert api.post("/api/v1/users", headers=admin, json={
         "username": "x1", "full_name": "X", "password": "password123", "role": "Wizard"}).status_code == 422

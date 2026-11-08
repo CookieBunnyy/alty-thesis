@@ -261,11 +261,13 @@ def agent_kpis(db: Session, agent_id: str, start: date, end: date) -> dict:
     sales = [float(a or 0) for t, s, a in rows if t == "SOLD" and s == "COMPLETED"]
     deals = [r for r in rows if r[1] != "CANCELLED"]
     cancelled = sum(1 for r in rows if r[1] == "CANCELLED")
-    rate = analytics.commission_rates(db).get(agent_id, settings.DEFAULT_COMMISSION_RATE)
+    from app.services import commissions
+
+    recorded = sum(row["amount"] for row in commissions.counted(db, agent_id=agent_id) if start <= row["day"] <= end)
     rating, reviews = db.execute(select(func.avg(AgentReview.rating), func.count())
                                  .where(AgentReview.agent_id == agent_id)).one()
     return {"deals": len(deals), "completed_sales": len(sales), "sales_value": round(sum(sales), 2),
-            "commission": round(sum(sales) * rate, 2), "cancellations": cancelled,
+            "commission": round(recorded, 2), "cancellations": cancelled,
             "conversion": round(len(sales) / len(deals) * 100, 1) if deals else None,
             "client_rating": round(float(rating), 2) if rating is not None else None, "reviews": int(reviews or 0)}
 
@@ -293,7 +295,6 @@ def assessment_draft(db: Session, agent: Agent, start: date, end: date) -> dict:
 
 def agent_commission(db: Session, agent_id: str, months: int = 12) -> dict:
     series = analytics.monthly_series(db, months, agent_id=agent_id)
-    rate = analytics.commission_rates(db).get(agent_id, settings.DEFAULT_COMMISSION_RATE)
-    return {"rate": rate, "months": [{"month": r["month"], "sales": r["sales"], "revenue": r["revenue"],
+    return {"rate": None, "months": [{"month": r["month"], "sales": r["sales"], "revenue": r["revenue"],
                                       "commission": r["commission"]} for r in series],
             "total": round(sum(r["commission"] for r in series), 2)}

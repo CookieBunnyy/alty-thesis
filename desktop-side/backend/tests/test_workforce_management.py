@@ -76,14 +76,10 @@ def test_listing_branch(api, admin, db):
     assert saved.status_code == 200 and saved.json()["branch_id"] == branch
 
 
-def test_branch_comparison_and_commission(api, admin, employee, agents, db):
+def test_branch_comparison_and_recorded_commission(api, admin, employee, agents, db):
     north, south = _branch(api, admin, "North"), _branch(api, admin, "South")
     api.put(f"{API}/agents/{agents[0]}/assignment", headers=admin, json={"branch_id": north})
     api.put(f"{API}/agents/{agents[1]}/assignment", headers=admin, json={"branch_id": south})
-    # agents[0] has a recorded 5% rate; the others use the 3% default.
-    agent = db.get(Agent, agents[0])
-    agent.total_sales, agent.total_commission = Decimal(10_000_000), Decimal(500_000)
-    db.commit()
     for months_ago in range(1, 8):
         _deal(db, agents[0], 2_000_000 + months_ago * 100_000, months_ago)
         _deal(db, agents[1], 1_000_000, months_ago)
@@ -95,22 +91,28 @@ def test_branch_comparison_and_commission(api, admin, employee, agents, db):
     rows = {row["name"]: row for row in body["branches"]}
     assert set(rows) == {"North", "South", "No branch"}
     assert rows["North"]["last_month"]["revenue"] == 2_100_000
-    assert rows["North"]["last_month"]["commission"] == 105_000          # 5%
-    assert rows["South"]["last_month"]["commission"] == 30_000           # 3% default
     assert rows["No branch"]["totals"]["revenue"] == 3_000_000
-    assert rows["North"]["trend_per_month"] < 0                          # older months sold more
-    assert rows["North"]["forecast_status"] == "estimated" and body["best_last_month"] == "North"
+    assert rows["North"]["forecast_status"] == "estimated"
+    # No commission is assumed: nothing counts until a commission is recorded.
+    assert rows["North"]["last_month"]["commission"] == 0
 
-    # Commission is a Business Outlook measure like the others.
-    outlook = api.get(f"{API}/intelligence/forecast?metric=commission&horizon=2", headers=admin)
-    assert outlook.status_code == 200, outlook.text
-    history = {p["month"]: p["value"] for p in outlook.json()["forecast"]["history"]}
+    sales = {t["agent_id"]: t for t in api.get(f"{API}/transactions", headers=admin).json()
+             if t["transaction_date"].startswith("%04d-%02d" % _months_back(1))}
+    for agent_id, amount in ((agents[0], "84000"), (agents[1], "25000")):
+        made = api.post(f"{API}/commissions", headers=admin, json={"transaction_id": sales[agent_id]["transaction_id"],
+                                                                   "amount": amount})
+        assert made.status_code == 201, made.text
+    body = api.get(f"{API}/branches/comparison", headers=admin).json()
+    rows = {row["name"]: row for row in body["branches"]}
+    assert rows["North"]["last_month"]["commission"] == 84_000 and rows["South"]["last_month"]["commission"] == 25_000
     key = "%04d-%02d" % _months_back(1)
-    assert history[key] == 105_000 + 30_000 + 90_000
+    history = {p["month"]: p["value"] for p in api.get(f"{API}/intelligence/forecast?metric=commission",
+                                                       headers=admin).json()["forecast"]["history"]}
+    assert history[key] == 109_000
     month = api.get(f"{API}/intelligence/outlook/month?month={key}&metric=commission", headers=admin).json()
-    assert month["total"] == 225_000 and {round(i["commission_rate"], 2) for i in month["items"]} == {0.05, 0.03}
+    assert month["total"] == 109_000 and len(month["items"]) == 2
     agent_commission = api.get(f"{API}/agents/{agents[0]}/commission?months=3", headers=admin).json()
-    assert agent_commission["rate"] == 0.05 and len(agent_commission["months"]) == 3
+    assert agent_commission["rate"] is None and agent_commission["total"] == 84_000
 
 
 # ---- demand vs capacity ------------------------------------------------------------------
@@ -150,7 +152,8 @@ def test_recruitment_pipeline_onboards_an_agent(api, admin, employee, agents, db
     assert api.post(base, headers=admin, json={"full_name": "Jo", "email": "bad"}).status_code == 422
     created = api.post(base, headers=admin, json={"full_name": "Jose Rizal", "phone_number": "0917 000 0000",
                                                   "branch_id": branch, "desired_designation": "Sales Agent",
-                                                  "source": "referral", "has_license": True})
+                                                  "source": "referral", "has_license": True,
+                                                  "not_bound_to_other_broker": True})
     assert created.status_code == 201, created.text
     applicant = created.json()
     assert applicant["status"] == "APPLIED" and applicant["source"] == "REFERRAL" and len(applicant["history"]) == 1
@@ -211,3 +214,40 @@ def test_assessments_use_recorded_figures(api, admin, agents, db):
 
 def test_commission_rate_defaults():
     assert analytics.METRICS == {"revenue", "transactions", "sales", "commission"}
+
+
+def test_recruitment_details_and_seller_login(api, admin, agents, db):
+    team = _branch(api, admin, "San Pablo Team")
+    base = f"{API}/recruitment/applicants"
+    made = api.post(base, headers=admin, json={
+        "full_name": "Rosa Linda", "birthday": "1996-04-12", "phone_number": "0917 111 2222",
+        "address": "San Pablo, Laguna", "email": "rosa@example.com", "recruiter_agent_id": agents[0],
+        "branch_id": team})
+    assert made.status_code == 201, made.text
+    applicant = made.json()
+    assert applicant["birthday"] == "1996-04-12" and applicant["recruiter_name"] == "Angela Cruz"
+    assert applicant["branch_name"] == "San Pablo Team"
+    assert api.post(base, headers=admin, json={"full_name": "X", "recruiter_agent_id": "AGT-NOPE"}).status_code == 422
+    stage = f"{base}/{applicant['id']}/stage"
+    for status in ("SCREENING", "INTERVIEW"):
+        api.post(stage, headers=admin, json={"status": status})
+    # Approval needs the declaration that the recruit isn't bound to another broker.
+    refused = api.post(stage, headers=admin, json={"status": "APPROVED"})
+    assert refused.status_code == 409 and "another broker" in refused.json()["detail"]
+    api.put(f"{base}/{applicant['id']}", headers=admin, json={"not_bound_to_other_broker": True,
+                                                              "declaration_date": "2026-11-01"})
+    assert api.post(stage, headers=admin, json={"status": "APPROVED"}).status_code == 200
+    onboarded = api.post(f"{base}/{applicant['id']}/onboard", headers=admin, json={
+        "account": {"username": "rosa.linda", "password": "seller-pass-1"}})
+    assert onboarded.status_code == 200, onboarded.text
+    agent_id = onboarded.json()["agent"]["agent_id"]
+    agent = db.get(Agent, agent_id)
+    assert agent.recruited_by_agent_id == agents[0] and agent.branch_id == team and not agent.commission_visible
+    # The recruit signs in to their own seller pages, linked to their record.
+    login = api.post(f"{API}/auth/login", data={"username": "rosa.linda", "password": "seller-pass-1"})
+    assert login.status_code == 200
+    seller = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    me = api.get(f"{API}/auth/me", headers=seller).json()
+    assert me["role"] == "Seller" and me["agent_id"] == agent_id
+    assert api.get(f"{API}/agents/me/work", headers=seller).status_code == 200
+

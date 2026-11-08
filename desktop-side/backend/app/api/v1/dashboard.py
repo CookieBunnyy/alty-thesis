@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_company_user
 from app.models.property_listing import PropertyListing
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
@@ -16,13 +16,13 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
 @router.get("/summary")
-def get_dashboard_summary(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_dashboard_summary(db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     return analytics.dashboard_summary(db)
 
 
 @router.get("/property-status")
 def get_dashboard_property_status(db: Session = Depends(get_db),
-                                  _user: User = Depends(get_current_user)):
+                                  _user: User = Depends(get_company_user)):
     rows = db.execute(
         select(func.upper(PropertyListing.status), func.count()).group_by(func.upper(PropertyListing.status))
     ).all()
@@ -40,7 +40,7 @@ def get_dashboard_property_status(db: Session = Depends(get_db),
 @router.get("/transaction-trend")
 def get_dashboard_transaction_trend(months: int = Query(default=12, ge=1, le=60),
                                     db: Session = Depends(get_db),
-                                    _user: User = Depends(get_current_user)):
+                                    _user: User = Depends(get_company_user)):
     series = analytics.monthly_series(db, months)
     return {
         "months": [row["month"] for row in series],
@@ -54,7 +54,7 @@ def get_dashboard_transaction_trend(months: int = Query(default=12, ge=1, le=60)
 @router.get("/revenue-trend")
 def get_dashboard_revenue_trend(months: int = Query(default=12, ge=1, le=60),
                                 db: Session = Depends(get_db),
-                                _user: User = Depends(get_current_user)):
+                                _user: User = Depends(get_company_user)):
     series = analytics.monthly_series(db, months)
     return {
         "months": [row["month"] for row in series],
@@ -66,7 +66,7 @@ def get_dashboard_revenue_trend(months: int = Query(default=12, ge=1, le=60),
 @router.get("/recent-transactions")
 def get_dashboard_recent_transactions(limit: int = Query(default=6, ge=1, le=20),
                                       db: Session = Depends(get_db),
-                                      _user: User = Depends(get_current_user)):
+                                      _user: User = Depends(get_company_user)):
     rows = db.execute(
         select(PropertyTransaction).options(*WITH_PARTIES)
         .order_by(PropertyTransaction.transaction_date.desc(), PropertyTransaction.created_at.desc())
@@ -91,7 +91,7 @@ def get_dashboard_recent_transactions(limit: int = Query(default=6, ge=1, le=20)
 @router.get("/agent-performance")
 def get_dashboard_agent_performance(limit: int = Query(default=8, ge=1, le=100),
                                     db: Session = Depends(get_db),
-                                    _user: User = Depends(get_current_user)):
+                                    _user: User = Depends(get_company_user)):
     agents = analytics.overview(db)["agents"]
     agents.sort(key=lambda row: (-row["transactions"], row["full_name"]))
     return [
@@ -104,7 +104,7 @@ def get_dashboard_agent_performance(limit: int = Query(default=8, ge=1, le=100),
 
 @router.get("/forecast")
 def get_dashboard_forecast(metric: str = Query(default="revenue", pattern="^(revenue|transactions|sales)$"),
-                           db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+                           db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     result = analytics.forecast(db, metric)
     result["next_month_revenue"] = (
         result["forecast"][0]["value"] if result["status"] == "estimated" and metric == "revenue" else None

@@ -16,6 +16,7 @@ import { lotAreaLong, lotAreaShort } from "@/lib/area"
 import { useBlobUrl } from "./useBlobUrl"
 import { LotBoundarySection } from "./LotBoundarySection"
 import { useBranchOptions } from "./branches"
+import { ListingMarketing, MarketingBadge } from "./listingMarketing"
 
 type PartnerOption = { id: number; name: string; status: string }
 type Summary = { available: number; reserved: number; sold: number; on_hold: number; unavailable: number; total: number }
@@ -94,6 +95,7 @@ export function PropertiesPage() {
     { key: "rooms", label: "Bed / Bath", sort: (l) => l.num_bedrooms ?? 0, render: (l) => `${l.num_bedrooms ?? "—"} / ${l.num_bathrooms ?? "—"}`, hideOnPhone: true },
     { key: "lot", label: "Lot area", sort: (l) => Number(l.lot_area_sqm ?? 0), render: (l) => lotAreaShort(l.lot_area_sqm) ?? "—", hideOnPhone: true },
     { key: "status", label: "Status", sort: (l) => l.status, render: (l) => <Badge value={l.status} /> },
+    { key: "marketing", label: "Marketing", sort: (l) => l.marketing_status ?? "", render: (l) => <MarketingBadge status={l.marketing_status} /> },
     { key: "sync", label: "Sync", sort: (l) => l.sync_status, render: (l) => <Badge value={l.sync_status} />, hideOnPhone: true },
   ]
 
@@ -223,7 +225,9 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
       <Section title="Details">
         <Facts items={[
           ["Developer / partner", developer ? <Link to={`/manage/partners?id=${developer.id}`} className="hover:underline">{developer.name}</Link> : null],
-          ["Branch", branchName],
+          ["Team / Cluster", branchName],
+          ["Project", listing.project_name],
+          ["Floor area", listing.floor_area_sqm ? `${Number(listing.floor_area_sqm).toLocaleString()} sqm` : null],
           ["Village / project", listing.village_name],
           ["Layout", listing.layout_type],
           ["Bedrooms", listing.num_bedrooms],
@@ -241,6 +245,7 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
         </div>
         {listing.details && <p className="mt-3 whitespace-pre-line text-sm text-ab-muted">{listing.details}</p>}
       </Section>
+      <ListingMarketing listingId={listing.listing_id} canManage={canEditListings(user?.role)} />
       <LotBoundarySection listing={listing} canEdit={canEditListings(user?.role)} onSaved={onSaved} />
 
       <Section title="Amenities & nearby">

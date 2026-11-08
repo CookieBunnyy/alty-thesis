@@ -202,3 +202,12 @@ class PropertyListing(Base):
     branch_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("branches.id", ondelete="SET NULL"), nullable=True, index=True,
     )
+    # Accredited-listing details (ALTY only). Abellar markets developers'
+    # properties; a listing is shown publicly only once approved for marketing,
+    # which needs the developer's verified accreditation (services/accreditation.py).
+    project_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    floor_area_sqm: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    marketing_status: Mapped[str] = mapped_column(String(20), nullable=False, default="DRAFT",
+                                                  server_default="DRAFT", index=True)
+    marketing_approved_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    marketing_approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -5,7 +5,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_management
+from app.core.security import get_current_user, require_management, get_company_user
 from app.models.client import Client
 from app.models.document import Document
 from app.models.transaction import PropertyTransaction
@@ -63,7 +63,7 @@ def get_clients(
     limit: int = Query(default=500, ge=1, le=2000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_company_user),
 ):
     statement = select(Client).order_by(Client.full_name)
     if status:
@@ -80,12 +80,12 @@ def get_clients(
 
 
 @router.get("/count")
-def get_client_count(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_client_count(db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     return {"total": int(db.scalar(select(func.count(Client.client_id))) or 0)}
 
 
 @router.get("/summary", response_model=ClientSummary)
-def get_client_summary(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_client_summary(db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     rows = db.execute(select(Client.status, func.count()).group_by(Client.status)).all()
     counts = {str(status).upper(): int(total) for status, total in rows}
     return {
@@ -98,7 +98,7 @@ def get_client_summary(db: Session = Depends(get_db), _user: User = Depends(get_
 
 
 @router.get("/{client_id}", response_model=ClientResponse)
-def get_client(client_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_client(client_id: str, db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     client = _client_or_404(db, client_id)
     return _response(client)
 
@@ -112,7 +112,7 @@ def _client_or_404(db: Session, client_id: str) -> Client:
 
 @router.get("/{client_id}/profile", response_model=ClientProfile)
 def get_client_profile(client_id: str, db: Session = Depends(get_db),
-                       _user: User = Depends(get_current_user)):
+                       _user: User = Depends(get_company_user)):
     """Client information with full transaction history and related documents."""
     client = _client_or_404(db, client_id)
     transactions = sorted(client.transactions, key=lambda item: item.transaction_date)

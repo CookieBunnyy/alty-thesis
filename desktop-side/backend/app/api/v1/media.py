@@ -3,7 +3,7 @@
 import hashlib
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response
 from sqlalchemy import func, select
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import FILING_ROLES, get_current_user, require_roles
+from app.core.security import MANAGEMENT_ROLES, get_current_user, require_roles, get_company_user
 from app.models.media import PropertyMedia
 from app.models.property_listing import PropertyListing
 from app.models.user import User
@@ -27,13 +27,14 @@ from app.services.document_storage import (
 from app.services.media_analysis import THRESHOLDS, analyze_image
 
 router = APIRouter(prefix="/media", tags=["Media"])
-require_editor = require_roles(*FILING_ROLES)
+require_editor = require_roles(*MANAGEMENT_ROLES)  # listings are managed by Admin / Marketing staff and the Broker
 
 
 def _serialize(media: PropertyMedia) -> dict:
     return {
         "id": media.id,
         "listing_id": media.listing_id,
+        "media_kind": media.media_kind,
         "file_name": media.file_name,
         "mime_type": media.mime_type,
         "file_size": media.file_size,
@@ -51,13 +52,13 @@ def _serialize(media: PropertyMedia) -> dict:
 
 
 @router.get("/thresholds")
-def get_thresholds(_user: User = Depends(get_current_user)):
+def get_thresholds(_user: User = Depends(get_company_user)):
     return {**THRESHOLDS, "note": "Quality analysis only; room/feature recognition is not performed."}
 
 
 @router.get("")
 def list_media(listing_id: int | None = None, quality_status: str | None = None,
-               db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+               db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     statement = select(PropertyMedia).order_by(PropertyMedia.created_at.desc())
     if listing_id is not None:
         statement = statement.where(PropertyMedia.listing_id == listing_id)
@@ -67,7 +68,7 @@ def list_media(listing_id: int | None = None, quality_status: str | None = None,
 
 
 @router.get("/summary")
-def media_summary(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def media_summary(db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     rows = db.execute(
         select(PropertyMedia.quality_status, func.count()).group_by(PropertyMedia.quality_status)
     ).all()
@@ -78,8 +79,9 @@ def media_summary(db: Session = Depends(get_db), _user: User = Depends(get_curre
 
 
 @router.post("/properties/{listing_id}", status_code=201)
-def upload_media(listing_id: int, file: UploadFile = File(...), db: Session = Depends(get_db),
-                 actor: User = Depends(require_editor)):
+def upload_media(listing_id: int, file: UploadFile = File(...),
+                 media_kind: str = Form(default="PHOTO", alias="kind", pattern="^(PHOTO|PERSPECTIVE)$"),
+                 db: Session = Depends(get_db), actor: User = Depends(require_editor)):
     listing = db.get(PropertyListing, listing_id)
     if listing is None:
         raise HTTPException(status_code=404, detail="Property listing not found")
@@ -116,7 +118,7 @@ def upload_media(listing_id: int, file: UploadFile = File(...), db: Session = De
         storage_bucket=bucket, mime_type=kind.mime_type, file_size=len(content), file_hash=file_hash,
         width=report.width, height=report.height, orientation=report.orientation,
         blur_score=report.blur_score, brightness=report.brightness, contrast=report.contrast,
-        quality_status=report.status, quality_issues=report.issues, uploaded_by=actor.id,
+        quality_status=report.status, quality_issues=report.issues, uploaded_by=actor.id, media_kind=media_kind,
     )
     db.add(media)
     db.flush()
@@ -129,7 +131,7 @@ def upload_media(listing_id: int, file: UploadFile = File(...), db: Session = De
 
 
 @router.get("/{media_id}/file")
-def get_media_file(media_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_media_file(media_id: int, db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     media = db.get(PropertyMedia, media_id)
     if media is None:
         raise HTTPException(status_code=404, detail="Media not found")
@@ -159,7 +161,7 @@ def delete_media(media_id: int, db: Session = Depends(get_db), actor: User = Dep
 
 @router.get("/listing/{listing_id}/count")
 def count_listing_media(listing_id: int, db: Session = Depends(get_db),
-                        _user: User = Depends(get_current_user)):
+                        _user: User = Depends(get_company_user)):
     total = db.scalar(select(func.count(PropertyMedia.id)).where(PropertyMedia.listing_id == listing_id))
     return {"listing_id": listing_id, "total": int(total or 0)}
 

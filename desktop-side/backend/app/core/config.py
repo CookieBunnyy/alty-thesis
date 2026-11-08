@@ -37,9 +37,12 @@ class Settings(BaseSettings):
 
     # Forecasting requires at least this many monthly observations.
     FORECAST_MIN_MONTHS: int = 6
-    # Used for agents without a recorded commission rate (total commission ÷ total sales).
-    DEFAULT_COMMISSION_RATE: float = 0.03
 
+    # Financial features not yet confirmed by Abellar Realty (interview): the
+    # reservation payment schedule and the buying-cost estimate stay off until
+    # the actual arrangements are validated.
+    PAYMENT_SCHEDULE_ENABLED: bool = False
+    COST_ESTIMATE_ENABLED: bool = False
     # Closing-cost estimate on the transaction page (services/closing_costs.py).
     TRANSFER_TAX_METRO: float = 0.0075
     TRANSFER_TAX_PROVINCE: float = 0.005
@@ -51,6 +54,14 @@ class Settings(BaseSettings):
     # threshold, adjusted every 3 years; update it when the BIR does).
     VAT_EXEMPT_DWELLING_MAX: float = 3_199_200
     CAPITAL_GAINS_TAX_RATE: float = 0.06
+
+    # Only listings approved for marketing, whose developer's accreditation of
+    # Abellar is verified and unexpired, are shown publicly. Turn off only for
+    # a transition period while accreditations are being recorded.
+    ACCREDITATION_REQUIRED: bool = True
+    # Listing fields a seller may update on listings assigned to them
+    # (comma-separated; to be confirmed with Abellar Realty).
+    SELLER_EDITABLE_LISTING_FIELDS: str = "details,amenity_list"
 
     # Comma-separated origins allowed to call the API from a browser.
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"

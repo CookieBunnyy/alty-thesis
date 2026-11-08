@@ -19,6 +19,11 @@ export type Listing = {
   num_bedrooms: number | null
   num_bathrooms: number | null
   lot_area_sqm?: number | string | null
+  project_name?: string | null
+  floor_area_sqm?: number | string | null
+  marketing_status?: string
+  marketing_approved_by?: string | null
+  marketing_approved_at?: string | null
   boundary?: import("@/lib/lotGeometry").Boundary | null
   boundary_measurements?: import("@/lib/lotGeometry").BoundaryMeasurements | null
   boundary_updated_at?: string | null
@@ -80,6 +85,8 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
     num_bedrooms: String(listing.num_bedrooms ?? ""),
     num_bathrooms: String(listing.num_bathrooms ?? ""),
     lot_area_sqm: listing.lot_area_sqm == null ? "" : String(Number(listing.lot_area_sqm)),
+    floor_area_sqm: listing.floor_area_sqm == null ? "" : String(Number(listing.floor_area_sqm)),
+    project_name: listing.project_name ?? "",
     layout_type: listing.layout_type ?? "",
     village_name: listing.village_name ?? "",
     lat: listing.lat == null ? "" : String(listing.lat),
@@ -114,6 +121,8 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
     if (Object.values(numbers).some((v) => v !== null && (!Number.isFinite(v) || v < 0))) return setError(t("Prices, rooms and garage spaces must be zero or more."))
     const lotArea = num(form.lot_area_sqm)
     if (lotArea !== null && (!Number.isFinite(lotArea) || lotArea <= 0)) return setError(t("Lot area must be more than zero (leave it blank for condominium units)."))
+    const floorArea = num(form.floor_area_sqm)
+    if (floorArea !== null && (!Number.isFinite(floorArea) || floorArea <= 0)) return setError(t("Floor area must be more than zero."))
     const lat = num(form.lat)
     const lng = num(form.lng)
     if ((lat === null) !== (lng === null)) return setError(t("Enter both latitude and longitude, or neither."))
@@ -125,6 +134,8 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
       category: form.category.trim() || null,
       ...numbers,
       lot_area_sqm: lotArea,
+      floor_area_sqm: floorArea,
+      project_name: form.project_name.trim() || null,
       layout_type: form.layout_type.trim() || null,
       village_name: form.village_name.trim() || null,
       lat, lng,
@@ -182,7 +193,7 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
               <span className="mt-1 block text-xs font-normal text-ab-faint">{t("Saved on the cancelled reservation so everyone can see why.")}</span>
             </label>
           )}
-          <Field label="Branch">
+          <Field label="Team / Cluster">
             <select className={field} value={form.branch_id} onChange={(e) => set("branch_id", e.target.value)}>
               <option value="">{t("Not set")}</option>
               {branches.filter((b) => b.is_active || String(b.id) === form.branch_id).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -204,6 +215,8 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
             <input className={field} inputMode="decimal" value={form.lot_area_sqm} placeholder={t("e.g. 250 or 640000")} onChange={(e) => set("lot_area_sqm", e.target.value)} />
             {lotAreaLong(form.lot_area_sqm) && <span className="mt-1 block text-xs font-normal text-ab-faint">= {lotAreaLong(form.lot_area_sqm)}</span>}
           </Field>
+          <Field label="Floor area (sqm)"><input className={field} inputMode="decimal" value={form.floor_area_sqm} onChange={(e) => set("floor_area_sqm", e.target.value)} /></Field>
+          <Field label="Project name"><input className={field} value={form.project_name} onChange={(e) => set("project_name", e.target.value)} /></Field>
           <Field label="Village / location" wide><input className={field} value={form.village_name} onChange={(e) => set("village_name", e.target.value)} /></Field>
           <Field label="Latitude"><input className={field} inputMode="decimal" value={form.lat} onChange={(e) => set("lat", e.target.value)} /></Field>
           <Field label="Longitude"><input className={field} inputMode="decimal" value={form.lng} onChange={(e) => set("lng", e.target.value)} /></Field>

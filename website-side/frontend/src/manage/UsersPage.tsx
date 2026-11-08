@@ -15,10 +15,11 @@ type AgentOption = { agent_id: string; full_name: string; status: string }
 type Role = { name: string; description?: string | null; permissions?: string[] } | string
 
 const PAGE_NAMES: Record<string, string> = {
-  dashboard: "Dashboard", properties: "Properties", partners: "Partners", clients: "Buyers & Sellers", transactions: "Transactions",
-  documents: "Documents", media: "Digital Preview", agents: "Agents", workforce: "Workforce", analytics: "Analytics",
+  dashboard: "Dashboard", properties: "Properties", partners: "Partners", clients: "Buyers & Owners", transactions: "Transactions",
+  documents: "Documents", media: "Digital Preview", agents: "Sellers", workforce: "Workforce", analytics: "Analytics",
   forecasting: "Business Outlook", dss: "Recommendations", users: "Users", audit: "Audit Logs", settings: "Settings",
-  branches: "Branches", recruitment: "Recruitment",
+  branches: "Teams / Clusters", recruitment: "Recruitment", reports: "Reports", commissions: "Commissions",
+  "my-work": "My Work", "my-listings": "My listings", "my-deals": "My deals", "my-commissions": "My commissions",
 }
 
 const field = "mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm focus:border-ab-accent focus:outline-none"
@@ -58,7 +59,7 @@ export function UsersPage() {
       render: (u) => (
         <span>
           {t(u.role)}
-          {u.agent_id && <span className="block text-xs text-ab-faint">{t("Agent record:")} {u.agent_name ?? u.agent_id}</span>}
+          {u.agent_id && <span className="block text-xs text-ab-faint">{t("Seller record:")} {u.agent_name ?? u.agent_id}</span>}
         </span>
       ),
     },
@@ -144,7 +145,7 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
 }) {
   const toast = useToast()
   const { api, user: me } = useStaffAuth()
-  const [form, setForm] = useState({ username: "", full_name: user?.full_name ?? "", role: user?.role ?? roles.find((r) => r === "Employee") ?? roles[0] ?? "", is_active: user?.is_active ?? true, password: "", confirm: "", agent_id: user?.agent_id ?? "", email: user?.email ?? "" })
+  const [form, setForm] = useState({ username: "", full_name: user?.full_name ?? "", role: user?.role ?? roles.find((r) => r === "Filing Manager") ?? roles[0] ?? "", is_active: user?.is_active ?? true, password: "", confirm: "", agent_id: user?.agent_id ?? "", email: user?.email ?? "" })
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }))

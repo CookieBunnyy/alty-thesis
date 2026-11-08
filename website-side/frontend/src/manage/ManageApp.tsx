@@ -13,6 +13,10 @@ import { UsersPage } from "./UsersPage"
 import { WorkforcePage } from "./WorkforcePage"
 import { BranchesPage } from "./BranchesPage"
 import { RecruitmentPage } from "./RecruitmentPage"
+import { SellerListingsPage } from "./SellerListingsPage"
+import { SellerDealsPage } from "./DealsPipeline"
+import { CommissionsPage, SellerCommissionsPage } from "./CommissionsPage"
+import { ReportsPage } from "./ReportsPage"
 import { AnalyticsPage } from "./AnalyticsPage"
 import { ForecastingPage } from "./ForecastingPage"
 import { InsightsPage } from "./InsightsPage"
@@ -36,8 +40,8 @@ import { GuideProvider } from "./guide"
 const PAGES: Record<string, [string, string, () => React.ReactNode]> = {
   "/manage": ["dashboard", "Dashboard", () => <DashboardPage />],
   "/manage/properties": ["properties", "Properties", () => <PropertiesPage />],
-  "/manage/agents": ["agents", "Agents", () => <AgentsPage />],
-  "/manage/clients": ["clients", "Buyers & Sellers", () => <ClientsPage />],
+  "/manage/agents": ["agents", "Sellers", () => <AgentsPage />],
+  "/manage/clients": ["clients", "Buyers & Owners", () => <ClientsPage />],
   "/manage/transactions": ["transactions", "Transactions", () => <TransactionsPage />],
   "/manage/partners": ["partners", "Partners / Developers", () => <PartnersPage />],
   "/manage/documents": ["documents", "Document Repository", () => <DocumentsPage />],
@@ -46,11 +50,16 @@ const PAGES: Record<string, [string, string, () => React.ReactNode]> = {
   "/manage/forecasting": ["forecasting", "Business Outlook", () => <ForecastingPage />],
   "/manage/insights": ["dss", "Recommendations", () => <InsightsPage />],
   "/manage/workforce": ["workforce", "Workforce", () => <WorkforcePage />],
-  "/manage/branches": ["branches", "Branches", () => <BranchesPage />],
+  "/manage/branches": ["branches", "Teams / Clusters", () => <BranchesPage />],
   "/manage/recruitment": ["recruitment", "Recruitment", () => <RecruitmentPage />],
   "/manage/users": ["users", "Users & Access", () => <UsersPage />],
   "/manage/audit": ["audit", "Audit Logs", () => <AuditPage />],
   "/manage/settings": ["settings", "Settings", () => <SettingsPage />],
+  "/manage/my-listings": ["my-listings", "My listings", () => <SellerListingsPage />],
+  "/manage/my-deals": ["my-deals", "My deals", () => <SellerDealsPage />],
+  "/manage/my-commissions": ["my-commissions", "My commissions", () => <SellerCommissionsPage />],
+  "/manage/commissions": ["commissions", "Commissions", () => <CommissionsPage />],
+  "/manage/reports": ["reports", "Reports", () => <ReportsPage />],
 }
 
 export default function ManageApp() {
@@ -95,6 +104,10 @@ function ManageRoutes() {
     )
   }
 
+  // Sellers have no company dashboard: their home is their own work.
+  if (path === "/manage" && !can("dashboard") && user.agent_id) {
+    return <ManageLayout title={t("My Work")}><MyWorkPage /></ManageLayout>
+  }
   // "My profile": every signed-in staff member.
   if (path === "/manage/profile") {
     return <ManageLayout title={t("My profile")}><ProfilePage /></ManageLayout>

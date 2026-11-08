@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type FormEvent } from "react"
 import { Archive, ArchiveRestore, Download, Eye, FilePlus2, FolderPlus, FolderX, LoaderCircle, RefreshCw, Trash2, UploadCloud, X } from "lucide-react"
 import { Link } from "@/components/Link"
-import { canFile, contains, date, dateTime, fileSize, statusLabel, text } from "./format"
+import { canFile, contains, date, dateTime, fileSize, isManagement, statusLabel, text } from "./format"
 import { UploadDocument, type DocType, type DocumentRecord, type Folder } from "./UploadDocument"
 import { FolderTree } from "./FolderTree"
 import { indexFolders, isStandardFolder } from "./folders"
@@ -10,6 +10,7 @@ import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { downloadBlob, useBlobUrl } from "./useBlobUrl"
+import { VoucherFieldsDialog, VoucherReview } from "./voucherReview"
 import { UploadResult } from "./UploadResult"
 import { t } from "./i18n"
 
@@ -45,6 +46,7 @@ export function DocumentsPage() {
   const [folder, setFolder] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const [creatingFolder, setCreatingFolder] = useState(false)
+  const [voucherFields, setVoucherFields] = useState(false)
   const [result, setResult] = useState<{ doc: DocumentRecord; newFolder: boolean } | null>(null)
   const [deletingFolder, setDeletingFolder] = useState(false)
   const [folderBusy, setFolderBusy] = useState(false)
@@ -139,6 +141,7 @@ export function DocumentsPage() {
         subtitle="Upload documents and ALTY processes them automatically: it reads, classifies and matches each one, then records the property, client, agent and transaction it describes. Failed documents show the stage and reason."
         actions={
           <>
+            {isManagement(user?.role) && <Button onClick={() => setVoucherFields(true)}>{t("Voucher fields")}</Button>}
             <Button onClick={() => setCreatingFolder(true)}><FolderPlus className="h-4 w-4" /> {t("New folder")}</Button>
             <Button variant="danger" onClick={() => setDeletingFolder(true)} disabled={!canDeleteFolder} title={deleteFolderTitle}>
               <FolderX className="h-4 w-4" /> {t("Delete folder")}
@@ -221,6 +224,7 @@ export function DocumentsPage() {
           onCancel={() => setDeletingFolder(false)}
         />
       )}
+      {voucherFields && <VoucherFieldsDialog onClose={() => setVoucherFields(false)} />}
       {creatingFolder && <NewFolder folders={folders} onClose={() => setCreatingFolder(false)} onCreated={() => { setCreatingFolder(false); void reload() }} />}
     </div>
   )
@@ -405,6 +409,7 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
         </Section>
       )}
 
+      {doc.document_type === "COMMISSION_VOUCHER" && <VoucherReview documentId={doc.document_id} canEdit={canEdit} />}
       <Section title="What ALTY recorded">
         <Facts items={[
           ["Property", matched.property ? <><Link to={`/manage/properties?id=${matched.property.id}`} className="hover:underline">{text(doc.property_listing_title)} (#{matched.property.id})</Link>{how(matched.property)}</> : doc.property_listing_title],

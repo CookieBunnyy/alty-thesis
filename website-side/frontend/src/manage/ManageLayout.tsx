@@ -5,6 +5,7 @@ import {
   Briefcase,
   Building,
   ClipboardList,
+  FileBarChart,
   FolderOpen,
   Gauge,
   Handshake,
@@ -20,6 +21,7 @@ import {
   UserPlus,
   UserRound,
   Users,
+  Wallet,
   X,
   type LucideIcon,
 } from "lucide-react"
@@ -30,6 +32,7 @@ import { useLocation } from "@/lib/router"
 import { ErrorBoundary } from "./ErrorBoundary"
 import { GlobalSearch, NotificationBell } from "./HeaderTools"
 import { useStaffAuth } from "./staffContext"
+import { isSeller } from "./format"
 import { t } from "./i18n"
 import { StaffAvatar } from "./avatars"
 import { InstallAppButton } from "@/components/InstallAppButton"
@@ -42,19 +45,30 @@ type NavItem = { key: string; label: string; icon: LucideIcon; path?: string; hi
 // later migration phase (never as a page that does nothing).
 const NAV: { group: string; items: NavItem[] }[] = [
   {
+    // Seller accounts: only their own and permitted records.
+    group: "My work",
+    items: [
+      { key: "my-listings", label: "My listings", icon: Home, path: "/manage/my-listings", hint: "Listings assigned to you and listings approved for marketing" },
+      { key: "my-deals", label: "My deals", icon: ArrowLeftRight, path: "/manage/my-deals", hint: "Your buyers' inquiries, viewings and reservations" },
+      { key: "my-commissions", label: "My commissions", icon: Wallet, path: "/manage/my-commissions", hint: "Your commission records, when management shares them" },
+    ],
+  },
+  {
     group: "Main",
     items: [
       { key: "dashboard", label: "Dashboard", icon: Gauge, path: "/manage", hint: "A summary of the whole business at a glance" },
       { key: "properties", label: "Properties", icon: Home, path: "/manage/properties", hint: "Every listing and whether it is available, reserved or sold" },
-      { key: "clients", label: "Buyers & Sellers", icon: Users, path: "/manage/clients", hint: "Clients, created automatically from documents" },
-      { key: "transactions", label: "Transactions", icon: ArrowLeftRight, path: "/manage/transactions", hint: "Every reservation and sale on record" },
-      { key: "agents", label: "Agents", icon: UserRound, path: "/manage/agents", hint: "Agents, their clients, sales and reviews" },
+      { key: "clients", label: "Buyers & Owners", icon: Users, path: "/manage/clients", hint: "Buyers and property owners, created automatically from documents" },
+      { key: "transactions", label: "Transactions", icon: ArrowLeftRight, path: "/manage/transactions", hint: "Every reservation and sale on record, and deals from inquiry to closing" },
+      { key: "commissions", label: "Commissions", icon: Wallet, path: "/manage/commissions", hint: "Commission records, approval, release and vouchers" },
+      { key: "agents", label: "Sellers", icon: UserRound, path: "/manage/agents", hint: "Sellers (agents), their clients, sales and reviews" },
       { key: "partners", label: "Partners / Developers", icon: Handshake, path: "/manage/partners", hint: "Developers and partner companies" },
     ],
   },
   {
     group: "Intelligence",
     items: [
+      { key: "reports", label: "Reports", icon: FileBarChart, path: "/manage/reports", hint: "Sales and recruitment by seller, recruiter, team and project" },
       { key: "analytics", label: "Analytics", icon: BarChart3, path: "/manage/analytics", hint: "How sales and listings are performing" },
       { key: "forecasting", label: "Business Outlook", icon: LineChart, path: "/manage/forecasting", hint: "Past months against their forecast, and the months ahead" },
       // Decision support is a layer inside Analytics, Forecasting, properties and
@@ -68,7 +82,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { key: "documents", label: "Document Repository", icon: FolderOpen, path: "/manage/documents", hint: "Upload documents; ALTY reads and files them" },
       { key: "workforce", label: "Workforce", icon: Network, path: "/manage/workforce", hint: "The team and how work is shared" },
-      { key: "branches", label: "Branches", icon: Building, path: "/manage/branches", hint: "Your offices and how each one is doing" },
+      { key: "branches", label: "Teams / Clusters", icon: Building, path: "/manage/branches", hint: "Seller teams and clusters and their sales" },
       { key: "recruitment", label: "Recruitment", icon: UserPlus, path: "/manage/recruitment", hint: "Agent applicants, from application to onboarding" },
       { key: "users", label: "Users & Access", icon: ShieldUser, path: "/manage/users", hint: "Staff accounts and what each role can open" },
       { key: "audit", label: "Audit Logs", icon: ClipboardList, path: "/manage/audit", hint: "A permanent record of every action" },
@@ -80,7 +94,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
 // Phones and tablets: a bottom bar with the most used pages (in this order,
 // only those the role can open) and the account's own profile. The full menu
 // is the button at the top left.
-const QUICK = ["dashboard", "properties", "transactions", "documents", "clients", "agents", "analytics"]
+const QUICK = ["dashboard", "properties", "transactions", "documents", "clients", "agents", "analytics", "my-listings", "my-deals", "my-commissions"]
 
 function BottomNav({ pathname, can, me }: { pathname: string; can: (key: string) => boolean; me: ReactNode }) {
   const items = NAV.flatMap((group) => group.items)
@@ -183,7 +197,7 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
             <button type="button" onClick={() => setMenuOpen(false)} aria-label={t("Close menu")} className="absolute right-3 top-3 z-10 rounded-lg p-2 text-ab-muted hover:bg-ab-hover">
               <X className="h-4 w-4" />
             </button>
-            <div className="px-4 pt-16 md:hidden"><GlobalSearch className="block w-full" /></div>
+            {!isSeller(user?.role) && <div className="px-4 pt-16 md:hidden"><GlobalSearch className="block w-full" /></div>}
             <div className="min-h-0 flex-1">{sidebar}</div>
             <div className="border-t border-ab-border p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               <div className="flex items-center gap-3">
@@ -209,7 +223,7 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
             <Menu className="h-4 w-4" />
           </button>
           <h1 className="min-w-0 flex-1 truncate text-base font-bold sm:text-lg md:flex-none md:shrink-0">{title}</h1>
-          <div className="hidden min-w-0 flex-1 justify-center px-2 md:flex" data-tour="search"><GlobalSearch /></div>
+          <div className="hidden min-w-0 flex-1 justify-center px-2 md:flex" data-tour="search">{!isSeller(user?.role) && <GlobalSearch />}</div>
           <InstallAppButton area="manage" translate={t} />
           <span data-tour="bell" className="shrink-0"><NotificationBell /></span>
           <HelpMenu />

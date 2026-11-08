@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_management
+from app.core.security import get_current_user, require_management, get_company_user
 from decimal import Decimal
 
 from app.models.agent import DESIGNATIONS, Agent
@@ -42,7 +42,7 @@ router = APIRouter(
 )
 def get_agents(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_company_user),
 ):
     agents = db.execute(select(Agent).order_by(Agent.full_name)).scalars().all()
     stats = review_service.review_stats(db, [agent.agent_id for agent in agents])
@@ -67,7 +67,7 @@ def _with_reviews(agent: Agent, stats: dict, recorded: dict) -> AgentResponse:
 @router.get("/count")
 def get_agent_count(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_company_user),
 ):
     total = db.scalar(
         select(
@@ -108,7 +108,7 @@ def get_my_work(db: Session = Depends(get_db), user: User = Depends(get_current_
 def get_agent(
     agent_id: str,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_company_user),
 ):
     agent = db.get(
         Agent,
@@ -135,7 +135,7 @@ def get_agent_reviews(
     limit: int = 20,
     offset: int = 0,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_company_user),
 ):
     """Client rating summary and recent reviews. Reviewers are shown as
     "First L." — staff don't need clients' contact details to read reviews."""
@@ -166,7 +166,7 @@ def get_agent_reviews(
 def get_agent_activity(
     agent_id: str,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_company_user),
 ):
     agent = db.get(Agent, agent_id)
     if agent is None:
@@ -269,6 +269,8 @@ class AssignmentInput(BaseModel):
     designation: str | None = None
     work_area: str | None = Field(default=None, max_length=255)
     hired_on: date | None = None
+    # Whether the seller may see their own commission records.
+    commission_visible: bool | None = None
 
     @field_validator("designation", "work_area", mode="before")
     @classmethod
@@ -287,7 +289,7 @@ class AssignmentInput(BaseModel):
 
 
 @router.get("/designations/options")
-def designation_options(_user: User = Depends(get_current_user)):
+def designation_options(_user: User = Depends(get_company_user)):
     return {"designations": DESIGNATIONS, "criteria": ASSESSMENT_CRITERIA}
 
 
@@ -298,6 +300,8 @@ def update_assignment(agent_id: str, payload: AssignmentInput, db: Session = Dep
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
     values = payload.model_dump(exclude_unset=True)
+    if values.get("commission_visible") is None:
+        values.pop("commission_visible", None)
     if values.get("branch_id") is not None and db.get(Branch, values["branch_id"]) is None:
         raise HTTPException(status_code=422, detail="That branch doesn't exist")
     changes = {}
@@ -412,6 +416,6 @@ def delete_assessment(agent_id: str, assessment_id: int, db: Session = Depends(g
 @router.get("/{agent_id}/commission")
 def agent_commission(agent_id: str, months: int = Query(default=12, ge=1, le=60), db: Session = Depends(get_db),
                      _user: User = Depends(require_management)):
-    """Estimated commission per month (completed sales × the agent's rate)."""
+    """Recorded commission per month (from commission records)."""
     _agent_or_404(db, agent_id)
     return workforce_planning.agent_commission(db, agent_id, months)

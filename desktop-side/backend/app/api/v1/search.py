@@ -5,7 +5,7 @@ from sqlalchemy import String, cast, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_company_user
 from app.models.agent import Agent
 from app.models.client import Client
 from app.models.document import Document
@@ -22,7 +22,7 @@ def global_search(
     q: str = Query(min_length=2, max_length=100),
     limit: int = Query(default=8, ge=1, le=25),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_company_user),
 ):
     """Matches across properties, clients, transactions, agents and documents.
 

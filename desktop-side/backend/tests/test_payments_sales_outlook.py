@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
+import pytest
+
 from sqlalchemy import select
 
 from app.models.client import Client
@@ -14,6 +16,15 @@ from app.models.transaction import PropertyTransaction
 from app.services.payment_plan import add_months, build_plan
 from tests.test_cancellations import _reserve
 
+
+
+@pytest.fixture(autouse=True)
+def financial_features_on(monkeypatch):
+    """Off by default until Abellar confirms them; these tests exercise them."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "PAYMENT_SCHEDULE_ENABLED", True)
+    monkeypatch.setattr(settings, "COST_ESTIMATE_ENABLED", True)
 
 def _terms(db, listing_id: int, price=3_000_000, down=300_000, monthly=15_000) -> None:
     listing = db.get(PropertyListing, listing_id)

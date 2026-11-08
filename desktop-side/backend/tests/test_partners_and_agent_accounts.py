@@ -48,7 +48,7 @@ def test_agent_accounts_link_to_one_agent_record_and_see_their_work(api, admin, 
     db.add_all([Agent(agent_id="AGT-9", full_name="Nine Agent", status="ACTIVE", sync_status="SYNCED"),
                 Agent(agent_id="AGT-8", full_name="Eight Agent", status="ACTIVE", sync_status="SYNCED")])
     db.commit()
-    made = api.post("/api/v1/users", headers=admin, json={"username": "nine", "full_name": "Nine Agent", "role": "Agent",
+    made = api.post("/api/v1/users", headers=admin, json={"username": "nine", "full_name": "Nine Agent", "role": "Seller",
                                                          "password": "password123", "agent_id": "AGT-9"})
     assert made.status_code == 201 and made.json()["agent_name"] == "Nine Agent"
     # One account per agent record; unknown agents refused.

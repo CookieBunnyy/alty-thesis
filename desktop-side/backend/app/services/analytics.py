@@ -54,17 +54,6 @@ def _shift_month(key: str, delta: int) -> str:
     return f"{index // 12:04d}-{index % 12 + 1:02d}"
 
 
-def commission_rates(db: Session) -> dict[str, float]:
-    """Each agent's commission rate: recorded total commission ÷ recorded
-    total sales when both are known, else DEFAULT_COMMISSION_RATE."""
-    rates = {}
-    for agent_id, total_sales, total_commission in db.execute(
-            select(Agent.agent_id, Agent.total_sales, Agent.total_commission)).all():
-        sales, commission = float(total_sales or 0), float(total_commission or 0)
-        rates[agent_id] = commission / sales if sales > 0 and commission > 0 else settings.DEFAULT_COMMISSION_RATE
-    return rates
-
-
 def _branch_filter(statement, branch_id: int | None):
     """Transactions of one branch: the agent's branch, else the listing's.
     ``branch_id`` 0 means transactions with no branch at all."""
@@ -79,7 +68,7 @@ def _branch_filter(statement, branch_id: int | None):
 
 def monthly_series(db: Session, months: int | None = None, agent_id: str | None = None,
                    branch_id: int | None = None) -> list[dict]:
-    """Per-month transaction counts, sales revenue and estimated commission.
+    """Per-month transaction counts, sales revenue and recorded commission.
     ``months`` limits the window to the last N months (including the current
     one). With ``agent_id`` (or ``branch_id``) only that agent's (branch's)
     transactions are counted, over the company's full history (months with
@@ -101,15 +90,12 @@ def monthly_series(db: Session, months: int | None = None, agent_id: str | None 
                    "sales": int(sales), "revenue": float(revenue or 0), "commission": 0.0}
         for key, count, reservations, sales, revenue in rows
     }
-    # Commission: each completed sale × its agent's commission rate.
-    rates = commission_rates(db)
-    sales_statement = select(month, PropertyTransaction.agent_id, func.sum(PropertyTransaction.amount)).where(SALE)
-    if agent_id is not None:
-        sales_statement = sales_statement.where(PropertyTransaction.agent_id == agent_id)
-    sales_statement = _branch_filter(sales_statement, branch_id)
-    for key, sale_agent, amount in db.execute(sales_statement.group_by(month, PropertyTransaction.agent_id)).all():
-        if str(key) in data:
-            data[str(key)]["commission"] += float(amount or 0) * rates.get(sale_agent, settings.DEFAULT_COMMISSION_RATE)
+    # Commission: the amounts recorded in commission records (no assumed rate).
+    from app.services import commissions  # imported here: commissions doesn't depend on analytics
+
+    for key, total in commissions.monthly(db, agent_id=agent_id, branch_id=branch_id).items():
+        data.setdefault(key, {"transactions": 0, "reservations": 0, "sales": 0, "revenue": 0.0, "commission": 0.0})
+        data[key]["commission"] += total
     for entry in data.values():
         entry["commission"] = round(entry["commission"], 2)
     current = _month_key(_now())
@@ -350,8 +336,29 @@ def month_breakdown(db: Session, month: str, metric: str = "revenue") -> dict:
     """The records behind one month's figure: completed sales for revenue and
     sales, every live transaction for transactions (same rules as the chart)."""
     key = func.to_char(func.timezone("UTC", PropertyTransaction.transaction_date), "YYYY-MM")
-    condition = SALE if metric in {"revenue", "sales", "commission"} else LIVE
-    rates = commission_rates(db) if metric == "commission" else {}
+    if metric == "commission":
+        from app.services import commissions
+
+        records = [row for row in commissions.counted(db) if row["month"] == month]
+        items = []
+        for row in sorted(records, key=lambda r: r["day"]):
+            record = row["record"]
+            transaction = db.get(PropertyTransaction, record.transaction_id) if record.transaction_id else None
+            agent = db.get(Agent, record.agent_id) if record.agent_id else None
+            listing = db.get(PropertyListing, record.listing_id) if record.listing_id else None
+            items.append({
+                "transaction_id": str(record.transaction_id or f"commission-{record.id}"), "commission_id": record.id,
+                "date": row["day"], "type": record.kind, "status": record.status, "amount": row["amount"],
+                "sale_amount": float(record.basis_amount) if record.basis_amount is not None else None,
+                "commission_rate": float(record.rate_percent) / 100 if record.rate_percent is not None else None,
+                "client": transaction.client.full_name if transaction and transaction.client else record.lessee_name,
+                "property": listing.title if listing else record.property_description,
+                "agent": agent.full_name if agent else None,
+            })
+        total = sum(item["amount"] for item in items)
+        return {"month": month, "metric": metric, "count": len(items), "total": round(total, 2), "items": items}
+    condition = SALE if metric in {"revenue", "sales"} else LIVE
+    key = func.to_char(func.timezone("UTC", PropertyTransaction.transaction_date), "YYYY-MM")
     rows = db.execute(select(PropertyTransaction).where(key == month, condition)
                       .order_by(PropertyTransaction.transaction_date)).scalars().all()
     items = [{
@@ -359,15 +366,12 @@ def month_breakdown(db: Session, month: str, metric: str = "revenue") -> dict:
         "date": row.transaction_date,
         "type": row.transaction_type,
         "status": row.status,
-        "amount": round(float(row.amount or 0) * rates.get(row.agent_id, settings.DEFAULT_COMMISSION_RATE), 2)
-        if metric == "commission" else float(row.amount or 0),
-        "sale_amount": float(row.amount or 0),
-        "commission_rate": rates.get(row.agent_id, settings.DEFAULT_COMMISSION_RATE) if metric == "commission" else None,
+        "amount": float(row.amount or 0),
         "client": row.client.full_name if row.client else None,
         "property": row.property_listing.title if row.property_listing else None,
         "agent": row.agent.full_name if row.agent else None,
     } for row in rows]
-    total = sum(item["amount"] for item in items) if metric in {"revenue", "commission"} else float(len(items))
+    total = sum(item["amount"] for item in items) if metric == "revenue" else float(len(items))
     return {"month": month, "metric": metric, "count": len(items), "total": round(total, 2), "items": items}
 
 

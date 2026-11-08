@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.core.security import (
     ADMINISTRATOR,
     ROLES,
+    SELLER,
     canonical_role,
     get_current_user,
     get_password_hash,
@@ -153,10 +154,18 @@ def get_users(db: Session = Depends(get_db), _user: User = Depends(require_manag
     return [_serialize(user, db) for user in db.execute(staff).scalars()]
 
 
+def _seller_needs_record(role: str, agent_id: str | None) -> None:
+    """A Seller account only ever shows its own records, so it must be linked
+    to the seller record it belongs to."""
+    if role == SELLER and not agent_id:
+        raise HTTPException(status_code=422, detail="Link a Seller account to its seller record")
+
+
 @router.post("", response_model=UserResponse, status_code=201)
 def create_user(payload: UserCreate, db: Session = Depends(get_db), actor: User = Depends(require_admin)):
     if db.execute(select(User).where(User.username == payload.username)).scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Username already exists")
+    _seller_needs_record(_valid_role(payload.role), payload.agent_id)
     user = User(username=payload.username, full_name=payload.full_name, role=_valid_role(payload.role),
                 password_hash=get_password_hash(payload.password), is_active=payload.is_active,
                 agent_id=_valid_agent_link(db, payload.agent_id), email=_unused_email(db, payload.email))
@@ -183,6 +192,7 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
         changes["agent_id"] = _valid_agent_link(db, changes["agent_id"], user.id)
     if "email" in changes:
         changes["email"] = _unused_email(db, changes["email"], user.id)
+    _seller_needs_record(changes.get("role", canonical_role(user.role)), changes.get("agent_id", user.agent_id))
     was_admin = canonical_role(user.role) == ADMINISTRATOR and user.is_active
     stays_admin = (
         changes.get("role", canonical_role(user.role)) == ADMINISTRATOR

@@ -78,7 +78,7 @@ from main import app  # noqa: E402
 BUSINESS_TABLES = (
     "auth_attempts", "password_reset_tokens", "notification_reads", "agent_reviews", "audit_events", "document_audit_events", "property_media", "transactions", "clients",
     "documents", "document_folders", "property_listings", "partners", "agents", "users",
-    "agent_assessments", "agent_applicants", "branches",
+    "agent_assessments", "agent_applicants", "branches", "listing_assignments", "deal_events", "deals", "commission_records", "commission_structures", "document_extractions",
 )
 
 # Synthetic agents used by the ingestion test documents (test DB only).
@@ -88,6 +88,15 @@ TEST_AGENTS = [
     ("AGT-0006", "Daniel Flores", "Imus, Cavite"),
     ("AGT-0007", "Patricia Ramos", "Bacoor, Cavite"),
 ]
+
+
+@pytest.fixture(autouse=True)
+def accreditation_optional(monkeypatch):
+    """Most tests use listings without developer accreditation; the tests of
+    accreditation itself switch the requirement back on (the production default)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ACCREDITATION_REQUIRED", False)
 
 
 @pytest.fixture(autouse=True)

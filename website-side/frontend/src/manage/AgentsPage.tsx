@@ -27,6 +27,7 @@ type Agent = {
   recorded_completed_sales: number; recorded_sales_value: number
   recorded_deals: number; performance_rate: number | null; photo_version: number | null
   branch_id: number | null; branch_name: string | null; designation: string | null; work_area: string | null; hired_on: string | null
+  recruiter_name: string | null; recruited_by_agent_id: string | null; commission_visible: boolean
   last_synced_at: string | null; created_at: string | null; updated_at: string | null
 }
 type Activity = {
@@ -68,7 +69,7 @@ export function AgentsPage() {
 
   const columns: Column<Agent>[] = [
     {
-      key: "name", label: "Agent", sort: (a) => a.full_name,
+      key: "name", label: "Seller", sort: (a) => a.full_name,
       render: (a) => (
         <span className="flex items-center gap-3">
           <AgentAvatar agentId={a.agent_id} name={a.full_name} version={a.photo_version} />
@@ -80,7 +81,7 @@ export function AgentsPage() {
       ),
     },
     { key: "status", label: "Status", sort: (a) => a.status, render: (a) => <Badge value={a.status} /> },
-    { key: "branch", label: "Branch", sort: (a) => a.branch_name ?? "", render: (a) => text(a.branch_name), hideOnPhone: true },
+    { key: "branch", label: "Team / Cluster", sort: (a) => a.branch_name ?? "", render: (a) => text(a.branch_name), hideOnPhone: true },
     { key: "client", label: "Client rating", sort: (a) => a.client_rating ?? -1, render: (a) => <span>{<Stars value={a.client_rating} />}{a.review_count ? <span className="ml-1 text-xs text-ab-faint">({a.review_count})</span> : null}</span> },
     { key: "clients", label: "Assigned clients", align: "right", sort: (a) => a.assigned_clients, render: (a) => a.assigned_clients, hideOnPhone: true },
     { key: "open", label: "Open reservations", align: "right", sort: (a) => a.open_reservations, render: (a) => a.open_reservations },
@@ -96,13 +97,13 @@ export function AgentsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
-        title="Your agents and the work recorded for each"
-        subtitle="Agents and the clients, reservations and sales recorded for each one in ALTY, with verified client reviews."
+        title="Your sellers and the work recorded for each"
+        subtitle="Sellers (agents) and the clients, reservations and sales recorded for each one in ALTY, with verified client reviews."
         actions={isManagement(user?.role) && <SyncButton path="/agents/sync" what="Agents" onDone={reload} />}
       />
       {data && (
         <Tiles items={[
-          { label: "Agents", value: agents.length, onClick: () => setStatus(""), active: !status },
+          { label: "Sellers", value: agents.length, onClick: () => setStatus(""), active: !status },
           { label: "Active", value: active, onClick: () => setStatus(status === "ACTIVE" ? "" : "ACTIVE"), active: status === "ACTIVE" },
           { label: "Open reservations", value: agents.reduce((s, a) => s + a.open_reservations, 0), detail: "Waiting to become sales" },
           { label: "Completed sales", value: agents.reduce((s, a) => s + a.recorded_completed_sales, 0), detail: "Recorded in ALTY" },
@@ -111,17 +112,17 @@ export function AgentsPage() {
         ]} />
       )}
       <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-        <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, agent ID, location or phone" /></div>
+        <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, seller ID, location or phone" /></div>
         <Select label="Status" value={status} onChange={setStatus} options={[{ value: "", label: "All statuses" }, ...[...new Set(agents.map((a) => a.status))].map((s) => ({ value: s, label: statusLabel(s) }))]} />
-        <Select label="Branch" value={branch} onChange={setBranch} options={[{ value: "", label: "All branches" },
+        <Select label="Team / Cluster" value={branch} onChange={setBranch} options={[{ value: "", label: "All teams" },
           ...[...new Map(agents.filter((a) => a.branch_id).map((a) => [String(a.branch_id), a.branch_name ?? ""])).entries()].map(([value, label]) => ({ value, label })),
-          { value: "NONE", label: "No branch" }]} />
+          { value: "NONE", label: "No team" }]} />
       </div>
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
           <p className="text-xs text-ab-faint">{t("{n} of {total} agents", { n: shown.length, total: agents.length })}</p>
-          <DataTable exportTitle="Agents" rows={shown} columns={columns} rowKey={(a) => a.agent_id} onOpen={(a) => open(a.agent_id)} empty="No agents match these filters." initialSort={{ key: "value", dir: "desc" }} />
+          <DataTable exportTitle="Sellers" rows={shown} columns={columns} rowKey={(a) => a.agent_id} onOpen={(a) => open(a.agent_id)} empty="No sellers match these filters." initialSort={{ key: "value", dir: "desc" }} />
         </>
       )}
       {selected && <AgentDrawer agent={selected} onClose={close} onChanged={reload} />}

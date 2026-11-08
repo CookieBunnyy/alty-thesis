@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, type FormEvent } from "react"
 import { Building2, ExternalLink, LoaderCircle, Mail, Pencil, Phone, Plus, Trash2, X } from "lucide-react"
 import { Link } from "@/components/Link"
 import { categoryLabel } from "@/lib/categories"
-import { contains, dateTime, isManagement, peso, pesoShort, text } from "./format"
+import { contains, date, dateTime, isManagement, peso, pesoShort, text } from "./format"
 import { Badge, Button, Confirm, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
@@ -19,11 +19,24 @@ export type Partner = {
   contact_person: string | null; email: string | null; phone_number: string | null; website: string | null; address: string | null; notes: string | null
   created_at: string; updated_at: string; logo_version?: number | null
   listings: number; available_listings: number; transactions: number; completed_sales: number; sales_value: number
+  accreditation_status: string; accreditation_reference: string | null; accreditation_valid_from: string | null
+  accreditation_valid_until: string | null; accreditation_notes: string | null
+  accreditation_verified_by: string | null; accreditation_verified_at: string | null
+  accreditation: { valid: boolean; status: string; reason: string | null }
 }
 type PartnerDetail = Partner & { listing_rows: { listing_id: number; title: string | null; category: string | null; status: string; price_total: number | null; village_name: string | null }[] }
 
 const TYPES: Record<string, string> = { DEVELOPER: "Developer", BROKERAGE: "Brokerage", BANK: "Bank / Financing", CONTRACTOR: "Contractor", OTHER: "Other partner" }
 const typeLabel = (code: string | null) => t(code ? TYPES[code] ?? code : "Type not set")
+const ACCREDITATION: Record<string, string> = { NONE: "Not recorded", PENDING: "Pending", VERIFIED: "Verified", EXPIRED: "Expired", REVOKED: "Revoked" }
+
+/** A developer's accreditation of Abellar Realty: only valid accreditation lets its listings be marketed. */
+function AccreditationBadge({ partner }: { partner: Partner }) {
+  if (partner.partner_type !== "DEVELOPER") return <span className="text-xs text-ab-faint">—</span>
+  const status = partner.accreditation.valid ? "VERIFIED" : partner.accreditation.status
+  const tone = partner.accreditation.valid ? "bg-ab-success/15 text-ab-success" : status === "PENDING" ? "bg-ab-warning/15 text-ab-warning" : "bg-ab-danger/10 text-ab-danger"
+  return <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{t(ACCREDITATION[status] ?? status)}</span>
+}
 
 export function PartnersPage() {
   const { api, user } = useStaffAuth()
@@ -57,6 +70,7 @@ export function PartnersPage() {
     { key: "listings", label: "Listings", align: "right", sort: (p) => p.listings, render: (p) => (p.listings ? t("{n} ({a} available)", { n: p.listings, a: p.available_listings }) : "0") },
     { key: "sales", label: "Completed sales", align: "right", sort: (p) => p.completed_sales, render: (p) => p.completed_sales, hideOnPhone: true },
     { key: "value", label: "Sales value", align: "right", sort: (p) => p.sales_value, render: (p) => (p.sales_value ? pesoShort(p.sales_value) : "—") },
+    { key: "accreditation", label: "Accreditation", sort: (p) => (p.accreditation.valid ? 2 : p.partner_type === "DEVELOPER" ? 1 : 0), render: (p) => <AccreditationBadge partner={p} /> },
     { key: "status", label: "Status", sort: (p) => p.status, render: (p) => <Badge value={p.status} /> },
   ]
 
@@ -176,6 +190,20 @@ function PartnerDrawer({ partner, canManage, onClose, onEdit, onDeleted, onChang
           <div key={label} className="rounded-xl border border-ab-border bg-ab-card p-3"><p className="text-[11px] text-ab-faint">{t(label)}</p><p className="mt-0.5 font-bold tabular-nums">{value}</p></div>
         ))}
       </div>
+      {partner.partner_type === "DEVELOPER" && (
+        <Section title="Accreditation of Abellar Realty">
+          <p className="mb-2 text-xs text-ab-muted">{t("The developer's accreditation lets Abellar Realty market its properties. Listings can only be approved for marketing while it is verified and not expired.")}</p>
+          <Facts items={[
+            ["Status", <AccreditationBadge partner={partner} />],
+            ["Reference", partner.accreditation_reference],
+            ["Valid from", partner.accreditation_valid_from ? date(partner.accreditation_valid_from) : null],
+            ["Valid until", partner.accreditation_valid_until ? date(partner.accreditation_valid_until) : null],
+            ["Verified by", partner.accreditation_verified_by ? `${partner.accreditation_verified_by} · ${dateTime(partner.accreditation_verified_at)}` : null],
+            ["Notes", partner.accreditation_notes],
+          ]} />
+          {!partner.accreditation.valid && partner.accreditation.reason && <p className="mt-2 text-xs text-ab-warning">{partner.accreditation.reason}</p>}
+        </Section>
+      )}
       <Section title="Details">
         <Facts items={[
           ["Type", partner.partner_type ? typeLabel(partner.partner_type) : null],
@@ -223,6 +251,9 @@ function PartnerForm({ partner, onClose, onSaved }: { partner: Partner | null; o
     name: partner?.name ?? "", partner_type: partner?.partner_type ?? "", status: partner?.status ?? "ACTIVE",
     contact_person: partner?.contact_person ?? "", phone_number: partner?.phone_number ?? "", email: partner?.email ?? "",
     website: partner?.website ?? "", address: partner?.address ?? "", notes: partner?.notes ?? "",
+    accreditation_status: partner?.accreditation_status ?? "NONE", accreditation_reference: partner?.accreditation_reference ?? "",
+    accreditation_valid_from: partner?.accreditation_valid_from ?? "", accreditation_valid_until: partner?.accreditation_valid_until ?? "",
+    accreditation_notes: partner?.accreditation_notes ?? "",
   })
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
@@ -233,7 +264,8 @@ function PartnerForm({ partner, onClose, onSaved }: { partner: Partner | null; o
     setBusy(true)
     setError("")
     try {
-      const body = JSON.stringify({ ...form, partner_type: form.partner_type || null })
+      const body = JSON.stringify({ ...form, partner_type: form.partner_type || null,
+        accreditation_valid_from: form.accreditation_valid_from || null, accreditation_valid_until: form.accreditation_valid_until || null })
       const saved = partner
         ? await api<Partner>(`/partners/${partner.id}`, { method: "PUT", body })
         : await api<Partner>("/partners", { method: "POST", body })
@@ -269,6 +301,20 @@ function PartnerForm({ partner, onClose, onSaved }: { partner: Partner | null; o
           <label className="text-sm font-medium">{t("Website")}<input className={field} value={form.website} onChange={set("website")} placeholder="https://" /></label>
           <label className="text-sm font-medium sm:col-span-2">{t("Address")}<input className={field} value={form.address} onChange={set("address")} /></label>
           <label className="text-sm font-medium sm:col-span-2">{t("Notes")}<textarea className={`${field} min-h-20`} value={form.notes} onChange={set("notes")} /></label>
+          {form.partner_type === "DEVELOPER" && (
+            <fieldset className="grid gap-3 rounded-xl border border-ab-border p-3 sm:col-span-2 sm:grid-cols-2">
+              <legend className="px-1 text-sm font-semibold">{t("Accreditation of Abellar Realty")}</legend>
+              <label className="text-sm font-medium">{t("Status")}
+                <select className={field} value={form.accreditation_status} onChange={set("accreditation_status")}>
+                  {Object.entries(ACCREDITATION).map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}
+                </select>
+              </label>
+              <label className="text-sm font-medium">{t("Reference")}<input className={field} value={form.accreditation_reference} onChange={set("accreditation_reference")} placeholder={t("e.g. accreditation certificate no.")} /></label>
+              <label className="text-sm font-medium">{t("Valid from")}<input type="date" className={field} value={form.accreditation_valid_from} onChange={set("accreditation_valid_from")} /></label>
+              <label className="text-sm font-medium">{t("Valid until")}<input type="date" className={field} value={form.accreditation_valid_until} onChange={set("accreditation_valid_until")} /></label>
+              <label className="text-sm font-medium sm:col-span-2">{t("Accreditation notes")}<textarea className={`${field} min-h-16`} value={form.accreditation_notes} onChange={set("accreditation_notes")} /></label>
+            </fieldset>
+          )}
         </div>
         {error && <p role="alert" className="mx-5 mb-2 rounded-lg border border-ab-danger/40 bg-ab-danger/10 px-3 py-2 text-sm text-ab-danger">{error}</p>}
         <footer className="flex justify-end gap-2 border-t border-ab-border px-5 py-3">

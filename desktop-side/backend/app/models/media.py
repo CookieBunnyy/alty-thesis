@@ -32,6 +32,8 @@ class PropertyMedia(Base):
     # GOOD / ACCEPTABLE / POOR / INVALID
     quality_status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     quality_issues: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    # PHOTO (the property) or PERSPECTIVE (architectural perspective / project image).
+    media_kind: Mapped[str] = mapped_column(String(20), nullable=False, default="PHOTO", server_default="PHOTO")
     uploaded_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

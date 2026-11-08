@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.client_ip import client_ip
 from app.core.config import DEFAULT_SECRET_KEY, settings
 from app.core.database import get_db
-from app.core.security import get_current_user, require_admin
+from app.core.security import get_current_user, require_admin, get_company_user
 from app.models.user import User
 from app.services import ocr_service
 from app.services.audit import record_audit
@@ -64,7 +64,7 @@ def get_system_settings(db: Session = Depends(get_db), _user: User = Depends(req
 
 
 @router.get("/sync")
-def get_sync_status(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_sync_status(db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     return sync_state(db)
 
 

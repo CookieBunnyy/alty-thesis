@@ -7,10 +7,12 @@ import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
-import { useBranchOptions } from "./branches"
+import { useBranchOptions, useSellerOptions } from "./branches"
 
 type Applicant = {
   id: number; full_name: string; email: string | null; phone_number: string | null; address: string | null
+  birthday: string | null; recruiter_agent_id: string | null; recruiter_name: string | null
+  not_bound_to_other_broker: boolean | null; declaration_date: string | null
   branch_id: number | null; branch_name: string | null; desired_designation: string | null; source: string | null
   experience_years: number | null; has_license: boolean; license_number: string | null; screening_score: number | null
   interview_on: string | null; status: string; notes: string | null
@@ -26,7 +28,7 @@ const NEXT: Record<string, string> = { APPLIED: "SCREENING", SCREENING: "INTERVI
 const STEP_HELP: Record<string, string> = {
   APPLIED: "Check the application and requirements, then move to screening.",
   SCREENING: "Review documents and the screening score, then schedule an interview.",
-  INTERVIEW: "After the interview, approve or reject the applicant.",
+  INTERVIEW: "After the interview, approve or reject the applicant. Approval needs their declaration that they are not bound to another broker.",
   APPROVED: "Onboard to create the agent record and assign a branch.",
 }
 
@@ -42,7 +44,7 @@ export function RecruitmentPage() {
   const [applicants, summary] = data ?? [null, null]
   const rows = useMemo(() => applicants ?? [], [applicants])
   const shown = rows.filter((a) => (!status || (status === "OPEN" ? NEXT[a.status] || a.status === "APPROVED" : a.status === status)) &&
-    contains([a.full_name, a.email, a.phone_number, a.branch_name, a.desired_designation], search))
+    contains([a.full_name, a.email, a.phone_number, a.branch_name, a.desired_designation, a.recruiter_name], search))
   const selected = id ? rows.find((a) => String(a.id) === id) ?? null : null
 
   const columns: Column<Applicant>[] = [
@@ -55,8 +57,9 @@ export function RecruitmentPage() {
         </span>
       ),
     },
+    { key: "recruiter", label: "Recruiter", sort: (a) => a.recruiter_name ?? "", render: (a) => text(a.recruiter_name), hideOnPhone: true },
     { key: "position", label: "Applying as", sort: (a) => a.desired_designation ?? "", render: (a) => t(a.desired_designation ?? "Not set"), hideOnPhone: true },
-    { key: "branch", label: "Branch", sort: (a) => a.branch_name ?? "", render: (a) => text(a.branch_name) },
+    { key: "branch", label: "Team / Cluster", sort: (a) => a.branch_name ?? "", render: (a) => text(a.branch_name) },
     { key: "score", label: "Screening score", align: "right", sort: (a) => a.screening_score ?? -1, render: (a) => (a.screening_score != null ? `${a.screening_score}/100` : "—"), hideOnPhone: true },
     { key: "license", label: "License", sort: (a) => (a.has_license ? 1 : 0), render: (a) => (a.has_license ? t("Licensed") : t("None")), hideOnPhone: true },
     { key: "applied", label: "Applied", sort: (a) => a.created_at, render: (a) => date(a.created_at), hideOnPhone: true },
@@ -80,7 +83,7 @@ export function RecruitmentPage() {
           ]} />
           <Pipeline summary={summary} />
           <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-            <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, contact, branch or position" /></div>
+            <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, contact, team, recruiter or position" /></div>
             <Select label="Stage" value={status} onChange={setStatus} options={[{ value: "", label: "All stages" }, { value: "OPEN", label: "Open applications" },
               ...[...summary.stages, ...summary.closed].map((s) => ({ value: s, label: statusLabel(s) }))]} />
           </div>
@@ -191,8 +194,12 @@ function ApplicantDrawer({ applicant, summary, onClose, onEdit, onChanged, onDel
       </div>
       <Section title="Application">
         <Facts items={[
+          ["Birthday", applicant.birthday ? date(applicant.birthday) : null],
+          ["Recruiter", applicant.recruiter_name],
+          ["Team / Cluster", applicant.branch_name],
+          ["Not bound to another broker", applicant.not_bound_to_other_broker == null ? t("Not declared yet")
+            : `${applicant.not_bound_to_other_broker ? t("Yes, declared") : t("No")}${applicant.declaration_date ? ` · ${date(applicant.declaration_date)}` : ""}`],
           ["Applying as", applicant.desired_designation ? t(applicant.desired_designation) : null],
-          ["Branch", applicant.branch_name],
           ["Source", applicant.source ? statusLabel(applicant.source) : null],
           ["Experience", applicant.experience_years != null ? t("{n} year(s)", { n: applicant.experience_years }) : null],
           ["Real estate license", applicant.has_license ? `${t("Yes")}${applicant.license_number ? ` · ${applicant.license_number}` : ""}` : t("No")],
@@ -283,15 +290,18 @@ function OnboardDialog({ applicant, summary, onClose, onDone }: { applicant: App
   const toast = useToast()
   const branches = useBranchOptions()
   const [form, setForm] = useState({ designation: applicant.desired_designation ?? "Trainee Agent", branch_id: applicant.branch_id ? String(applicant.branch_id) : "", work_area: "", hired_on: new Date().toISOString().slice(0, 10) })
+  const [account, setAccount] = useState({ create: false, username: (applicant.email ?? "").split("@")[0], password: "", email: applicant.email ?? "" })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (account.create && (account.username.trim().length < 3 || account.password.length < 8)) return setError(t("Give the seller login a username (3+ characters) and a password (8+ characters)."))
     setBusy(true)
     setError("")
     try {
       const saved = await api<{ agent: { agent_id: string } }>(`/recruitment/applicants/${applicant.id}/onboard`, {
-        method: "POST", body: JSON.stringify({ ...form, branch_id: form.branch_id ? Number(form.branch_id) : null, work_area: form.work_area || null }),
+        method: "POST", body: JSON.stringify({ ...form, branch_id: form.branch_id ? Number(form.branch_id) : null, work_area: form.work_area || null,
+          account: account.create ? { username: account.username.trim(), password: account.password, email: account.email.trim() || null } : null }),
       })
       toast(t("{name} is now agent {id}.", { name: applicant.full_name, id: saved.agent.agent_id }))
       onDone()
@@ -310,14 +320,25 @@ function OnboardDialog({ applicant, summary, onClose, onDone }: { applicant: App
             {summary.designations.map((d) => <option key={d} value={d}>{t(d)}</option>)}
           </select>
         </label>
-        <label className="text-sm font-medium">{t("Branch")}
+        <label className="text-sm font-medium">{t("Team / Cluster")}
           <select className={field} value={form.branch_id} onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}>
-            <option value="">{t("No branch")}</option>
+            <option value="">{t("No team")}</option>
             {branches.filter((b) => b.is_active).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </label>
         <label className="text-sm font-medium">{t("Work area")}<input className={field} value={form.work_area} onChange={(e) => setForm((f) => ({ ...f, work_area: e.target.value }))} placeholder={t("e.g. Imus, Bacoor")} /></label>
         <label className="text-sm font-medium">{t("Start date")}<input type="date" className={field} value={form.hired_on} onChange={(e) => setForm((f) => ({ ...f, hired_on: e.target.value }))} /></label>
+        <label className="flex items-center gap-2 text-sm font-medium sm:col-span-2">
+          <input type="checkbox" checked={account.create} onChange={(e) => setAccount((a) => ({ ...a, create: e.target.checked }))} className="h-4 w-4 accent-[var(--color-ab-accent)]" />
+          {t("Also create the seller's login (Seller role, linked to this record)")}
+        </label>
+        {account.create && (
+          <>
+            <label className="text-sm font-medium">{t("Username")}<input className={field} value={account.username} onChange={(e) => setAccount((a) => ({ ...a, username: e.target.value }))} autoComplete="off" /></label>
+            <label className="text-sm font-medium">{t("Initial password")}<input type="password" className={field} value={account.password} onChange={(e) => setAccount((a) => ({ ...a, password: e.target.value }))} autoComplete="new-password" /></label>
+            <label className="text-sm font-medium sm:col-span-2">{t("Email (for password recovery)")}<input type="email" className={field} value={account.email} onChange={(e) => setAccount((a) => ({ ...a, email: e.target.value }))} /></label>
+          </>
+        )}
         {error && <p role="alert" className="text-sm text-ab-danger sm:col-span-2">{error}</p>}
       </div>
     </Dialog>
@@ -328,8 +349,11 @@ function ApplicantForm({ applicant, summary, onClose, onSaved }: { applicant: Ap
   const { api } = useStaffAuth()
   const toast = useToast()
   const branches = useBranchOptions()
+  const sellers = useSellerOptions()
   const [form, setForm] = useState({
     full_name: applicant?.full_name ?? "", email: applicant?.email ?? "", phone_number: applicant?.phone_number ?? "", address: applicant?.address ?? "",
+    birthday: applicant?.birthday ?? "", recruiter_agent_id: applicant?.recruiter_agent_id ?? "", recruiter_name: applicant?.recruiter_agent_id ? "" : applicant?.recruiter_name ?? "",
+    not_bound_to_other_broker: applicant?.not_bound_to_other_broker ?? false, declaration_date: applicant?.declaration_date ?? "",
     branch_id: applicant?.branch_id ? String(applicant.branch_id) : "", desired_designation: applicant?.desired_designation ?? "",
     source: applicant?.source ?? "", experience_years: applicant?.experience_years != null ? String(applicant.experience_years) : "",
     has_license: applicant?.has_license ?? false, license_number: applicant?.license_number ?? "",
@@ -352,6 +376,10 @@ function ApplicantForm({ applicant, summary, onClose, onSaved }: { applicant: Ap
         experience_years: form.experience_years === "" ? null : Number(form.experience_years),
         screening_score: form.screening_score === "" ? null : Number(form.screening_score),
         interview_on: form.interview_on || null,
+        birthday: form.birthday || null,
+        recruiter_agent_id: form.recruiter_agent_id || null,
+        recruiter_name: form.recruiter_agent_id ? null : form.recruiter_name.trim() || null,
+        declaration_date: form.declaration_date || null,
       })
       const saved = applicant
         ? await api<Applicant>(`/recruitment/applicants/${applicant.id}`, { method: "PUT", body })
@@ -371,13 +399,21 @@ function ApplicantForm({ applicant, summary, onClose, onSaved }: { applicant: Ap
         <label className="text-sm font-medium">{t("Phone")}<input className={field} value={form.phone_number} onChange={set("phone_number")} /></label>
         <label className="text-sm font-medium">{t("Email")}<input type="email" className={field} value={form.email} onChange={set("email")} /></label>
         <label className="text-sm font-medium sm:col-span-2">{t("Address")}<input className={field} value={form.address} onChange={set("address")} /></label>
+        <label className="text-sm font-medium">{t("Birthday")}<input type="date" className={field} value={form.birthday} onChange={set("birthday")} /></label>
+        <label className="text-sm font-medium">{t("Recruiter")}
+          <select className={field} value={form.recruiter_agent_id} onChange={set("recruiter_agent_id")}>
+            <option value="">{t("Not a seller in ALTY / not set")}</option>
+            {sellers.map((s) => <option key={s.agent_id} value={s.agent_id}>{s.full_name}</option>)}
+          </select>
+        </label>
+        {!form.recruiter_agent_id && <label className="text-sm font-medium sm:col-span-2">{t("Recruiter's name (if not a seller in ALTY)")}<input className={field} value={form.recruiter_name} onChange={set("recruiter_name")} /></label>}
         <label className="text-sm font-medium">{t("Applying as")}
           <select className={field} value={form.desired_designation} onChange={set("desired_designation")}>
             <option value="">{t("Not set")}</option>
             {summary.designations.map((d) => <option key={d} value={d}>{t(d)}</option>)}
           </select>
         </label>
-        <label className="text-sm font-medium">{t("Branch")}
+        <label className="text-sm font-medium">{t("Team / Cluster")}
           <select className={field} value={form.branch_id} onChange={set("branch_id")}>
             <option value="">{t("Not set")}</option>
             {branches.filter((b) => b.is_active).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -397,6 +433,14 @@ function ApplicantForm({ applicant, summary, onClose, onSaved }: { applicant: Ap
         <label className="text-sm font-medium">{t("License number")}<input className={field} value={form.license_number} onChange={set("license_number")} disabled={!form.has_license} /></label>
         <label className="text-sm font-medium">{t("Screening score (0–100)")}<input type="number" min={0} max={100} className={field} value={form.screening_score} onChange={set("screening_score")} /></label>
         <label className="text-sm font-medium">{t("Interview date")}<input type="date" className={field} value={form.interview_on} onChange={set("interview_on")} /></label>
+        <fieldset className="grid gap-3 rounded-xl border border-ab-border p-3 sm:col-span-2 sm:grid-cols-2">
+          <legend className="px-1 text-sm font-semibold">{t("Broker affiliation")}</legend>
+          <label className="flex items-start gap-2 text-sm font-medium sm:col-span-2">
+            <input type="checkbox" checked={form.not_bound_to_other_broker} onChange={(e) => setForm((f) => ({ ...f, not_bound_to_other_broker: e.target.checked }))} className="mt-0.5 h-4 w-4 accent-[var(--color-ab-accent)]" />
+            {t("The applicant declared they are not actively bound to another broker")}
+          </label>
+          <label className="text-sm font-medium">{t("Declaration date")}<input type="date" className={field} value={form.declaration_date} onChange={set("declaration_date")} /></label>
+        </fieldset>
         <label className="text-sm font-medium sm:col-span-2">{t("Notes")}<textarea className={`${field} min-h-20`} value={form.notes} onChange={set("notes")} /></label>
         {error && <p role="alert" className="rounded-lg border border-ab-danger/40 bg-ab-danger/10 px-3 py-2 text-sm text-ab-danger sm:col-span-2">{error}</p>}
       </div>

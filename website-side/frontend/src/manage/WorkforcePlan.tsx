@@ -33,9 +33,9 @@ const one = (v: number) => v.toLocaleString(locale(), { maximumFractionDigits: 1
 
 /** The recommendation as a sentence (built here so it follows the chosen language). */
 function sentence(r: Recommendation, plan: Plan): string {
-  if (r.kind === "ASSIGN") return t("Assign {n} agent(s) without a branch to {to}.", { n: r.agents, to: r.to_branch ?? "" })
-  if (r.kind === "REALLOCATE") return t("Move {n} agent(s) from {from} to {to}.", { n: r.agents, from: r.from_branch ?? "", to: r.to_branch ?? "" })
-  if (r.kind === "RECRUIT") return r.to_branch ? t("Recruit {n} agent(s) for {to}.", { n: r.agents, to: r.to_branch }) : t("Recruit {n} agent(s).", { n: r.agents })
+  if (r.kind === "ASSIGN") return t("Assign {n} seller(s) without a team to {to}.", { n: r.agents, to: r.to_branch ?? "" })
+  if (r.kind === "REALLOCATE") return t("Move {n} seller(s) from {from} to {to}.", { n: r.agents, from: r.from_branch ?? "", to: r.to_branch ?? "" })
+  if (r.kind === "RECRUIT") return r.to_branch ? t("Recruit {n} seller(s) for {to}.", { n: r.agents, to: r.to_branch }) : t("Recruit {n} seller(s).", { n: r.agents })
   if (r.kind === "LEADS") return t("Agents have more capacity than the expected deals: focus on lead generation and marketing before hiring.")
   return t("Give new clients to other agents until these agents' open reservations go down: {names}.", { names: plan.overloaded_agents.map((a) => a.full_name).join(", ") })
 }
@@ -49,10 +49,10 @@ export function WorkforcePlan() {
   const company = data?.company
 
   const columns: Column<PlanRow>[] = [
-    { key: "name", label: "Branch", sort: (r) => r.name, render: (r) => <span className="font-semibold">{r.branch_id === 0 ? t("No branch") : r.name}</span> },
+    { key: "name", label: "Team / Cluster", sort: (r) => r.name, render: (r) => <span className="font-semibold">{r.branch_id === 0 ? t("No team") : r.name}</span> },
     { key: "demand", label: "Expected deals", align: "right", sort: (r) => r.demand.value, render: (r) => one(r.demand.value) },
     { key: "needed", label: "Agents needed", align: "right", sort: (r) => r.agents_needed, render: (r) => r.agents_needed },
-    { key: "active", label: "Active agents", align: "right", sort: (r) => r.active_agents, render: (r) => r.active_agents },
+    { key: "active", label: "Active sellers", align: "right", sort: (r) => r.active_agents, render: (r) => r.active_agents },
     { key: "gap", label: "Gap", align: "right", sort: (r) => r.gap, render: (r) => <span className={`font-semibold tabular-nums ${r.gap > 0 ? "text-ab-danger" : ""}`}>{r.gap > 0 ? `+${r.gap}` : r.gap}</span> },
     { key: "use", label: "Utilization", align: "right", sort: (r) => r.utilization ?? -1, render: (r) => (r.utilization != null ? `${r.utilization}%` : "—"), hideOnPhone: true },
     { key: "status", label: "Status", sort: (r) => r.status, render: (r) => <span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS[r.status].tone}`}>{t(STATUS[r.status].label)}</span> },
@@ -96,14 +96,14 @@ export function WorkforcePlan() {
             <DataTable exportTitle="Workforce demand vs capacity" rows={data.branches} columns={columns} rowKey={(r) => String(r.branch_id)} empty="No branches." initialSort={{ key: "gap", dir: "desc" }} />
           ) : (
             <p className="text-sm text-ab-muted">
-              {t("Add branches and assign agents to see this per branch.")} <Link to="/manage/branches" className="font-semibold text-ab-accent hover:underline">{t("Open Branches")}</Link>
+              {t("Add teams and assign sellers to see this per team.")} <Link to="/manage/branches" className="font-semibold text-ab-accent hover:underline">{t("Open Teams / Clusters")}</Link>
             </p>
           )}
 
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-ab-faint">{t("Recommendations")}</p>
             {data.recommendations.length === 0 ? (
-              <p className="mt-2 text-sm text-ab-muted">{t("No changes needed: every branch has about the agents its expected deals need.")}</p>
+              <p className="mt-2 text-sm text-ab-muted">{t("No changes needed: every team has about the sellers its expected deals need.")}</p>
             ) : (
               <ul className="mt-2 space-y-2">
                 {data.recommendations.map((r, index) => {

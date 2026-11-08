@@ -15,6 +15,10 @@ from app.models.partner import Partner
 from app.models.auth_security import AuthAttempt, PasswordResetToken
 from app.models.payment import TransactionPayment
 from app.models.workforce import AgentApplicant, AgentAssessment
+from app.models.listing_assignment import ListingAssignment
+from app.models.deal import Deal, DealEvent
+from app.models.commission import CommissionRecord, CommissionStructure
+from app.models.extraction import DocumentExtraction, DocumentSchema
 
 __all__ = [
 	"Branch",
@@ -38,4 +42,11 @@ __all__ = [
 	"TransactionPayment",
 	"AgentApplicant",
 	"AgentAssessment",
+	"ListingAssignment",
+	"Deal",
+	"DealEvent",
+	"CommissionRecord",
+	"CommissionStructure",
+	"DocumentExtraction",
+	"DocumentSchema",
 ]

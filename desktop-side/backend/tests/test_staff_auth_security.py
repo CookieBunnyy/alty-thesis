@@ -158,8 +158,8 @@ def test_client_accounts_cannot_use_staff_endpoints(api):
 
 
 def test_no_role_escalation(api, admin, employee):
-    _make_user("gm", "General Manager")
-    manager = login(api, "gm")
+    _make_user("owner", "Broker")
+    manager = login(api, "owner")  # the Broker manages the company, not system accounts
     me = api.get("/api/v1/auth/me", headers=employee).json()
     new_admin = {"username": "sneaky", "full_name": "S", "password": "password123", "role": "Administrator"}
     assert api.post("/api/v1/users", headers=employee, json=new_admin).status_code == 403
@@ -173,15 +173,15 @@ def test_no_role_escalation(api, admin, employee):
 
 def test_admin_sets_unique_staff_email(api, admin):
     created = api.post("/api/v1/users", headers=admin, json={
-        "username": "mailed", "full_name": "Mailed", "password": "password123", "role": "Employee",
+        "username": "mailed", "full_name": "Mailed", "password": "password123", "role": "Filing Manager",
         "email": "  Mailed.Person@Example.com "})
     assert created.status_code == 201 and created.json()["email"] == "mailed.person@example.com"
     clash = api.post("/api/v1/users", headers=admin, json={
-        "username": "other", "full_name": "Other", "password": "password123", "role": "Employee",
+        "username": "other", "full_name": "Other", "password": "password123", "role": "Filing Manager",
         "email": "MAILED.person@example.com"})
     assert clash.status_code == 409
     assert api.post("/api/v1/users", headers=admin, json={
-        "username": "bad", "full_name": "Bad", "password": "password123", "role": "Employee",
+        "username": "bad", "full_name": "Bad", "password": "password123", "role": "Filing Manager",
         "email": "not-an-email"}).status_code == 422
     user_id = created.json()["id"]
     assert api.put(f"/api/v1/users/{user_id}", headers=admin, json={"email": "new@example.com"}).json()["email"] == "new@example.com"

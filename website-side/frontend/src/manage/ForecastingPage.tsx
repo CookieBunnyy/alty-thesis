@@ -310,7 +310,7 @@ export function ForecastingPage() {
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
         title="How the business is doing, and what may come next"
-        subtitle="Recorded months next to what the forecast expected for them, and the forecast for the coming months. Pick a month to see how its figure was added up, the formula behind its forecast, and whether it met the likely range."
+        subtitle="Recorded months next to what the forecast expected for them, and the forecast for the coming months. Forecasts are statistical estimates from the recorded history, not figures Abellar has confirmed. Pick a month to see how its figure was added up, the formula behind its forecast, and whether it met the likely range."
         actions={
           <>
             <div role="tablist" aria-label={t("Measure")} className="flex rounded-xl border border-ab-border bg-ab-card p-1">

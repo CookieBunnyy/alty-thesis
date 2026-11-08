@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_current_user, require_management
+from app.core.security import get_current_user, require_management, get_company_user
 from app.models.partner import Partner
 from app.models.payment import TransactionPayment
 from app.models.transaction import PropertyTransaction
@@ -19,7 +20,7 @@ from app.schemas.transaction import (
     TransactionSummary,
     TransactionSyncResult,
 )
-from app.services import closing_costs
+from app.services import closing_costs, deal_pipeline
 from app.services.audit import record_audit
 from app.services.payment_plan import build_plan
 from app.services.client_sync import cancel_reservation
@@ -77,7 +78,7 @@ def get_transactions(
     limit: int = Query(default=500, ge=1, le=2000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_company_user),
 ):
     statement = select(PropertyTransaction).options(*WITH_PARTIES)
     if property_id is not None:
@@ -102,7 +103,7 @@ def get_transactions(
 
 
 @router.get("/summary", response_model=TransactionSummary)
-def get_transaction_summary(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_transaction_summary(db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     total, reserved, completed_sales, cancelled, revenue = db.execute(
         select(
             func.count(PropertyTransaction.transaction_id),
@@ -121,9 +122,15 @@ def get_transaction_summary(db: Session = Depends(get_db), _user: User = Depends
     }
 
 
+@router.get("/features")
+def transaction_features(_user: User = Depends(get_company_user)):
+    """Which unconfirmed financial features are switched on (settings)."""
+    return {"payment_schedule": settings.PAYMENT_SCHEDULE_ENABLED, "cost_estimate": settings.COST_ESTIMATE_ENABLED}
+
+
 @router.get("/{transaction_id}", response_model=TransactionResponse)
 def get_transaction(transaction_id: str, db: Session = Depends(get_db),
-                    _user: User = Depends(get_current_user)):
+                    _user: User = Depends(get_company_user)):
     transaction = find_transaction_by_reference(db, transaction_id)
     if transaction is None:
         raise HTTPException(status_code=404, detail="Transaction not found")
@@ -190,16 +197,23 @@ def _plan_response(db: Session, transaction: PropertyTransaction) -> dict:
     }
 
 
+def _require(enabled: bool, what: str) -> None:
+    if not enabled:
+        raise HTTPException(status_code=404, detail=f"The {what} is switched off until Abellar Realty confirms it")
+
+
 @router.get("/{transaction_id}/payment-plan")
-def get_payment_plan(transaction_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_payment_plan(transaction_id: str, db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     """A reservation's payment schedule (from the listing's terms) and the payments recorded for it."""
+    _require(settings.PAYMENT_SCHEDULE_ENABLED, "payment schedule")
     return _plan_response(db, _reservation_or_404(db, transaction_id))
 
 
 @router.get("/{transaction_id}/cost-breakdown")
-def get_cost_breakdown(transaction_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def get_cost_breakdown(transaction_id: str, db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     """The property price plus the estimated taxes and fees of buying it
     (transfer tax, documentary stamp tax, registration, notarial, VAT)."""
+    _require(settings.COST_ESTIMATE_ENABLED, "buying-cost estimate")
     transaction = _reservation_or_404(db, transaction_id)
     listing = transaction.property_listing
     price = (listing.price_total if listing is not None and listing.price_total else None) or transaction.amount
@@ -212,6 +226,7 @@ def get_cost_breakdown(transaction_id: str, db: Session = Depends(get_db), _user
 @router.post("/{transaction_id}/payments", status_code=201)
 def add_payment(transaction_id: str, payload: PaymentCreate, db: Session = Depends(get_db),
                 user: User = Depends(require_management)):
+    _require(settings.PAYMENT_SCHEDULE_ENABLED, "payment schedule")
     transaction = _reservation_or_404(db, transaction_id)
     if transaction.transaction_type != "RESERVED" or transaction.status == "CANCELLED":
         raise HTTPException(status_code=409, detail="Payments are recorded on a reservation that isn't cancelled")
@@ -297,6 +312,7 @@ def complete_sale(transaction_id: str, payload: SaleCompletion, db: Session = De
     client.property_id = listing.listing_id
     client.sync_status = "PENDING"
     db.flush()
+    deal_pipeline.record_transaction(db, sale, user.full_name or user.username)
     record_audit(db, "RESERVATION_COMPLETED_AS_SALE", actor=user, entity_type="transactions",
                  entity_id=str(sale.transaction_id),
                  details={"reservation": str(reservation.transaction_id), "amount": str(amount),

@@ -48,6 +48,12 @@ class Agent(Base):
     designation: Mapped[str | None] = mapped_column(String(60), nullable=True)
     work_area: Mapped[str | None] = mapped_column(String(255), nullable=True)
     hired_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Who recruited this seller (a seller in ALTY, or a name).
+    recruited_by_agent_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("agents.agent_id", ondelete="SET NULL"), nullable=True, index=True)
+    recruiter_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Management decides whether the seller sees their own commission records.
+    commission_visible: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
     branch = relationship("Branch", lazy="selectin", viewonly=True)
 
     @property

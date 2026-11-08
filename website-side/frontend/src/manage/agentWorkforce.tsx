@@ -15,6 +15,7 @@ import { useBranchOptions } from "./branches"
 export type AgentAssignmentFields = {
   agent_id: string; full_name: string
   branch_id: number | null; branch_name: string | null; designation: string | null; work_area: string | null; hired_on: string | null
+  recruiter_name?: string | null; recruited_by_agent_id?: string | null; commission_visible?: boolean
 }
 type Options = { designations: string[]; criteria: string[] }
 type Kpis = { deals: number; completed_sales: number; sales_value: number; commission: number; cancellations: number; conversion: number | null; client_rating: number | null; reviews: number }
@@ -51,8 +52,10 @@ export function AgentAssignment({ agent, canManage, onChanged }: { agent: AgentA
   return (
     <Section title="Assignment" action={canManage && <Button onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /> {t("Edit")}</Button>}>
       <Facts items={[
-        ["Branch", agent.branch_name],
+        ["Team / Cluster", agent.branch_name],
         ["Designation", agent.designation ? t(agent.designation) : null],
+        ["Recruited by", agent.recruiter_name ?? agent.recruited_by_agent_id ?? null],
+        ["Sees own commissions", agent.commission_visible ? t("Yes") : t("No")],
         ["Work area", agent.work_area],
         ["Start date", agent.hired_on ? date(agent.hired_on) : null],
       ]} />
@@ -66,7 +69,7 @@ function AssignmentDialog({ agent, onClose, onSaved }: { agent: AgentAssignmentF
   const toast = useToast()
   const branches = useBranchOptions()
   const options = useOptions()
-  const [form, setForm] = useState({ branch_id: agent.branch_id ? String(agent.branch_id) : "", designation: agent.designation ?? "", work_area: agent.work_area ?? "", hired_on: agent.hired_on ?? "" })
+  const [form, setForm] = useState({ branch_id: agent.branch_id ? String(agent.branch_id) : "", designation: agent.designation ?? "", work_area: agent.work_area ?? "", hired_on: agent.hired_on ?? "", commission_visible: Boolean(agent.commission_visible) })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const submit = async (event: FormEvent) => {
@@ -76,7 +79,7 @@ function AssignmentDialog({ agent, onClose, onSaved }: { agent: AgentAssignmentF
     try {
       await api(`/agents/${encodeURIComponent(agent.agent_id)}/assignment`, {
         method: "PUT",
-        body: JSON.stringify({ branch_id: form.branch_id ? Number(form.branch_id) : null, designation: form.designation || null, work_area: form.work_area || null, hired_on: form.hired_on || null }),
+        body: JSON.stringify({ branch_id: form.branch_id ? Number(form.branch_id) : null, designation: form.designation || null, work_area: form.work_area || null, hired_on: form.hired_on || null, commission_visible: form.commission_visible }),
       })
       toast(t("Saved {name}.", { name: agent.full_name }))
       await onSaved()
@@ -89,9 +92,9 @@ function AssignmentDialog({ agent, onClose, onSaved }: { agent: AgentAssignmentF
     <Modal title={t("Assignment of {name}", { name: agent.full_name })} onClose={onClose} onSubmit={submit}
       footer={<><Button onClick={onClose} disabled={busy}>{t("Cancel")}</Button><Button type="submit" variant="primary" disabled={busy}>{busy && <LoaderCircle className="h-4 w-4 animate-spin" />} {t("Save")}</Button></>}>
       <div className="grid gap-3 p-5 sm:grid-cols-2">
-        <label className="text-sm font-medium">{t("Branch")}
+        <label className="text-sm font-medium">{t("Team / Cluster")}
           <select className={field} value={form.branch_id} onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}>
-            <option value="">{t("No branch")}</option>
+            <option value="">{t("No team")}</option>
             {branches.map((b) => <option key={b.id} value={b.id}>{b.name}{b.is_active ? "" : ` (${t("inactive")})`}</option>)}
           </select>
         </label>
@@ -103,6 +106,10 @@ function AssignmentDialog({ agent, onClose, onSaved }: { agent: AgentAssignmentF
         </label>
         <label className="text-sm font-medium">{t("Work area")}<input className={field} value={form.work_area} onChange={(e) => setForm((f) => ({ ...f, work_area: e.target.value }))} placeholder={t("e.g. Imus, Bacoor")} /></label>
         <label className="text-sm font-medium">{t("Start date")}<input type="date" className={field} value={form.hired_on} onChange={(e) => setForm((f) => ({ ...f, hired_on: e.target.value }))} /></label>
+        <label className="flex items-start gap-2 text-sm font-medium sm:col-span-2">
+          <input type="checkbox" checked={form.commission_visible} onChange={(e) => setForm((f) => ({ ...f, commission_visible: e.target.checked }))} className="mt-0.5 h-4 w-4 accent-[var(--color-ab-accent)]" />
+          {t("Let this seller see their own commission records")}
+        </label>
         {error && <p role="alert" className="text-sm text-ab-danger sm:col-span-2">{error}</p>}
       </div>
     </Modal>
@@ -269,7 +276,7 @@ function AssessmentForm({ agent, onClose, onSaved }: { agent: AgentAssignmentFie
 /** Estimated commission per month for the last 12 months. */
 export function AgentCommission({ agentId }: { agentId: string }) {
   const { api } = useStaffAuth()
-  const load = useCallback(() => api<{ rate: number; total: number; months: { month: string; sales: number; revenue: number; commission: number }[] }>(`/agents/${encodeURIComponent(agentId)}/commission?months=12`), [api, agentId])
+  const load = useCallback(() => api<{ rate: number | null; total: number; months: { month: string; sales: number; revenue: number; commission: number }[] }>(`/agents/${encodeURIComponent(agentId)}/commission?months=12`), [api, agentId])
   const { data, error, loading, reload } = useApiData(load)
   const [table, setTable] = useState(false)
   return (
@@ -277,12 +284,11 @@ export function AgentCommission({ agentId }: { agentId: string }) {
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
-          <p className="text-sm">{t("Total")}: <span className="font-extrabold tabular-nums">{peso(data.total)}</span>
-            <span className="ml-2 text-xs text-ab-faint">{t("at a {r}% commission rate", { r: (data.rate * 100).toFixed(1) })}</span></p>
+          <p className="text-sm">{t("Total")}: <span className="font-extrabold tabular-nums">{peso(data.total)}</span></p>
           <StackedBarChart caption={t("Commission per month")} months={data.months.map((m) => m.month)} showTable={table} height={180}
             series={[{ key: "commission", label: t("Commission"), color: "var(--color-ab-chart-1)", values: data.months.map((m) => m.commission) }]}
             format={(v) => peso(v)} axisFormat={(v) => pesoShort(v)} />
-          <p className="mt-2 text-xs text-ab-faint">{t("Completed sales × the agent's commission rate (recorded total commission ÷ total sales; 3% when not recorded).")}</p>
+          <p className="mt-2 text-xs text-ab-faint">{t("From the commission records on the Commissions page, by the month of each sale. Nothing is estimated.")}</p>
         </>
       )}
     </Section>

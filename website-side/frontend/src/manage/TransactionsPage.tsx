@@ -11,6 +11,7 @@ import { CancellationDetails, CancelReason, CancelReservationDialog } from "./ca
 import { GrossSalesRecap } from "./GrossSalesRecap"
 import { PaymentSchedule, ProceedToSaleDialog } from "./reservationPayments"
 import { CostBreakdown } from "./costBreakdown"
+import { DealsPipeline } from "./DealsPipeline"
 import { locale } from "./i18n"
 
 // Philippine-time month of a transaction ("2026-09").
@@ -37,6 +38,7 @@ export function TransactionsPage() {
   const [status, setStatus] = useState("")
   const [type, setType] = useState("")
   const [period, setPeriod] = useState("")
+  const [view, setView] = useState<"records" | "pipeline">("records")
   const load = useCallback(() => Promise.all([api<Transaction[]>("/transactions?limit=2000"), api<Summary>("/transactions/summary")]), [api])
   const { data, error, loading, reload } = useApiData(load, "transactions")
   const [rows, summary] = data ?? [[], null]
@@ -80,6 +82,13 @@ export function TransactionsPage() {
         subtitle="Reservations and sales recorded from processed documents and from the central database. Management records the payments on a reservation and marks it sold when it proceeds to a purchase; every change is audited."
         actions={isManagement(user?.role) && <SyncButton path="/transactions/sync" what="Transactions" onDone={reload} />}
       />
+      <div role="tablist" aria-label={t("Transactions view")} className="flex w-fit rounded-xl border border-ab-border bg-ab-card p-1">
+        {([["records", "Reservations & sales"], ["pipeline", "Pipeline: inquiry to closing"]] as const).map(([key, label]) => (
+          <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${view === key ? "bg-ab-accent text-ab-ink" : "text-ab-muted hover:text-ab-text"}`}>{t(label)}</button>
+        ))}
+      </div>
+      {view === "pipeline" ? <DealsPipeline mode="company" /> : (<>
       {summary && (
         <Tiles items={[
           { label: "All transactions", value: summary.total, onClick: () => setStatus(""), active: !status },
@@ -108,6 +117,7 @@ export function TransactionsPage() {
         </>
       )}
       {selected && <TransactionDrawer transaction={selected} related={rows} onClose={close} canCancel={isManagement(user?.role)} onChanged={reload} />}
+      </>)}
     </div>
   )
 }
@@ -116,6 +126,10 @@ function TransactionDrawer({ transaction: tx, related, onClose, canCancel, onCha
   transaction: Transaction; related: Transaction[]; onClose: () => void; canCancel: boolean; onChanged: () => Promise<void>
 }) {
   const toast = useToast()
+  const { api } = useStaffAuth()
+  // The payment schedule and buying-cost estimate are off until Abellar confirms them.
+  const loadFeatures = useCallback(() => api<{ payment_schedule: boolean; cost_estimate: boolean }>("/transactions/features"), [api])
+  const features = useApiData(loadFeatures, "transaction-features").data
   const [cancelling, setCancelling] = useState(false)
   const [selling, setSelling] = useState(false)
   const isOpenReservation = tx.transaction_type === "RESERVED" && tx.status === "RESERVED"
@@ -144,9 +158,9 @@ function TransactionDrawer({ transaction: tx, related, onClose, canCancel, onCha
           ["Amount", peso(tx.amount)],
         ]} />
       </Section>
-      {tx.status !== "CANCELLED" && <CostBreakdown transactionId={tx.transaction_id} />}
+      {features?.cost_estimate && tx.status !== "CANCELLED" && <CostBreakdown transactionId={tx.transaction_id} />}
       {tx.transaction_type === "RESERVED" && tx.status !== "CANCELLED" && (
-        <PaymentSchedule transactionId={tx.transaction_id} canRecord={canCancel} />
+        features?.payment_schedule && <PaymentSchedule transactionId={tx.transaction_id} canRecord={canCancel} />
       )}
       <Section title="Timeline for this client and property">
         <ol className="relative space-y-3 border-l border-ab-border pl-4">

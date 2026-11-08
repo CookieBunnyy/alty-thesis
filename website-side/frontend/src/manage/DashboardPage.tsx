@@ -5,6 +5,7 @@ import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
 import { statusLabel, transactionDate } from "./format"
 import { locale, t } from "./i18n"
+import { SalesRecruitmentPanel } from "./dashboardSalesRecruitment"
 import { CancelReason } from "./cancellation"
 
 // Every number below comes from the same API the desktop dashboard uses.
@@ -135,6 +136,7 @@ export function DashboardPage() {
         </div>
       )}
 
+      <SalesRecruitmentPanel />
       {data && <DashboardBody data={data} txTable={txTable} setTxTable={setTxTable} revenueTable={revenueTable} setRevenueTable={setRevenueTable} />}
     </div>
   )
@@ -145,19 +147,18 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
 }) {
   const { summary, status, tx, revenue, txSummary, recent, overview, forecast } = data
   const attention = summary.failed_documents + summary.processing_documents + summary.pending_documents
-  const agents = [...overview.agents].sort((a, b) => b.sales_value - a.sales_value || b.transactions - a.transactions).slice(0, 6)
 
   return (
     <>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6" data-tour="dash-kpis">
         <Kpi icon={Building2} label="Total properties" value={count(summary.total_properties)}
           detail={t("{a} available · {r} reserved · {s} sold", { a: summary.available_properties, r: summary.reserved_properties, s: summary.sold_properties })} />
-        <Kpi icon={Users} label="Buyers & sellers" value={count(summary.total_clients)} detail={t("From client records")} />
+        <Kpi icon={Users} label="Buyers & owners" value={count(summary.total_clients)} detail={t("From client records")} />
         <Kpi icon={ArrowLeftRight} label="Transactions" value={count(txSummary.total)}
           detail={t("{r} reserved · {c} completed · {x} cancelled", { r: txSummary.reserved, c: txSummary.completed, x: txSummary.cancelled })} />
         <Kpi icon={TrendingUp} label="Sales revenue" value={pesoShort(summary.completed_revenue)}
           detail={overview.transactions.average_sale_value ? t("Avg sale {v}", { v: pesoShort(overview.transactions.average_sale_value) }) : t("Completed sales")} />
-        <Kpi icon={UserRound} label="Active agents" value={count(summary.active_agents)} detail={t("of {n} agent records", { n: summary.total_agents })} />
+        <Kpi icon={UserRound} label="Active sellers" value={count(summary.active_agents)} detail={t("of {n} agent records", { n: summary.total_agents })} />
         <Kpi icon={FileWarning} label="Documents needing attention" value={count(attention)}
           detail={t("{f} failed · {p} processing · {d} done", { f: summary.failed_documents, p: summary.processing_documents, d: summary.successful_documents })}
           tone={summary.failed_documents ? "text-ab-danger" : "text-ab-muted"} />
@@ -222,7 +223,7 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
           )}
         </Card>
 
-        <Card title="Revenue forecast">
+        <Card title="Revenue forecast (estimate)">
           {forecast.status === "estimated" && forecast.forecast.length ? (
             <>
               <p className="text-xs text-ab-muted">{t("Next month ({month})", { month: forecast.forecast[0].month })}</p>
@@ -244,54 +245,6 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <Card title="Agent performance" className="lg:col-span-2">
-          {agents.length === 0 ? (
-            <p className="text-sm text-ab-muted">{t("No agent records.")}</p>
-          ) : (
-            <>
-              {/* Phones: one card per agent. */}
-              <ul className="space-y-2 sm:hidden">
-                {agents.map((a) => (
-                  <li key={a.agent_id} className="rounded-xl border border-ab-border p-3 text-sm">
-                    <p className="font-semibold">{a.full_name}</p>
-                    <p className="mt-1 text-xs text-ab-muted">
-                      {t("{n} transactions · {s} sales", { n: a.transactions, s: a.completed_sales })} · {peso(a.sales_value)}
-                      {a.recorded_total_commission != null && ` · ${t("commission {v}", { v: peso(a.recorded_total_commission) })}`}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-              <div className="ab-table-scroll hidden sm:block">
-                <table className="w-full text-left text-sm">
-                  <thead className="text-[11px] uppercase tracking-wide text-ab-faint">
-                    <tr>
-                      <th className="pb-2 pr-3 font-semibold">{t("Agent")}</th>
-                      <th className="pb-2 pr-3 text-right font-semibold">{t("Transactions")}</th>
-                      <th className="pb-2 pr-3 text-right font-semibold">{t("Completed sales")}</th>
-                      <th className="pb-2 pr-3 text-right font-semibold">{t("Sales value")}</th>
-                      <th className="pb-2 text-right font-semibold">{t("Recorded commission")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {agents.map((a) => (
-                      <tr key={a.agent_id} className="border-t border-ab-border">
-                        <td className="py-2.5 pr-3">
-                          <span className="font-semibold">{a.full_name}</span>
-                          <span className="ml-2 text-xs text-ab-faint">{a.agent_id}</span>
-                        </td>
-                        <td className="py-2.5 pr-3 text-right tabular-nums">{a.transactions}</td>
-                        <td className="py-2.5 pr-3 text-right tabular-nums">{a.completed_sales}</td>
-                        <td className="py-2.5 pr-3 text-right tabular-nums">{peso(a.sales_value)}</td>
-                        <td className="py-2.5 text-right tabular-nums text-ab-muted">{a.recorded_total_commission != null ? peso(a.recorded_total_commission) : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="mt-3 text-xs text-ab-faint">{t("Top {n} by sales value. Commission is the figure recorded on the agent's record.", { n: agents.length })}</p>
-            </>
-          )}
-        </Card>
 
         <Card title="Recent transactions">
           {recent.length === 0 ? (
