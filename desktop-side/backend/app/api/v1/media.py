@@ -27,7 +27,7 @@ from app.services.document_storage import (
 from app.services.media_analysis import THRESHOLDS, analyze_image
 
 router = APIRouter(prefix="/media", tags=["Media"])
-require_editor = require_roles(*MANAGEMENT_ROLES)  # listings are managed by Admin / Marketing staff and the Broker
+require_editor = require_roles(*MANAGEMENT_ROLES)  # listings are managed by Admin / Marketing staff
 
 
 def _serialize(media: PropertyMedia) -> dict:

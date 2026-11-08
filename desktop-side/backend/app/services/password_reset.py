@@ -119,6 +119,9 @@ def confirm_reset(db: Session, token: str, new_password: str, ip: str) -> User:
         raise HTTPException(status_code=400, detail=INVALID_LINK)
 
     set_password(user, new_password)
+    # An Administrator-approved request finishes here too (same token hash).
+    from app.services.password_requests import mark_completed
+    mark_completed(db, hash_token(token), user.id)
     db.execute(update(PasswordResetToken)
                .where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None))
                .values(used_at=now))

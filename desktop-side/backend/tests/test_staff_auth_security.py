@@ -31,6 +31,7 @@ def mail(monkeypatch):
     monkeypatch.setattr(email_service, "outbox", outbox)
     monkeypatch.setattr(settings, "STAFF_APP_URL", STAFF_URL)
     monkeypatch.setattr(settings, "EMAIL_PROVIDER", "brevo")
+    monkeypatch.setattr(settings, "PASSWORD_RESET_VIA", "email")
     monkeypatch.setattr(settings, "EMAIL_FROM", "no-reply@example.app")
     return outbox
 
@@ -158,8 +159,8 @@ def test_client_accounts_cannot_use_staff_endpoints(api):
 
 
 def test_no_role_escalation(api, admin, employee):
-    _make_user("owner", "Broker")
-    manager = login(api, "owner")  # the Broker manages the company, not system accounts
+    _make_user("filer", "Filing Manager")
+    manager = login(api, "filer")  # company staff, but not system accounts
     me = api.get("/api/v1/auth/me", headers=employee).json()
     new_admin = {"username": "sneaky", "full_name": "S", "password": "password123", "role": "Administrator"}
     assert api.post("/api/v1/users", headers=employee, json=new_admin).status_code == 403

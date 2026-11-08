@@ -1,5 +1,5 @@
 """Roles from the Abellar Realty interview: Administrator (Admin / Marketing
-staff), Broker (company owner), Filing Manager and Seller; developers have no
+staff), Filing Manager and Seller (the Broker role was folded into Administrator); developers have no
 accounts; sellers never see company-wide or other sellers' records."""
 
 from app.core.security import canonical_role, permissions_for
@@ -25,7 +25,8 @@ def _seller(api, admin, db, agent_id="AGT-77", username="seller77"):
 
 
 def test_legacy_names_map_to_the_new_roles():
-    assert canonical_role("President") == "Broker"
+    assert canonical_role("President") == "Administrator"
+    assert canonical_role("Broker") == "Administrator"       # the Broker role was removed
     assert canonical_role("general manager") == "Administrator"
     assert canonical_role("Employee") == "Filing Manager"
     assert canonical_role("Agent") == "Seller"
@@ -50,18 +51,19 @@ def test_seller_accounts_must_be_linked_and_developers_get_none(api, admin):
     assert api.post("/api/v1/users", headers=admin, json={**base, "username": "s1", "role": "Seller"}).status_code == 422
     assert api.post("/api/v1/users", headers=admin, json={**base, "username": "d1", "role": "Developer"}).status_code == 422
     roles = [r["name"] for r in api.get("/api/v1/users/roles", headers=admin).json()]
-    assert roles == ["Administrator", "Broker", "Filing Manager", "Seller"]
+    assert roles == ["Administrator", "Filing Manager", "Seller"]
 
 
-def test_broker_and_filing_manager_scope(api, admin):
+def test_old_broker_accounts_and_filing_manager_scope(api, admin):
     _make_user("owner", "Broker")
     _make_user("filer", "Filing Manager")
     owner, filer = login(api, "owner"), login(api, "filer")
-    # The broker sees company-wide records and the audit trail, but doesn't administer accounts.
+    # An account still stored as "Broker" works as an Administrator.
+    assert api.get("/api/v1/auth/me", headers=owner).json()["role"] == "Administrator"
     for path in ("/api/v1/transactions", "/api/v1/intelligence/forecast", "/api/v1/audit", "/api/v1/users"):
         assert api.get(path, headers=owner).status_code == 200, path
-    assert api.post("/api/v1/users", headers=owner, json={"username": "z", "full_name": "Z", "role": "Seller",
-                                                          "password": "password123"}).status_code == 403
+    assert api.post("/api/v1/users", headers=admin, json={"username": "b2", "full_name": "B", "role": "Broker",
+                                                          "password": "password123"}).status_code == 422
     # The filing manager reads sales records and documents, but doesn't manage listings or users.
     assert api.get("/api/v1/transactions", headers=filer).status_code == 200
     assert api.get("/api/v1/documents", headers=filer).status_code == 200

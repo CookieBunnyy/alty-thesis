@@ -32,3 +32,26 @@ class AuthAttempt(Base):
     key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     success: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PasswordResetRequest(Base):
+    """"Forgot password" without email: the staff member asks, an
+    Administrator approves or declines, and only the browser that asked
+    (it holds the secret whose SHA-256 is ``token_hash``) can then choose the
+    new password. Approval adds a PasswordResetToken with the same hash, so
+    the usual one-time reset step finishes it."""
+
+    __tablename__ = "password_reset_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # PENDING -> APPROVED -> COMPLETED, or DENIED / CANCELLED.
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING", index=True)
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)  # while pending
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    decided_by_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

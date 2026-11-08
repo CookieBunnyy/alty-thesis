@@ -1,6 +1,6 @@
 """Commission records (sales and rentals) and configurable structures.
 
-Company staff can read them; management (Administrator, Broker) records,
+Company staff can read them; the Administrator records,
 approves and releases them; the Filing Manager and management attach the
 supporting commission vouchers. A seller sees their own records only when
 management has turned that on for them (``agents.commission_visible``).

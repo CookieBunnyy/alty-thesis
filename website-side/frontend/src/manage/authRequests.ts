@@ -35,7 +35,11 @@ export async function authRequest<T>(path: string, init: RequestInit): Promise<A
   }
 }
 
-export type SecurityConfig = { captcha_site_key: string | null; password_reset_enabled: boolean; password_reset_minutes: number }
+export type SecurityConfig = {
+  captcha_site_key: string | null; password_reset_enabled: boolean; password_reset_minutes: number
+  /** "email": reset link by email; "admin": the Administrator approves the reset. */
+  password_reset_mode?: "email" | "admin"
+}
 
 let cached: Promise<SecurityConfig> | null = null
 
@@ -47,7 +51,7 @@ export function useSecurityConfig(): SecurityConfig | null {
     cached ??= authRequest<SecurityConfig>("/security-config", {}).then((reply) => {
       if (!reply.ok || !reply.data) {
         cached = null
-        return { captcha_site_key: null, password_reset_enabled: false, password_reset_minutes: 20 }
+        return { captcha_site_key: null, password_reset_enabled: false, password_reset_minutes: 20, password_reset_mode: "admin" as const }
       }
       return reply.data
     })

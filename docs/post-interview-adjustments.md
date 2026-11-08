@@ -286,3 +286,51 @@ additive Alembic migrations (`0016`–`0021`); no data is deleted.
    certificates (not built yet).
 10. **Terminology on the public website:** whether buyers should see "seller"
     or "agent".
+
+---
+
+## Follow-up changes (2026-11-09)
+
+### Broker role removed
+* Roles are now **Administrator**, **Filing Manager** and **Seller**. The Broker
+  column in the role matrix above no longer applies.
+* Migration `20261109_0022` moves any account stored as `Broker` (or the older
+  `President`) to `Administrator`. Nothing is deleted. Old names are still read
+  as Administrator (`LEGACY_ROLES`), and `Broker` can no longer be assigned
+  (422).
+
+### Forgot password without email (Administrator approval)
+There is no email subscription yet, so "Forgot password?" sends a request to
+the Administrator instead of an email link.
+
+1. The staff member enters their username (or registered email) and an optional
+   message. Their browser receives a secret and a 6-digit **check code**. The
+   server stores only the secret's SHA-256 hash.
+2. Administrators see the request in the notification bell and at the top of
+   **Users & Access**. To approve, they type the check code the person reads to
+   them, in person or by phone. A wrong code can't be approved.
+3. The requester's page checks every 10 s. Once the request is approved, it shows
+   the "choose a new password" form, but only on the device that asked. The
+   reset is single-use, ends every session of the account and is written to the
+   audit log.
+4. A request waits up to 72 h (`PASSWORD_RESET_REQUEST_HOURS`). An approval stays
+   usable for 24 h (`PASSWORD_RESET_APPROVED_HOURS`). Declined and expired
+   requests can't be used. Each account can have at most 3 pending requests, and
+   the existing per-IP and per-account rate limits apply.
+5. Unknown usernames get the same answer, so the page doesn't reveal which
+   accounts exist.
+
+* `PASSWORD_RESET_VIA` (default `admin`) chooses the mode. Set it to `email`
+  (with `STAFF_APP_URL` and `EMAIL_PROVIDER`) to go back to email links later.
+* Endpoints:
+  - `POST /auth/password-reset/ask`
+  - `POST /auth/password-reset/status`
+  - `GET /password-requests`
+  - `POST /password-requests/{id}/approve|deny` (Administrator only)
+  - the existing `POST /auth/password-reset/confirm` finishes the reset.
+* Migration `20261109_0023` adds `password_reset_requests`.
+* Tests: `tests/test_password_requests.py`.
+
+### Loading screen
+The logo was removed from the welcome/loading screen (`index.html`). The text
+and the progress bar stay.

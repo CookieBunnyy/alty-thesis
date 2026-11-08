@@ -9,6 +9,7 @@ import { useApiData } from "./useApiData"
 import { t } from "./i18n"
 import { photoBody } from "./photoBody"
 import { PhotoControls, StaffAvatar } from "./avatars"
+import { PasswordRequestsPanel } from "./passwordRequests"
 
 type StaffUser = { id: number; username: string; full_name: string; role: string; is_active: boolean; last_login_at: string | null; created_at: string; agent_id: string | null; agent_name: string | null; photo_version: number | null; email: string | null }
 type AgentOption = { agent_id: string; full_name: string; status: string }
@@ -96,6 +97,7 @@ export function UsersPage() {
         <Select label="Role" value={role} onChange={setRole} options={[{ value: "", label: "All roles" }, ...roles.map((r) => ({ value: r, label: r }))]} />
       </div>
       {!isAdmin && <p className="text-xs text-ab-faint">{t("Only the Administrator can add users, change roles or reset passwords.")}</p>}
+      {isAdmin && <PasswordRequestsPanel />}
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && <DataTable exportTitle="Users & Access" rows={shown} columns={columns} rowKey={(u) => String(u.id)} empty="No users match these filters." initialSort={{ key: "name", dir: "asc" }} />}
 

@@ -60,15 +60,15 @@ export const text = (value: unknown): string => (value === null || value === und
 
 // Mirrors the backend role groups (app/core/security.py). The API enforces
 // them; the web only hides actions a role can't perform.
-// Roles: Administrator (Admin / Marketing staff), Broker (company owner),
-// Filing Manager, Seller.
+// Roles: Administrator (Admin / Marketing staff), Filing Manager, Seller.
+// Accounts still stored as the removed "Broker" role are Administrators.
 const MANAGEMENT = new Set(["administrator", "broker"])
 const COMPANY = new Set([...MANAGEMENT, "filing manager"])
 const roleKey = (role?: string | null) => String(role ?? "").toLowerCase()
 export const isManagement = (role?: string | null) => MANAGEMENT.has(roleKey(role))
 export const isAdministrator = (role?: string | null) => roleKey(role) === "administrator"
 export const isSeller = (role?: string | null) => roleKey(role) === "seller"
-/** Listings, photos and boundaries are managed by Admin / Marketing staff and the Broker. */
+/** Listings, photos and boundaries are managed by Admin / Marketing staff. */
 export const canEditListings = isManagement
 /** Filing actions: edit/archive/reprocess/delete documents. */
 export const canFile = (role?: string | null) => COMPANY.has(roleKey(role))

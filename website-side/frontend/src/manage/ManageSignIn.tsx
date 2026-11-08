@@ -164,7 +164,9 @@ export function ManageSignIn({ view = "signin" }: { view?: "signin" | "forgot" |
 
   const heading = view === "forgot" ? t("Forgot your password?") : view === "reset" ? t("Choose a new password") : t("Welcome back!")
   const subheading = view === "forgot"
-    ? t("Enter your registered email and we'll send you a link to reset it.")
+    ? (config?.password_reset_enabled
+      ? t("Enter your registered email and we'll send you a link to reset it.")
+      : t("Ask the Administrator to approve a password reset."))
     : view === "reset"
       ? t("Pick a password you don't use anywhere else.")
       : t("Sign in to manage Abellar Realty's listings, clients and deals.")

@@ -24,6 +24,7 @@ from app.api.v1.recruitment import router as recruitment_router
 from app.api.v1.seller import router as seller_router
 from app.api.v1.deals import router as deals_router
 from app.api.v1.reports import router as reports_router
+from app.api.v1.password_requests import router as password_requests_router
 from app.api.v1.commissions import router as commissions_router, seller_router as seller_commissions_router
 from app.api.v1.property_listings import router as property_listings_router
 from app.api.v1.public import router as public_router
@@ -113,6 +114,7 @@ for router in (
     commissions_router,
     seller_commissions_router,
     reports_router,
+    password_requests_router,
 ):
     app.include_router(router, prefix="/api/v1")
 
@@ -120,6 +122,12 @@ for router in (
 @app.get("/health")
 async def health_check() -> dict[str, str]:
     return {"status": "ok", "app": settings.APP_NAME}
+
+
+# The bare domain: uptime monitors and visitors hit "/", so answer, not 404.
+@app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+async def root() -> dict[str, str]:
+    return {"status": "ok", "app": settings.APP_NAME, "api": "/api/v1", "health": "/health"}
 
 
 if __name__ == "__main__":

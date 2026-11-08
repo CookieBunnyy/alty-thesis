@@ -34,6 +34,22 @@ class PasswordResetRequest(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
+class PasswordResetAsk(BaseModel):
+    """Forgot password without email: a request to the Administrator."""
+    identifier: str = Field(..., min_length=1, max_length=254)  # username or registered email
+    note: str | None = Field(default=None, max_length=300)
+    captcha_token: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("identifier", mode="before")
+    @classmethod
+    def strip_identifier(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class PasswordResetStatus(BaseModel):
+    token: str = Field(..., min_length=1, max_length=200)
+
+
 class PasswordResetConfirm(BaseModel):
     token: str = Field(..., min_length=1, max_length=200)
     new_password: str = Field(..., min_length=8, max_length=128)

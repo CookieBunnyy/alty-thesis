@@ -131,6 +131,14 @@ class Settings(BaseSettings):
     PASSWORD_RESET_PER_EMAIL_PER_HOUR: int = 3
     PASSWORD_RESET_MIN_EMAIL_INTERVAL_SECONDS: int = 120
     PASSWORD_RESET_PER_IP_PER_HOUR: int = 10
+    # How "Forgot password" works: "admin" (default, no email needed) sends a
+    # request the Administrator approves; "email" sends a reset link (needs
+    # STAFF_APP_URL and an EMAIL_PROVIDER). Email off = "admin" either way.
+    PASSWORD_RESET_VIA: str = "admin"
+    # Admin approval: a request waits this long for a decision, and an
+    # approval stays usable this long.
+    PASSWORD_RESET_REQUEST_HOURS: int = 72
+    PASSWORD_RESET_APPROVED_HOURS: int = 24
 
     # ---- Email (password reset and password-changed notices) -----------------
     # "brevo" or "resend" (HTTPS APIs), "smtp", or "none". Render's free plan
@@ -191,7 +199,9 @@ class Settings(BaseSettings):
 
     @property
     def password_reset_enabled(self) -> bool:
-        return bool(self.STAFF_APP_URL.strip() and self.EMAIL_PROVIDER.strip().casefold() != "none")
+        """Reset links by email (otherwise the Administrator approves resets)."""
+        return bool(self.PASSWORD_RESET_VIA.strip().casefold() == "email" and self.STAFF_APP_URL.strip()
+                    and self.EMAIL_PROVIDER.strip().casefold() != "none")
 
     @property
     def password_reset_ttl_minutes(self) -> int:

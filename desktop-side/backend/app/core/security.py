@@ -17,12 +17,12 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 # Canonical role names (users.role). Comparisons are case-insensitive.
-# The four user groups confirmed in the Abellar Realty interview:
+# The user groups confirmed in the Abellar Realty interview (the separate
+# Broker role was folded into Administrator, migration 0022):
 ADMINISTRATOR = "Administrator"   # Admin / Marketing staff: runs the system day to day
-BROKER = "Broker"                 # Broker / company owner: company-wide authority
 FILING_MANAGER = "Filing Manager" # sales reports, commission vouchers, documents
 SELLER = "Seller"                 # seller / agent: own listings and records only
-ROLES = (ADMINISTRATOR, BROKER, FILING_MANAGER, SELLER)
+ROLES = (ADMINISTRATOR, FILING_MANAGER, SELLER)
 # Website client accounts share the users table, hashing and tokens, but are
 # not an internal role: they cannot use any internal endpoint (see
 # get_current_user) and cannot be assigned from the Users page. Developers
@@ -30,15 +30,16 @@ ROLES = (ADMINISTRATOR, BROKER, FILING_MANAGER, SELLER)
 CLIENT = "Client"
 
 # Names used before the interview, still accepted on read (tokens, old rows,
-# the retired desktop client). Migration 0016 rewrites the stored values.
+# the retired desktop client). Migrations 0016 and 0022 rewrite the stored values.
 LEGACY_ROLES = {
-    "president": BROKER,
+    "president": ADMINISTRATOR,
+    "broker": ADMINISTRATOR,
     "general manager": ADMINISTRATOR,
     "employee": FILING_MANAGER,
     "agent": SELLER,
 }
 
-MANAGEMENT_ROLES = {ADMINISTRATOR, BROKER}
+MANAGEMENT_ROLES = {ADMINISTRATOR}
 # Company staff: everyone except sellers (company-wide records and reports).
 COMPANY_ROLES = MANAGEMENT_ROLES | {FILING_MANAGER}
 FILING_ROLES = COMPANY_ROLES
@@ -52,8 +53,6 @@ _COMPANY_PAGES = [
 ]
 ROLE_PERMISSIONS: dict[str, list[str]] = {
     ADMINISTRATOR: _COMPANY_PAGES,
-    # The owner sees everything; the Users page is read-only for the Broker.
-    BROKER: _COMPANY_PAGES,
     FILING_MANAGER: ["dashboard", "reports", "transactions", "commissions", "documents", "properties", "settings"],
     SELLER: ["my-work", "my-listings", "my-deals", "my-commissions", "settings"],
 }

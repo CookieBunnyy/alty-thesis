@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState, type FormEvent } from "react"
 import { ArrowRight, CircleX, LoaderCircle, Plus, X } from "lucide-react"
 import { Link } from "@/components/Link"
-import { contains, date, dateTime, statusLabel, text } from "./format"
+import { contains, date, dateTime, isManagement, statusLabel, text } from "./format"
 import { Badge, Button, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
@@ -44,7 +44,7 @@ export function DealsPipeline({ mode }: { mode: "company" | "seller" }) {
   const [search, setSearch] = useState("")
   const [stage, setStage] = useState("")
   const [creating, setCreating] = useState(false)
-  const canManage = mode === "company" && ["administrator", "broker"].includes(String(user?.role ?? "").toLowerCase())
+  const canManage = mode === "company" && isManagement(user?.role)
   const load = useCallback(() => Promise.all([api<Deal[]>("/deals"), api<Summary>("/deals/summary")]), [api])
   const { data, error, loading, reload } = useApiData(load, `deals:${mode}`)
   const [deals, summary] = data ?? [null, null]

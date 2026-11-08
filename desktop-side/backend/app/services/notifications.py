@@ -207,6 +207,18 @@ def _security(db: Session, now: datetime) -> list[dict[str, Any]]:
     ]
 
 
+def _password_requests(db: Session) -> list[dict[str, Any]]:
+    from app.services.password_requests import check_code, pending_for_notifications
+    return [
+        _item(f"password-request:{request.id}", category="security", severity="warning",
+              title="Password reset request",
+              message=f"{user.full_name} ({user.username}) forgot their password and asks you to approve a reset "
+                      f"· check code {check_code(request.token_hash)}",
+              at=request.created_at, page="users")
+        for request, user in pending_for_notifications(db)
+    ]
+
+
 def notifications_for(db: Session, user: User) -> dict[str, Any]:
     now = datetime.utcnow()
     pages = set(permissions_for(user.role))
@@ -225,6 +237,7 @@ def notifications_for(db: Session, user: User) -> dict[str, Any]:
     if admin:
         items += _sync(db, now)
         items += _security(db, now)
+        items += _password_requests(db)
 
     items.sort(key=lambda item: item["created_at"] or "", reverse=True)
     items = items[:MAX_ITEMS]

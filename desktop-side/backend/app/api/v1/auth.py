@@ -17,8 +17,10 @@ from app.core.security import (
     verify_password_or_dummy,
 )
 from app.models.user import User
-from app.schemas.auth import CurrentUser, PasswordChange, PasswordResetConfirm, PasswordResetRequest, Token
+from app.schemas.auth import (CurrentUser, PasswordChange, PasswordResetAsk, PasswordResetConfirm, PasswordResetRequest,
+                              PasswordResetStatus, Token)
 from app.services import auth_throttle as throttle
+from app.services import password_requests
 from app.services import password_reset as reset_service
 from app.services.audit import record_audit, record_audit_now
 from app.services.captcha import verify_turnstile
@@ -122,6 +124,8 @@ def security_config():
         "captcha_site_key": settings.TURNSTILE_SITE_KEY.strip() if settings.captcha_enabled else None,
         "password_reset_enabled": settings.password_reset_enabled,
         "password_reset_minutes": settings.password_reset_ttl_minutes,
+        # "email": a reset link by email; "admin": the Administrator approves.
+        "password_reset_mode": "email" if settings.password_reset_enabled else "admin",
     }
 
 
@@ -147,6 +151,29 @@ def request_password_reset(payload: PasswordResetRequest, request: Request, back
     if message is not None:
         background.add_task(reset_service.send_reset_email, message)
     return {"message": RESET_SENT_MESSAGE}
+
+
+@router.post("/password-reset/ask", status_code=202)
+def ask_password_reset(payload: PasswordResetAsk, request: Request, db: Session = Depends(get_db)):
+    """Forgot password while email isn't set up: the request goes to the
+    Administrator. The answer is the same whether or not the account exists;
+    only this browser gets the secret that can finish the reset."""
+    if settings.password_reset_enabled:
+        raise HTTPException(status_code=409, detail="Use the email reset link instead.")
+    ip = client_ip(request)
+    if (settings.captcha_enabled
+            and throttle.count(db, throttle.RESET_IP, ip, timedelta(hours=1)) >= 3
+            and not verify_turnstile(payload.captcha_token, ip)):
+        raise HTTPException(status_code=400, detail="Complete the security check, then try again.",
+                            headers={CAPTCHA_HEADER: "true"})
+    return password_requests.ask(db, payload.identifier, payload.note, ip)
+
+
+@router.post("/password-reset/status")
+def password_reset_status(payload: PasswordResetStatus, db: Session = Depends(get_db)):
+    """Where an Administrator-approved request stands (PENDING, APPROVED,
+    DENIED, EXPIRED, COMPLETED, CANCELLED), for the browser that asked."""
+    return password_requests.status(db, payload.token)
 
 
 @router.post("/password-reset/confirm")

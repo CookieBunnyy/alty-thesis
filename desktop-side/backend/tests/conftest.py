@@ -76,7 +76,7 @@ from app.models.user import User  # noqa: E402
 from main import app  # noqa: E402
 
 BUSINESS_TABLES = (
-    "auth_attempts", "password_reset_tokens", "notification_reads", "agent_reviews", "audit_events", "document_audit_events", "property_media", "transactions", "clients",
+    "auth_attempts", "password_reset_requests", "password_reset_tokens", "notification_reads", "agent_reviews", "audit_events", "document_audit_events", "property_media", "transactions", "clients",
     "documents", "document_folders", "property_listings", "partners", "agents", "users",
     "agent_assessments", "agent_applicants", "branches", "listing_assignments", "deal_events", "deals", "commission_records", "commission_structures", "document_extractions",
 )

@@ -47,14 +47,11 @@ def test_role_restrictions(api, admin, employee):
 
 
 def test_audit_and_system_settings_are_administrator_only(api, admin, employee):
-    # The Broker (company owner; the legacy "President") sees the audit trail
-    # but system settings stay with the Administrator.
+    # The legacy "President" (later "Broker") is an Administrator now.
     _make_user("pres", "President")
     headers = login(api, "pres")
     me = api.get("/api/v1/auth/me", headers=headers).json()
-    assert me["role"] == "Broker" and "audit" in me["permissions"] and "settings" in me["permissions"]
-    assert api.get("/api/v1/system/settings", headers=headers).status_code == 403
-    assert api.post("/api/v1/system/sync/push", headers=headers).status_code == 403
+    assert me["role"] == "Administrator" and "audit" in me["permissions"]
     assert api.get("/api/v1/audit", headers=employee).status_code == 403
     assert api.get("/api/v1/system/settings", headers=employee).status_code == 403
     # Everyone still sees the sync status shown in the header.

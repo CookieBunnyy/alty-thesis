@@ -1,5 +1,5 @@
-"""Management reports: sales (Administrator, Broker, Filing Manager) and
-recruitment (Administrator, Broker). Sellers never see these."""
+"""Management reports: sales (Administrator, Filing Manager) and
+recruitment (Administrator). Sellers never see these."""
 
 from __future__ import annotations
 

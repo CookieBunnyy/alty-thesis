@@ -39,7 +39,7 @@ router = APIRouter(prefix="/property-listings", tags=["Property Listings"])
 
 PROPERTY_STATUSES = ("AVAILABLE", "RESERVED", "SOLD", "ON_HOLD", "UNAVAILABLE")
 MANUAL_STATUSES = {"AVAILABLE", "ON_HOLD", "UNAVAILABLE"}
-require_editor = require_roles(*MANAGEMENT_ROLES)  # listings are managed by Admin / Marketing staff and the Broker
+require_editor = require_roles(*MANAGEMENT_ROLES)  # listings are managed by Admin / Marketing staff
 
 
 def _listing_or_404(db: Session, listing_id: int) -> PropertyListing:
