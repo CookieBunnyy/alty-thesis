@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type FormEvent } from "react"
-import { LoaderCircle, Pencil, X } from "lucide-react"
+import { LoaderCircle, Pencil, Plus, X } from "lucide-react"
 import { categoryLabel } from "@/lib/categories"
 import { lotAreaLong } from "@/lib/area"
 import { publicUrl } from "@/config"
@@ -9,14 +9,17 @@ import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
+import { AddPropertyForm, type DraftListing } from "./AddPropertyForm"
+import { ListingImages } from "./listingImages"
+import { MarketingBadge } from "./listingMarketing"
 
 type SellerListing = {
   listing_id: number; listing_code: string | null; title: string | null; category: string | null; project_name: string | null
   price_total: number | null; initial_dp: number | null; monthly_rate: number | null; num_bedrooms: number | null; num_bathrooms: number | null
   village_name: string | null; lot_area_sqm: number | null; floor_area_sqm: number | null; details: string | null
   amenity_list: unknown; photos: string[]; media: string[]; status: string; developer: string | null
-  assigned: boolean; editable_fields: string[]
-}
+  assigned: boolean; editable_fields: string[]; submitted_by_me?: boolean; marketing_status?: string
+} & Omit<DraftListing, "listing_id" | "title" | "category" | "project_name" | "price_total" | "initial_dp" | "monthly_rate" | "num_bedrooms" | "num_bathrooms" | "village_name" | "lot_area_sqm" | "floor_area_sqm" | "details" | "amenity_list">
 
 const amenityNames = (raw: unknown): string[] =>
   Array.isArray(raw) ? raw.map(String) : raw && typeof raw === "object" ? Object.entries(raw as Record<string, unknown>).filter(([, on]) => on).map(([k]) => k.replace(/_/g, " ")) : []
@@ -27,6 +30,7 @@ export function SellerListingsPage() {
   const { id, open, close } = useOpenRecord()
   const [search, setSearch] = useState("")
   const [scope, setScope] = useState("")
+  const [adding, setAdding] = useState(false)
   const load = useCallback(() => api<SellerListing[]>("/seller/listings"), [api])
   const { data, error, loading, reload } = useApiData(load, "seller-listings")
   const rows = useMemo(() => data ?? [], [data])
@@ -47,12 +51,13 @@ export function SellerListingsPage() {
     { key: "category", label: "Category", sort: (l) => categoryLabel(l.category), render: (l) => t(categoryLabel(l.category)), hideOnPhone: true },
     { key: "price", label: "Price", align: "right", sort: (l) => l.price_total ?? 0, render: (l) => peso(l.price_total) },
     { key: "status", label: "Status", sort: (l) => l.status, render: (l) => <Badge value={l.status} /> },
-    { key: "mine", label: "Assigned", sort: (l) => (l.assigned ? 1 : 0), render: (l) => (l.assigned ? <span className="rounded-full bg-ab-accent-soft px-2 py-0.5 text-[11px] font-semibold text-ab-accent">{t("Assigned to you")}</span> : <span className="text-xs text-ab-faint">{t("Available to market")}</span>) },
+    { key: "mine", label: "Assigned", sort: (l) => (l.assigned ? 1 : 0), render: (l) => (l.assigned ? <span className="flex flex-col items-start gap-1"><span className="rounded-full bg-ab-accent-soft px-2 py-0.5 text-[11px] font-semibold text-ab-accent">{t(l.submitted_by_me ? "Added by you" : "Assigned to you")}</span>{l.marketing_status !== "APPROVED" && <MarketingBadge status={l.marketing_status} />}</span> : <span className="text-xs text-ab-faint">{t("Available to market")}</span>) },
   ]
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <PageHeader title="Your listings" subtitle="Listings assigned to you, and every other listing currently approved for marketing. You can update the description and amenities of listings assigned to you." />
+      <PageHeader title="Your listings" subtitle="Listings assigned to you, and every other listing currently approved for marketing. Add a property you're selling: choose its developer, then add the photos, floor plans and amenity pictures the developer provided."
+        actions={<Button variant="primary" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> {t("Add property")}</Button>} />
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
@@ -69,17 +74,26 @@ export function SellerListingsPage() {
         </>
       )}
       {selected && <SellerListingDrawer listing={selected} onClose={close} onSaved={() => void reload()} />}
+      {adding && <AddPropertyForm onClose={() => { setAdding(false); void reload() }} onSaved={() => void reload()} />}
     </div>
   )
 }
 
 function SellerListingDrawer({ listing, onClose, onSaved }: { listing: SellerListing; onClose: () => void; onSaved: () => void }) {
   const [editing, setEditing] = useState(false)
+  const [editingAll, setEditingAll] = useState(false)
+  // Their own property, not approved yet: every field can still change.
+  const ownDraft = Boolean(listing.submitted_by_me && listing.editable_fields.includes("title"))
   const photo = listing.photos[0] ?? (listing.media[0] ? publicUrl(listing.media[0]) : null)
   const amenities = amenityNames(listing.amenity_list)
   return (
     <Drawer title={text(listing.title)} subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={listing.status} /> {t(categoryLabel(listing.category))}</span>} onClose={onClose}
-      footer={listing.editable_fields.length > 0 && <Button variant="primary" onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /> {t("Update details")}</Button>}>
+      footer={listing.editable_fields.length > 0 && <Button variant="primary" onClick={() => (ownDraft ? setEditingAll(true) : setEditing(true))}><Pencil className="h-4 w-4" /> {t(ownDraft ? "Edit property" : "Update details")}</Button>}>
+      {listing.assigned && listing.marketing_status !== "APPROVED" && (
+        <p className="rounded-xl border border-ab-warning/40 bg-ab-warning/5 px-3 py-2 text-xs">
+          <MarketingBadge status={listing.marketing_status} /> {t("Not on the website yet: the Administrator approves it for marketing once the developer's accreditation is verified.")}
+        </p>
+      )}
       {photo && <img src={photo} alt="" className="aspect-video w-full rounded-2xl object-cover" />}
       <Section title="Details">
         <Facts items={[
@@ -99,7 +113,13 @@ function SellerListingDrawer({ listing, onClose, onSaved }: { listing: SellerLis
         {listing.details ? <p className="whitespace-pre-line text-sm text-ab-muted">{listing.details}</p> : <p className="text-sm italic text-ab-faint">{t("No description yet.")}</p>}
         {amenities.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{amenities.map((a) => <span key={a} className="rounded-full border border-ab-border bg-ab-card-2 px-2.5 py-1 text-xs">{a}</span>)}</div>}
       </Section>
+      {listing.assigned && (
+        <Section title="Photos, floor plans & amenities">
+          <ListingImages listingId={listing.listing_id} editable />
+        </Section>
+      )}
       {!listing.assigned && <p className="text-xs text-ab-faint">{t("This listing isn't assigned to you, so you can view it but not change it.")}</p>}
+      {editingAll && <AddPropertyForm listing={listing} onClose={() => { setEditingAll(false); onSaved() }} onSaved={onSaved} />}
       {editing && <SellerListingForm listing={listing} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); onSaved() }} />}
     </Drawer>
   )

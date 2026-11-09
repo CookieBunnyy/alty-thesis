@@ -11,6 +11,7 @@ import { Stars } from "@/components/Stars"
 import { LoadingLabel, RowSkeleton } from "@/components/Skeleton"
 import type { ClientTransaction } from "@/types"
 import { CallButton } from "@/components/CallButton"
+import { MyTrips } from "@/components/MyTrips"
 
 const STATUS: Record<string, string> = {
   RESERVED: "bg-ab-warning/15 text-ab-warning",
@@ -88,6 +89,8 @@ export function AccountPage() {
             <LogOut className="h-4 w-4" /> Log out
           </button>
         </section>
+
+        <MyTrips />
 
         <section id="transactions" className="scroll-mt-24">
           <h2 className="text-xl font-bold">My transactions</h2>

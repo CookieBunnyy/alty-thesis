@@ -1,7 +1,8 @@
 """Property listings.
 
-There is no create endpoint: listings enter the system from Property
-Information documents or from the central (Supabase) listing sync.
+Listings enter the system from Property Information documents, from the
+central (Supabase) listing sync, or are added here by the Administrator or a
+seller (POST, with the developer the property belongs to).
 """
 
 from datetime import datetime
@@ -13,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.services import lot_geometry
-from app.core.security import MANAGEMENT_ROLES, get_current_user, require_management, require_roles, get_company_user
+from app.core.security import (MANAGEMENT_ROLES, SELLER, canonical_role, get_company_user, get_current_user,
+                               get_lister_user, require_management, require_roles)
 from app.core.supabase import supabase
 from app.models.document import Document
 from app.models.branch import Branch
@@ -25,6 +27,7 @@ from app.models.transaction import PropertyTransaction
 from app.models.user import User
 from app.schemas.property_listing import (
     BoundaryInput,
+    PropertyListingCreate,
     PropertyListingResponse,
     PropertyListingStatusSummary,
     PropertyListingUpdate,
@@ -80,6 +83,50 @@ def get_property_status_summary(db: Session = Depends(get_db), _user: User = Dep
     counts = {str(name): int(total) for name, total in rows}
     return {**{name.lower(): counts.get(name, 0) for name in PROPERTY_STATUSES},
             "total": sum(counts.values())}
+
+
+@router.post("", response_model=PropertyListingResponse, status_code=status.HTTP_201_CREATED)
+def create_property_listing(payload: PropertyListingCreate, db: Session = Depends(get_db),
+                            user: User = Depends(get_lister_user)):
+    """Add a property. It starts as AVAILABLE but not approved for marketing,
+    so it isn't on the website until the Administrator approves it (which
+    needs the developer's accreditation). A seller's listing is assigned to
+    that seller."""
+    values = payload.model_dump()
+    partner = db.get(Partner, values["partner_id"])
+    if partner is None:
+        raise HTTPException(status_code=422, detail="Choose the developer this property belongs to")
+    if (partner.partner_type or "").upper() != "DEVELOPER":
+        raise HTTPException(status_code=422, detail=f"{partner.name} isn't recorded as a developer")
+    if values.get("branch_id") is not None and db.get(Branch, values["branch_id"]) is None:
+        raise HTTPException(status_code=422, detail="Unknown branch")
+    for field in ("title", "category", "project_name", "layout_type", "village_name", "details"):
+        if isinstance(values.get(field), str):
+            values[field] = values[field].strip() or None
+    if not values["title"] or not values["category"]:
+        raise HTTPException(status_code=422, detail="Title and category are required")
+    if (values.get("lat") is None) != (values.get("lng") is None):
+        raise HTTPException(status_code=422, detail="Enter both latitude and longitude, or neither")
+    values["amenity_list"] = [a.strip() for a in (values.get("amenity_list") or []) if a and a.strip()]
+    if values.get("has_garage") is False:
+        values["garage_spaces"] = 0
+    seller = canonical_role(user.role) == SELLER
+    if seller and values.get("branch_id") is None:
+        agent = db.get(Agent, user.agent_id)
+        values["branch_id"] = agent.branch_id if agent else None
+    listing = PropertyListing(**values, status="AVAILABLE", marketing_status="DRAFT", sync_status="PENDING",
+                              submitted_by_user_id=user.id)
+    db.add(listing)
+    db.flush()
+    if seller:
+        db.add(ListingAssignment(listing_id=listing.listing_id, agent_id=user.agent_id,
+                                 assigned_by=user.full_name or user.username))
+    record_audit(db, "PROPERTY_CREATED", actor=user, entity_type="property_listings", entity_id=listing.listing_id,
+                 details={"title": listing.title, "developer": partner.name, "by_seller": seller})
+    db.commit()
+    try_push_pending(db)
+    db.refresh(listing)
+    return listing
 
 
 @router.get("/{listing_id}", response_model=PropertyListingResponse)

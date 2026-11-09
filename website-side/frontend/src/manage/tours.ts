@@ -68,10 +68,11 @@ export const TOURS: Record<string, (user: StaffUser | null) => TourStep[]> = {
     { target: "page-actions", title: "Refresh", body: "Runs the analysis again on the latest records." },
   ],
 
-  "/manage/media": () => [
-    { target: "page-header", title: "Digital Preview", body: "Property photos and their automatic quality checks: resolution, sharpness, brightness and contrast. Only photos that pass are shown on the website." },
-    { target: "tiles", title: "Summary at a glance", body: "How many photos there are and how many properties have them." },
-    { target: "page-actions", title: "Upload photos", body: "Choose a property first, then upload its photos. Each photo is checked as soon as it arrives." },
+  "/manage/bulletin": () => [
+    { target: "page-header", title: "Announcements and memos", body: "The office bulletin board online: monthly meetings, updates and project flyers, plus memos for sales targets, incentives and sales notices. Everyone gets a notification when something new is posted." },
+  ],
+  "/manage/trips": () => [
+    { target: "page-header", title: "Tripping schedule", body: "Site visits with buyers, like the whiteboard: date, pick-up, time, subdivision and agent. The board updates live; use Notify to send the schedule to the buyers." },
   ],
 
   "/manage/documents": () => [

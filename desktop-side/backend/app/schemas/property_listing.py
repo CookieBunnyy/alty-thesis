@@ -154,6 +154,38 @@ class PropertyListingUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PropertyListingCreate(BaseModel):
+    """A listing added in the Management System (Administrator or Seller).
+    The developer it belongs to is required: Abellar markets developers'
+    properties."""
+
+    title: str = Field(min_length=1, max_length=500)
+    category: str = Field(min_length=1, max_length=100)
+    partner_id: int
+    project_name: str | None = Field(default=None, max_length=200)
+    price_total: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    initial_dp: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    monthly_rate: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    num_bedrooms: int | None = Field(default=None, ge=0)
+    num_bathrooms: int | None = Field(default=None, ge=0)
+    layout_type: str | None = Field(default=None, max_length=255)
+    village_name: str | None = Field(default=None, max_length=255)
+    lat: Decimal | None = Field(default=None, ge=-90, le=90, max_digits=10, decimal_places=6)
+    lng: Decimal | None = Field(default=None, ge=-180, le=180, max_digits=10, decimal_places=6)
+    amenity_list: list[str] | None = None
+    details: str | None = None
+    has_balcony: bool | None = None
+    has_kitchen: bool | None = None
+    has_backyard: bool | None = None
+    has_garage: bool | None = None
+    garage_spaces: int | None = Field(default=None, ge=0)
+    lot_area_sqm: Decimal | None = Field(default=None, gt=0, le=100_000_000, max_digits=14, decimal_places=2)
+    floor_area_sqm: Decimal | None = Field(default=None, gt=0, le=10_000_000, max_digits=14, decimal_places=2)
+    branch_id: int | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class BoundaryInput(BaseModel):
     """A lot outline drawn on the map (GeoJSON Polygon geometry)."""
     model_config = ConfigDict(extra="forbid")

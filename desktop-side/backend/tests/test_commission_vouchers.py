@@ -30,7 +30,8 @@ def test_voucher_is_read_for_review_and_linked_after_verification(api, admin, em
     sale = _sale(api, admin, db)
     commission = api.post(f"{API}/commissions", headers=admin, json={"transaction_id": sale["transaction_id"],
                                                                      "amount": "84000"}).json()
-    doc = upload(api, employee, "voucher.docx", build.docx(VOUCHER))
+    original = build.docx(VOUCHER)
+    doc = upload(api, employee, "voucher.docx", original)
     assert doc["document_type"] == "COMMISSION_VOUCHER" and doc["processing_stage"] == "COMPLETE", doc
     assert doc["folder_path"] == "Commission Vouchers"
     path = f"{API}/documents/{doc['document_id']}/extraction"
@@ -63,7 +64,7 @@ def test_voucher_is_read_for_review_and_linked_after_verification(api, admin, em
     linked = api.get(f"{API}/commissions/{commission['id']}", headers=admin).json()
     assert linked["voucher"]["document_id"] == doc["document_id"]
     download = api.get(f"{API}/documents/{doc['document_id']}/download", headers=employee)
-    assert download.status_code == 200 and download.content == build.docx(VOUCHER)
+    assert download.status_code == 200 and download.content == original
     history = [e["event_type"] for e in api.get(f"{API}/documents/{doc['document_id']}/audit", headers=employee).json()]
     assert "DOCUMENT_VERIFIED" in history
 

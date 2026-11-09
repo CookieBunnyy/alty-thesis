@@ -7,6 +7,7 @@ import { PropertyPricingGrid } from '@/components/property-detail-modal/Property
 import { PropertyFeatures } from '@/components/property-detail-modal/PropertyFeatures';
 import { PropertyAmenities } from '@/components/property-detail-modal/PropertyAmenities';
 import { PropertyNearby } from '@/components/property-detail-modal/PropertyNearby';
+import { PropertyAmenityPhotos, PropertyFloorPlans } from '@/components/property-detail-modal/PropertyFlyerMedia';
 import { CommuteCard } from '@/components/CommuteCard';
 import { ContactAgentsModal } from '@/components/ContactAgentsModal';
 import { publicUrl } from '@/config';
@@ -102,7 +103,11 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
               </div>
             )}
 
+            <PropertyFloorPlans items={property.floor_plans} />
+
             <PropertyAmenities amenityList={property.amenity_list} />
+
+            <PropertyAmenityPhotos items={property.amenity_media} />
 
             <PropertyNearby nearbyData={rawNearby} />
           </div>

@@ -47,14 +47,15 @@ FILING_ROLES = COMPANY_ROLES
 # Page keys each role may open in the Management System. The API enforces the
 # same boundaries independently; this list only drives what the menu shows.
 _COMPANY_PAGES = [
-    "dashboard", "reports", "properties", "partners", "clients", "transactions", "commissions",
-    "documents", "media", "agents", "recruitment", "branches", "workforce", "analytics",
+    "dashboard", "bulletin", "trips", "reports", "properties", "partners", "clients", "transactions", "commissions",
+    "documents", "agents", "recruitment", "branches", "workforce", "analytics",
     "forecasting", "dss", "users", "audit", "settings",
 ]
 ROLE_PERMISSIONS: dict[str, list[str]] = {
     ADMINISTRATOR: _COMPANY_PAGES,
-    FILING_MANAGER: ["dashboard", "reports", "transactions", "commissions", "documents", "properties", "settings"],
-    SELLER: ["my-work", "my-listings", "my-deals", "my-commissions", "settings"],
+    FILING_MANAGER: ["dashboard", "bulletin", "trips", "reports", "transactions", "commissions", "documents",
+                     "properties", "settings"],
+    SELLER: ["my-work", "bulletin", "trips", "my-listings", "my-deals", "my-commissions", "settings"],
 }
 
 
@@ -220,6 +221,16 @@ def get_company_user(user: User = Depends(get_current_user)) -> User:
             detail="Seller accounts can only open their own listings and records.",
         )
     return user
+
+
+def get_lister_user(user: User = Depends(get_current_user)) -> User:
+    """Who may add a property listing: management, or a seller account linked
+    to its seller record (the listing is then assigned to that seller)."""
+    role = canonical_role(user.role)
+    if role in MANAGEMENT_ROLES or (role == SELLER and user.agent_id):
+        return user
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Only the Administrator and sellers can add properties.")
 
 
 def get_seller_user(user: User = Depends(get_current_user)) -> User:

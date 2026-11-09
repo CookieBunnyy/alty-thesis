@@ -23,6 +23,9 @@ class UserCreate(BaseModel):
     agent_id: str | None = None  # link to the agent record (agent accounts)
     # Registered email for password recovery (optional for older clients).
     email: str | None = Field(default=None, max_length=254, pattern=EMAIL_PATTERN)
+    # A Seller without a seller record yet: the record is created with these.
+    phone_number: str | None = Field(default=None, max_length=40)
+    branch_id: int | None = None
 
     @field_validator("username", "full_name", mode="before")
     @classmethod

@@ -1,30 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react"
-import {
-  ArrowLeftRight,
-  BarChart3,
-  Briefcase,
-  Building,
-  ClipboardList,
-  FileBarChart,
-  FolderOpen,
-  Gauge,
-  Handshake,
-  Home,
-  Images,
-  ListChecks,
-  LineChart,
-  LogOut,
-  Menu,
-  Network,
-  Settings,
-  ShieldUser,
-  UserPlus,
-  UserRound,
-  Users,
-  Wallet,
-  X,
-  type LucideIcon,
-} from "lucide-react"
+import { ArrowLeftRight, BarChart3, Briefcase, Building, ClipboardList, FileBarChart, FolderOpen, Gauge, Handshake, Home, ListChecks, LineChart, LogOut, Menu, Network, Settings, ShieldUser, UserPlus, UserRound, Users, Wallet, X, type LucideIcon, Megaphone, CalendarClock } from "lucide-react"
 import { Link } from "@/components/Link"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/hooks/useTheme"
@@ -66,6 +41,13 @@ const NAV: { group: string; items: NavItem[] }[] = [
     ],
   },
   {
+    group: "Office board",
+    items: [
+      { key: "bulletin", label: "Announcements & memos", icon: Megaphone, path: "/manage/bulletin", hint: "Monthly meetings, updates, project flyers, targets and incentives" },
+      { key: "trips", label: "Tripping schedule", icon: CalendarClock, path: "/manage/trips", hint: "Site visits with buyers: date, pick-up, time, subdivision and agent" },
+    ],
+  },
+  {
     group: "Intelligence",
     items: [
       { key: "reports", label: "Reports", icon: FileBarChart, path: "/manage/reports", hint: "Sales and recruitment by seller, recruiter, team and project" },
@@ -74,7 +56,6 @@ const NAV: { group: string; items: NavItem[] }[] = [
       // Decision support is a layer inside Analytics, Forecasting, properties and
       // agents; this is its central feed (same "dss" permission as the desktop).
       { key: "dss", label: "Recommendations", icon: ListChecks, path: "/manage/insights", hint: "What needs attention and what to do next" },
-      { key: "media", label: "Digital Preview", icon: Images, path: "/manage/media", hint: "Property photos and their quality checks" },
     ],
   },
   {
@@ -94,7 +75,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
 // Phones and tablets: a bottom bar with the most used pages (in this order,
 // only those the role can open) and the account's own profile. The full menu
 // is the button at the top left.
-const QUICK = ["dashboard", "properties", "transactions", "documents", "clients", "agents", "analytics", "my-listings", "my-deals", "my-commissions"]
+const QUICK = ["dashboard", "properties", "transactions", "trips", "documents", "clients", "agents", "analytics", "my-listings", "my-deals", "my-commissions"]
 
 function BottomNav({ pathname, can, me }: { pathname: string; can: (key: string) => boolean; me: ReactNode }) {
   const items = NAV.flatMap((group) => group.items)
@@ -123,7 +104,7 @@ function BottomNav({ pathname, can, me }: { pathname: string; can: (key: string)
 }
 
 // Short names that fit under an icon on a phone.
-const SHORT: Record<string, string> = { documents: "Documents", clients: "Clients", transactions: "Transactions" }
+const SHORT: Record<string, string> = { documents: "Documents", clients: "Clients", transactions: "Transactions", trips: "Trips" }
 
 export function ManageLayout({ title, children }: { title: string; children: ReactNode }) {
   const { user, can, signOut } = useStaffAuth()

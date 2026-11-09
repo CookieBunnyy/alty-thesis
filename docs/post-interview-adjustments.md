@@ -334,3 +334,65 @@ the Administrator instead of an email link.
 ### Loading screen
 The logo was removed from the welcome/loading screen (`index.html`). The text
 and the progress bar stay.
+
+---
+
+## Demo preparation and office-board features (2026-11-09)
+
+### Starting from zero
+`desktop-side/backend/scripts/reset_demo_data.py` deletes every record and leaves one account: `admin` / `admin1234`. Change that password after the demo.
+
+How it works:
+* It writes a full `pg_dump` backup to `~/alty-backups` first, and stops if the backup fails.
+* It keeps the schema version, `roles`, `document_schemas` and the document folder structure.
+* Run it with `--yes`, and add `--database-url "<url>"` for a database other than the one in `.env`.
+* Storage files and the central Supabase tables are not touched. Pressing a **Sync** button afterwards brings the central records back.
+* Restore with `pg_restore --clean --if-exists -d "<url>" <backup file>`.
+
+### Sellers as accounts and sellers adding properties
+* **Users & Access → New user → Seller:** if no seller record is picked, one is created from the name, mobile number and team. Email is optional.
+* **Adding a property:** `POST /property-listings` is open to the Administrator and to sellers.
+  - The **developer is required** and must be a partner of type Developer.
+  - A seller's property is assigned to them and starts **not approved**, so it isn't on the website until the Administrator approves it. That approval still needs the developer's verified accreditation.
+  - The seller can edit every field of their own property until it is approved.
+* **Images:** the add-property form has a second step with three groups of images, each checked for quality as it is uploaded (resolution, sharpness, brightness and contrast).
+  - Property photos and perspectives.
+  - **Floor plans**, with a label. Drawings aren't marked down for being bright or low in contrast.
+  - **Amenities**, with a required name, laid out like the developer's flyer.
+  - Images that fail the check are never shown on the website.
+* **Digital Preview page:** removed. Quality analysis now happens where images are uploaded.
+* **On the website:** the property popup shows **Floor plans** and **Amenity** pictures with their captions.
+
+### Announcements & memos (`/manage/bulletin`)
+* **Announcements:** monthly meeting (with date and time), update, project/flyer, general.
+* **Memos:**
+  - **target sales**: progress is shown to company staff;
+  - **incentive**: reward tiers by minimum sales (e.g. Bohol ₱75M, Boracay ₱100M, Thailand ₱150M), and/or a flat incentive per sale, optionally limited to one developer;
+  - **sales notice**: date, buyer, agent, project and TCP of a recorded reservation, like the whiteboard memo;
+  - **general**.
+* Optional flyer image, pinning and archiving. The Administrator posts, and **every new post notifies every staff account**.
+* **Sales figures:** only recorded reservations and sales count, each buyer-property deal once, cancelled ones excluded. Sellers see the target and their own figures, never the company total or other sellers.
+
+### Transactions in the whiteboard format
+The default view is a **sales board by team**. There is one table per team or cluster, with columns RES. DATE · BUYER · AGENT · PROJECT NAME · TCP. The record list uses the same columns.
+
+### Tripping schedule (`/manage/trips`)
+* **Columns:** DATE · PICK-UP · TIME · SUBDIVISION · AGENT, plus buyers and status (scheduled, confirmed, ongoing, done, cancelled).
+* **Live updates:** every open board checks `GET /trips/version` every 8 seconds and reloads only when something changed. Phones show trips as cards.
+* **Who sees what:** sellers see and manage their own trips, and can only add their own buyers. Company staff see all trips.
+* **Notify buyers:**
+  - Buyers with a website account see the schedule and message under **My site trippings** on their account page, which checks for changes every 15 seconds.
+  - Every buyer with a number gets a ready text message, with an SMS link and a copy button for Messenger or Viber.
+  - Changing a trip marks its buyers as not yet notified.
+* **Notifications:** trips in the next two days, and recent changes, go to the agent and to company staff.
+
+### Endpoints and migration
+* **Endpoints:**
+  - `POST /property-listings`
+  - `GET /seller/developers`
+  - `PATCH /media/{id}` (caption and kind)
+  - `/bulletin` (CRUD, `/{id}/image`, `/sales-options`)
+  - `/trips` (CRUD, `/version`, `/buyer-options`, `/{id}/status`, `/{id}/notify`)
+  - `/client/trips`, `/client/trips/read`
+* **Migration** `20261109_0024`: `bulletin_posts`, `trips`, `trip_buyers`, `trip_notices`, `property_media.caption` and `property_listings.submitted_by_user_id`.
+* **Tests:** `tests/test_demo_features.py`.

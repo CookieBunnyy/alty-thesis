@@ -67,12 +67,18 @@ class _RateLimiter:
 
 
 
+GALLERY_KINDS = ("PHOTO", "PERSPECTIVE")
+
+
 def _media_urls(db: Session, listing_ids: list[int]) -> dict[int, list[str]]:
+    """The gallery images of each listing (photos and perspectives that passed
+    the quality check)."""
     if not listing_ids:
         return {}
     rows = db.execute(
         select(PropertyMedia.listing_id, PropertyMedia.id)
-        .where(PropertyMedia.listing_id.in_(listing_ids), PropertyMedia.quality_status.in_(MEDIA_OK))
+        .where(PropertyMedia.listing_id.in_(listing_ids), PropertyMedia.quality_status.in_(MEDIA_OK),
+               PropertyMedia.media_kind.in_(GALLERY_KINDS))
         .order_by(PropertyMedia.created_at)
     ).all()
     urls: dict[int, list[str]] = defaultdict(list)
@@ -81,7 +87,25 @@ def _media_urls(db: Session, listing_ids: list[int]) -> dict[int, list[str]]:
     return urls
 
 
-def _public_listing(listing: PropertyListing, media: list[str]) -> dict:
+def _labelled_media(db: Session, listing_ids: list[int]) -> dict[int, dict[str, list[dict]]]:
+    """Floor plans and amenity pictures from the developer, with their
+    captions, per listing (quality-checked ones only)."""
+    result: dict[int, dict[str, list[dict]]] = defaultdict(lambda: {"floor_plans": [], "amenity_media": []})
+    if not listing_ids:
+        return result
+    rows = db.execute(
+        select(PropertyMedia.listing_id, PropertyMedia.id, PropertyMedia.media_kind, PropertyMedia.caption)
+        .where(PropertyMedia.listing_id.in_(listing_ids), PropertyMedia.quality_status.in_(MEDIA_OK),
+               PropertyMedia.media_kind.in_(("FLOOR_PLAN", "AMENITY")))
+        .order_by(PropertyMedia.created_at)
+    ).all()
+    for listing_id, media_id, kind, caption in rows:
+        key = "floor_plans" if kind == "FLOOR_PLAN" else "amenity_media"
+        result[listing_id][key].append({"url": f"/api/v1/public/media/{media_id}", "caption": caption})
+    return result
+
+
+def _public_listing(listing: PropertyListing, media: list[str], labelled: dict | None = None) -> dict:
     number = lambda value: float(value) if value is not None else None  # noqa: E731
     return {
         "listing_id": listing.listing_id,
@@ -99,6 +123,8 @@ def _public_listing(listing: PropertyListing, media: list[str]) -> dict:
         "lng": number(listing.lng),
         "photos": list(listing.photos or []),
         "media": media,
+        "floor_plans": (labelled or {}).get("floor_plans", []),
+        "amenity_media": (labelled or {}).get("amenity_media", []),
         "amenity_list": listing.amenity_list,
         "nearby_places": listing.nearby_places,
         "nearby_establishments": listing.nearby_establishments,
@@ -147,8 +173,10 @@ def list_public_properties(status: str = "AVAILABLE", mapped_only: bool = False,
     if mapped_only:
         statement = statement.where(PropertyListing.lat.is_not(None), PropertyListing.lng.is_not(None))
     listings = db.execute(statement.order_by(PropertyListing.listing_id)).scalars().all()
-    media = _media_urls(db, [listing.listing_id for listing in listings])
-    return [_public_listing(listing, media.get(listing.listing_id, [])) for listing in listings]
+    ids = [listing.listing_id for listing in listings]
+    media, labelled = _media_urls(db, ids), _labelled_media(db, ids)
+    return [_public_listing(listing, media.get(listing.listing_id, []), labelled[listing.listing_id])
+            for listing in listings]
 
 
 @router.get("/properties/{listing_id}")
@@ -156,7 +184,8 @@ def get_public_property(listing_id: int, db: Session = Depends(get_db)):
     listing = db.get(PropertyListing, listing_id)
     if not _is_public(listing):
         raise HTTPException(status_code=404, detail="Property not found")
-    return _public_listing(listing, _media_urls(db, [listing_id]).get(listing_id, []))
+    return _public_listing(listing, _media_urls(db, [listing_id]).get(listing_id, []),
+                           _labelled_media(db, [listing_id])[listing_id])
 
 
 def _active_agents(db: Session) -> list[Agent]:
@@ -223,6 +252,7 @@ def public_home(db: Session = Depends(get_db)):
         .limit(6)
     ).scalars().all()
     media = _media_urls(db, [listing.listing_id for listing in featured])
+    labelled = _labelled_media(db, [listing.listing_id for listing in featured])
     categories = db.execute(
         select(PropertyListing.category, func.count())
         .where(available).group_by(PropertyListing.category)
@@ -239,8 +269,8 @@ def public_home(db: Session = Depends(get_db)):
             "active_agents": len(agents),
             "client_reviews": review_service.overall_stats(db),
         },
-        "featured_properties": [_public_listing(listing, media.get(listing.listing_id, []))
-                                for listing in featured],
+        "featured_properties": [_public_listing(listing, media.get(listing.listing_id, []),
+                                                labelled[listing.listing_id]) for listing in featured],
         "categories": [{"category": name or "Other", "count": count} for name, count in categories],
         "agents": [_public_agent(agent, stats) for agent in agents[:6]],
         "partners": public_partners(db),

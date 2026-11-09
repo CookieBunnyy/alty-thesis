@@ -15,7 +15,7 @@ import { useToast } from "./toastContext"
 const PAGE_NAMES: Record<string, string> = {
   dashboard: "Dashboard", properties: "Properties", clients: "Buyers & Owners", transactions: "Transactions",
   agents: "Sellers", partners: "Partners / Developers", analytics: "Analytics", forecasting: "Business Outlook",
-  dss: "Recommendations", media: "Digital Preview", documents: "Document Repository", workforce: "Workforce",
+  dss: "Recommendations", bulletin: "Announcements & memos", trips: "Tripping schedule", documents: "Document Repository", workforce: "Workforce",
   users: "Users & Access", audit: "Audit Logs", settings: "Settings", branches: "Teams / Clusters", recruitment: "Recruitment", reports: "Reports", commissions: "Commissions",
   "my-work": "My Work", "my-listings": "My listings", "my-deals": "My deals", "my-commissions": "My commissions",
 }

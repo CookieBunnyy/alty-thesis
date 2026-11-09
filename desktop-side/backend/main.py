@@ -25,6 +25,8 @@ from app.api.v1.seller import router as seller_router
 from app.api.v1.deals import router as deals_router
 from app.api.v1.reports import router as reports_router
 from app.api.v1.password_requests import router as password_requests_router
+from app.api.v1.bulletin import router as bulletin_router
+from app.api.v1.trips import router as trips_router
 from app.api.v1.commissions import router as commissions_router, seller_router as seller_commissions_router
 from app.api.v1.property_listings import router as property_listings_router
 from app.api.v1.public import router as public_router
@@ -115,6 +117,8 @@ for router in (
     seller_commissions_router,
     reports_router,
     password_requests_router,
+    bulletin_router,
+    trips_router,
 ):
     app.include_router(router, prefix="/api/v1")
 

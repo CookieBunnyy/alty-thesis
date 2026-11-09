@@ -12,8 +12,11 @@ class TransactionResponse(BaseModel):
     property_id: int
     property_external_id: str | None = None
     property_title: str | None = None
+    project_name: str | None = None
     agent_id: str
     agent_name: str
+    branch_id: int | None = None
+    branch_name: str | None = None
     transaction_type: str
     transaction_date: datetime
     amount: Decimal

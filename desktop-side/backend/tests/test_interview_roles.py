@@ -32,7 +32,8 @@ def test_legacy_names_map_to_the_new_roles():
     assert canonical_role("Agent") == "Seller"
     assert canonical_role("Developer") == "Seller"           # unknown names get the least access
     assert "reports" in permissions_for("Filing Manager") and "users" not in permissions_for("Filing Manager")
-    assert permissions_for("Seller") == ["my-work", "my-listings", "my-deals", "my-commissions", "settings"]
+    assert permissions_for("Seller") == ["my-work", "bulletin", "trips", "my-listings", "my-deals", "my-commissions",
+                                        "settings"]
 
 
 def test_seller_cannot_read_company_records(api, admin, db):

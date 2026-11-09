@@ -39,7 +39,13 @@ class QualityReport:
     issues: list[str] = field(default_factory=list)
 
 
-def analyze_image(content: bytes) -> QualityReport:
+# Floor plans are line drawings on a light background: exposure, contrast and
+# orientation say nothing about their quality, so only integrity, resolution
+# and sharpness are checked for them.
+DRAWING_KINDS = {"FLOOR_PLAN"}
+
+
+def analyze_image(content: bytes, kind: str = "PHOTO") -> QualityReport:
     import cv2
 
     report = QualityReport()
@@ -69,13 +75,16 @@ def analyze_image(content: bytes) -> QualityReport:
         severe.append(f"Image appears blurry (sharpness {report.blur_score} < {BLUR_POOR})")
     elif report.blur_score < BLUR_OK:
         minor.append(f"Image is slightly soft (sharpness {report.blur_score})")
-    if report.brightness < DARK:
+    drawing = kind in DRAWING_KINDS
+    if drawing:
+        pass
+    elif report.brightness < DARK:
         minor.append(f"Underexposed (mean brightness {report.brightness})")
     elif report.brightness > BRIGHT:
         minor.append(f"Overexposed (mean brightness {report.brightness})")
-    if report.contrast < LOW_CONTRAST:
+    if not drawing and report.contrast < LOW_CONTRAST:
         minor.append(f"Low contrast (std {report.contrast})")
-    if report.orientation == "PORTRAIT":
+    if not drawing and report.orientation == "PORTRAIT":
         minor.append("Portrait orientation; listing galleries display landscape best")
 
     report.issues = severe + minor

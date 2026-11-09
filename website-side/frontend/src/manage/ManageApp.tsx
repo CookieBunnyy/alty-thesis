@@ -23,7 +23,8 @@ import { InsightsPage } from "./InsightsPage"
 import { ClientsPage } from "./ClientsPage"
 import { DashboardPage } from "./DashboardPage"
 import { DocumentsPage } from "./DocumentsPage"
-import { MediaPage } from "./MediaPage"
+import { BulletinPage } from "./BulletinPage"
+import { TripsPage } from "./TripsPage"
 import { PropertiesPage } from "./PropertiesPage"
 import { ToastProvider } from "./Toasts"
 import { t } from "./i18n"
@@ -45,7 +46,8 @@ const PAGES: Record<string, [string, string, () => React.ReactNode]> = {
   "/manage/transactions": ["transactions", "Transactions", () => <TransactionsPage />],
   "/manage/partners": ["partners", "Partners / Developers", () => <PartnersPage />],
   "/manage/documents": ["documents", "Document Repository", () => <DocumentsPage />],
-  "/manage/media": ["media", "Digital Preview", () => <MediaPage />],
+  "/manage/bulletin": ["bulletin", "Announcements & memos", () => <BulletinPage />],
+  "/manage/trips": ["trips", "Tripping schedule", () => <TripsPage />],
   "/manage/analytics": ["analytics", "Analytics", () => <AnalyticsPage />],
   "/manage/forecasting": ["forecasting", "Business Outlook", () => <ForecastingPage />],
   "/manage/insights": ["dss", "Recommendations", () => <InsightsPage />],

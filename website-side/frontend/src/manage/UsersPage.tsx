@@ -10,6 +10,7 @@ import { t } from "./i18n"
 import { photoBody } from "./photoBody"
 import { PhotoControls, StaffAvatar } from "./avatars"
 import { PasswordRequestsPanel } from "./passwordRequests"
+import { useBranchOptions } from "./branches"
 
 type StaffUser = { id: number; username: string; full_name: string; role: string; is_active: boolean; last_login_at: string | null; created_at: string; agent_id: string | null; agent_name: string | null; photo_version: number | null; email: string | null }
 type AgentOption = { agent_id: string; full_name: string; status: string }
@@ -17,7 +18,7 @@ type Role = { name: string; description?: string | null; permissions?: string[] 
 
 const PAGE_NAMES: Record<string, string> = {
   dashboard: "Dashboard", properties: "Properties", partners: "Partners", clients: "Buyers & Owners", transactions: "Transactions",
-  documents: "Documents", media: "Digital Preview", agents: "Sellers", workforce: "Workforce", analytics: "Analytics",
+  documents: "Documents", bulletin: "Announcements & memos", trips: "Tripping schedule", agents: "Sellers", workforce: "Workforce", analytics: "Analytics",
   forecasting: "Business Outlook", dss: "Recommendations", users: "Users", audit: "Audit Logs", settings: "Settings",
   branches: "Teams / Clusters", recruitment: "Recruitment", reports: "Reports", commissions: "Commissions",
   "my-work": "My Work", "my-listings": "My listings", "my-deals": "My deals", "my-commissions": "My commissions",
@@ -147,7 +148,10 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
 }) {
   const toast = useToast()
   const { api, user: me } = useStaffAuth()
-  const [form, setForm] = useState({ username: "", full_name: user?.full_name ?? "", role: user?.role ?? roles.find((r) => r === "Filing Manager") ?? roles[0] ?? "", is_active: user?.is_active ?? true, password: "", confirm: "", agent_id: user?.agent_id ?? "", email: user?.email ?? "" })
+  const [form, setForm] = useState({ username: "", full_name: user?.full_name ?? "", role: user?.role ?? roles.find((r) => r === "Filing Manager") ?? roles[0] ?? "", is_active: user?.is_active ?? true, password: "", confirm: "", agent_id: user?.agent_id ?? "", email: user?.email ?? "", phone_number: "", branch_id: "" })
+  const branches = useBranchOptions()
+  // A new Seller without a seller record: the record is created with the account.
+  const newSellerRecord = !user && form.role === "Seller" && !form.agent_id
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }))
@@ -157,7 +161,6 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
     setError("")
     if (!form.full_name.trim()) return setError(t("Enter the full name."))
     const email = form.email.trim()
-    if (!user && !email) return setError(t("Enter the email address."))
     if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return setError(t("Enter a valid email address."))
     if (!user) {
       if (form.username.trim().length < 3) return setError(t("Username must be at least 3 characters."))
@@ -168,7 +171,7 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
     try {
       const saved = user
         ? await api<StaffUser>(`/users/${user.id}`, { method: "PUT", body: JSON.stringify({ full_name: form.full_name.trim(), role: form.role, is_active: form.is_active, agent_id: form.agent_id || null, ...(email || user.email ? { email: email || null } : {}) }) })
-        : await api<StaffUser>("/users", { method: "POST", body: JSON.stringify({ username: form.username.trim(), full_name: form.full_name.trim(), role: form.role, is_active: form.is_active, password: form.password, agent_id: form.agent_id || null, email }) })
+        : await api<StaffUser>("/users", { method: "POST", body: JSON.stringify({ username: form.username.trim(), full_name: form.full_name.trim(), role: form.role, is_active: form.is_active, password: form.password, agent_id: form.agent_id || null, email: email || null, ...(newSellerRecord ? { phone_number: form.phone_number.trim() || null, branch_id: form.branch_id ? Number(form.branch_id) : null } : {}) }) })
       onSaved(saved, Boolean(user && user.id === me?.id && (user.role !== saved.role || !saved.is_active)))
     } catch (saveError) {
       setError((saveError as Error).message)
@@ -209,9 +212,9 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
             <label className="block text-sm font-medium">{t("Username")}<input className={field} autoComplete="off" value={form.username} onChange={(e) => set("username", e.target.value)} /></label>
           )}
           <label className="block text-sm font-medium">{t("Full name")}<input className={field} value={form.full_name} onChange={(e) => set("full_name", e.target.value)} /></label>
-          <label className="block text-sm font-medium">{t("Email")}{!user && <span className="text-ab-danger"> *</span>}
+          <label className="block text-sm font-medium">{t("Email (optional)")}
             <input type="email" inputMode="email" autoComplete="off" className={field} value={form.email} placeholder="name@example.com" onChange={(e) => set("email", e.target.value)} />
-            <span className="mt-1 block text-xs font-normal text-ab-faint">{t("Used for “Forgot password”: reset links go only to this address. One email per account.")}</span>
+            <span className="mt-1 block text-xs font-normal text-ab-faint">{t("They can sign in or ask for a password reset with their username or this email. One email per account.")}</span>
           </label>
           <label className="block text-sm font-medium"><Term label="Role" />
             <select className={field} value={form.role} onChange={(e) => set("role", e.target.value)}>
@@ -220,7 +223,7 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
           </label>
           <label className="block text-sm font-medium"><Term label="Linked agent record" />
             <select className={field} value={form.agent_id} onChange={(e) => set("agent_id", e.target.value)}>
-              <option value="">{t("None (not an agent)")}</option>
+              <option value="">{t(!user && form.role === "Seller" ? "Create a new seller record" : "None (not an agent)")}</option>
               {agents.map((a) => (
                 <option key={a.agent_id} value={a.agent_id} disabled={takenAgents.has(a.agent_id)}>
                   {a.full_name} ({a.agent_id}){takenAgents.has(a.agent_id) ? ` — ${t("linked to @{user}", { user: takenAgents.get(a.agent_id) })}` : ""}
@@ -229,6 +232,18 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
             </select>
             <span className="mt-1 block text-xs font-normal text-ab-faint">{t("For agents: their “My Work” page shows this agent record's clients, transactions and reviews.")}</span>
           </label>
+          {newSellerRecord && (
+            <div className="grid gap-3 rounded-xl border border-ab-accent/40 bg-ab-accent-soft p-3 sm:grid-cols-2">
+              <p className="text-xs text-ab-muted sm:col-span-2">{t("A seller record is created for {name} with this account. Complete it later on the Sellers page.", { name: form.full_name.trim() || t("this seller") })}</p>
+              <label className="block text-sm font-medium">{t("Mobile number")}<input className={field} inputMode="tel" value={form.phone_number} placeholder="0917 123 4567" onChange={(e) => set("phone_number", e.target.value)} /></label>
+              <label className="block text-sm font-medium">{t("Team / Cluster")}
+                <select className={field} value={form.branch_id} onChange={(e) => set("branch_id", e.target.value)}>
+                  <option value="">{t("Not set")}</option>
+                  {branches.filter((b) => b.is_active).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </label>
+            </div>
+          )}
           {!user && (
             <>
               <label className="block text-sm font-medium">{t("Password")}<input type="password" autoComplete="new-password" className={field} value={form.password} onChange={(e) => set("password", e.target.value)} /></label>

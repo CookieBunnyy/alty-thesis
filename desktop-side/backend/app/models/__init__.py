@@ -19,6 +19,8 @@ from app.models.listing_assignment import ListingAssignment
 from app.models.deal import Deal, DealEvent
 from app.models.commission import CommissionRecord, CommissionStructure
 from app.models.extraction import DocumentExtraction, DocumentSchema
+from app.models.bulletin import BulletinPost
+from app.models.trip import Trip, TripBuyer, TripNotice
 
 __all__ = [
 	"Branch",
@@ -48,6 +50,10 @@ __all__ = [
 	"DealEvent",
 	"CommissionRecord",
 	"CommissionStructure",
+	"BulletinPost",
+	"Trip",
+	"TripBuyer",
+	"TripNotice",
 	"DocumentExtraction",
 	"DocumentSchema",
 ]

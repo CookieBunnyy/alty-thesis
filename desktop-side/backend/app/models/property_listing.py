@@ -154,7 +154,8 @@ class PropertyListing(Base):
     @property
     def media_ids(self) -> list[int]:
         """Uploaded photos that passed the quality check (shown on the listing)."""
-        return [m.id for m in self.uploaded_media if m.quality_status in ("GOOD", "ACCEPTABLE")]
+        return [m.id for m in self.uploaded_media
+                if m.quality_status in ("GOOD", "ACCEPTABLE") and m.media_kind in ("PHOTO", "PERSPECTIVE")]
 
     status: Mapped[str] = mapped_column(
         String(20),
@@ -206,6 +207,10 @@ class PropertyListing(Base):
     # properties; a listing is shown publicly only once approved for marketing,
     # which needs the developer's verified accreditation (services/accreditation.py).
     project_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # The staff account that added the listing in the Management System (a
+    # seller may keep editing their own listing until it is approved).
+    submitted_by_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     floor_area_sqm: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
     marketing_status: Mapped[str] = mapped_column(String(20), nullable=False, default="DRAFT",
                                                   server_default="DRAFT", index=True)

@@ -50,8 +50,12 @@ def _response(transaction: PropertyTransaction) -> dict:
         "property_id": transaction.property_id,
         "property_external_id": transaction.property_listing.external_listing_id,
         "property_title": transaction.property_listing.title,
+        # The office board's columns: project name, and the agent's team / cluster.
+        "project_name": transaction.property_listing.project_name or transaction.property_listing.title,
         "agent_id": transaction.agent_id,
         "agent_name": transaction.agent.full_name,
+        "branch_id": transaction.agent.branch_id,
+        "branch_name": transaction.agent.branch.name if transaction.agent.branch else None,
         "transaction_type": transaction.transaction_type,
         "transaction_date": transaction.transaction_date,
         "amount": transaction.amount,

@@ -154,6 +154,22 @@ def get_users(db: Session = Depends(get_db), _user: User = Depends(require_manag
     return [_serialize(user, db) for user in db.execute(staff).scalars()]
 
 
+def _new_seller_record(db: Session, payload: UserCreate) -> str:
+    """A new Seller account without a seller record: create the record (the
+    Sellers page shows it; the Administrator can complete it there)."""
+    from app.api.v1.recruitment import next_agent_id
+    from app.models.branch import Branch
+
+    if payload.branch_id is not None and db.get(Branch, payload.branch_id) is None:
+        raise HTTPException(status_code=422, detail="Unknown team / cluster")
+    agent = Agent(agent_id=next_agent_id(db), full_name=payload.full_name,
+                  phone_number=(payload.phone_number or "").strip() or None, branch_id=payload.branch_id,
+                  status="ACTIVE", sync_status="PENDING", designation="Sales Agent")
+    db.add(agent)
+    db.flush()
+    return agent.agent_id
+
+
 def _seller_needs_record(role: str, agent_id: str | None) -> None:
     """A Seller account only ever shows its own records, so it must be linked
     to the seller record it belongs to."""
@@ -165,15 +181,22 @@ def _seller_needs_record(role: str, agent_id: str | None) -> None:
 def create_user(payload: UserCreate, db: Session = Depends(get_db), actor: User = Depends(require_admin)):
     if db.execute(select(User).where(User.username == payload.username)).scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Username already exists")
-    _seller_needs_record(_valid_role(payload.role), payload.agent_id)
-    user = User(username=payload.username, full_name=payload.full_name, role=_valid_role(payload.role),
+    role = _valid_role(payload.role)
+    email = _unused_email(db, payload.email)
+    agent_id = _valid_agent_link(db, payload.agent_id)
+    created_record = None
+    if role == SELLER and not agent_id:
+        agent_id = created_record = _new_seller_record(db, payload)
+    _seller_needs_record(role, agent_id)
+    user = User(username=payload.username, full_name=payload.full_name, role=role,
                 password_hash=get_password_hash(payload.password), is_active=payload.is_active,
-                agent_id=_valid_agent_link(db, payload.agent_id), email=_unused_email(db, payload.email))
+                agent_id=agent_id, email=email)
     db.add(user)
     db.flush()
     record_audit(db, "USER_CREATED", actor=actor, entity_type="users", entity_id=user.id,
                  details={"username": user.username, "role": user.role, "is_active": user.is_active,
-                          "agent_id": user.agent_id, "email": user.email})
+                          "agent_id": user.agent_id, "email": user.email,
+                          "seller_record_created": created_record})
     db.commit()
     db.refresh(user)
     return _serialize(user, db)

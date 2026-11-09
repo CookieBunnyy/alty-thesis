@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
-import { ExternalLink, MapPin, Pencil, Trash2 } from "lucide-react"
+import { ExternalLink, MapPin, Pencil, Plus, Trash2 } from "lucide-react"
 import { Link } from "@/components/Link"
 import { CATEGORIES, categoryLabel, categoryOf } from "@/lib/categories"
 import { canEditListings, contains, date, dateTime, isManagement, peso, statusLabel, text, transactionDate } from "./format"
@@ -17,6 +17,8 @@ import { useBlobUrl } from "./useBlobUrl"
 import { LotBoundarySection } from "./LotBoundarySection"
 import { useBranchOptions } from "./branches"
 import { ListingMarketing, MarketingBadge } from "./listingMarketing"
+import { AddPropertyForm } from "./AddPropertyForm"
+import { ListingImages } from "./listingImages"
 
 type PartnerOption = { id: number; name: string; status: string }
 type Summary = { available: number; reserved: number; sold: number; on_hold: number; unavailable: number; total: number }
@@ -61,6 +63,7 @@ export function PropertiesPage() {
     [api],
   )
   const { data, setData, error, loading, reload } = useApiData(load, "properties")
+  const [adding, setAdding] = useState(false)
   const [listings, summary, partners] = data ?? [[], null, []]
 
   const shown = useMemo(
@@ -103,8 +106,13 @@ export function PropertiesPage() {
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
         title="All listings and where each one stands"
-        subtitle="Listings from Supabase and from processed documents. Reserved and sold statuses come from reservation and sale documents."
-        actions={isManagement(user?.role) && <SyncButton path="/property-listings/sync" what="Listings" onDone={reload} />}
+        subtitle="Every property Abellar markets, each under its developer. Add a property here (sellers add theirs from My listings); reserved and sold statuses come from reservation and sale documents."
+        actions={isManagement(user?.role) && (
+          <>
+            <SyncButton path="/property-listings/sync" what="Listings" onDone={reload} />
+            <Button variant="primary" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> {t("Add property")}</Button>
+          </>
+        )}
       />
       {summary && (
         <Tiles
@@ -129,6 +137,7 @@ export function PropertiesPage() {
             empty="No listings match these filters." initialSort={{ key: "title", dir: "asc" }} />
         </>
       )}
+      {adding && <AddPropertyForm onClose={() => { setAdding(false); void reload() }} onSaved={() => void reload()} />}
       {selected && (
         <PropertyDrawer
           listing={selected}
@@ -246,6 +255,9 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
         {listing.details && <p className="mt-3 whitespace-pre-line text-sm text-ab-muted">{listing.details}</p>}
       </Section>
       <ListingMarketing listingId={listing.listing_id} canManage={canEditListings(user?.role)} />
+      <Section title="Photos, floor plans & amenities">
+        <ListingImages listingId={listing.listing_id} editable={canEditListings(user?.role)} />
+      </Section>
       <LotBoundarySection listing={listing} canEdit={canEditListings(user?.role)} onSaved={onSaved} />
 
       <Section title="Amenities & nearby">

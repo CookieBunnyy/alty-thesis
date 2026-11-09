@@ -276,3 +276,49 @@ def _is_uuid(value: str) -> bool:
     except ValueError:
         return False
 
+
+
+# ---- Tripping schedule (site visits) -------------------------------------------
+
+@router.get("/trips")
+def my_trips(user: User = Depends(get_current_client), db: Session = Depends(get_db)):
+    """Site trippings the signed-in client joins (from a week ago on), with the
+    schedule messages their agent sent. The page checks this every few
+    seconds, so changes show up right away."""
+    from datetime import date, timedelta
+
+    from app.models.trip import Trip, TripBuyer, TripNotice
+
+    trips = db.execute(
+        select(Trip).join(TripBuyer, TripBuyer.trip_id == Trip.id)
+        .where(TripBuyer.client_id == user.client_id, Trip.trip_date >= date.today() - timedelta(days=7))
+        .order_by(Trip.trip_date, Trip.pickup_time)
+    ).scalars().unique().all()
+    notices = db.execute(select(TripNotice).where(TripNotice.client_id == user.client_id)
+                         .order_by(TripNotice.created_at.desc()).limit(50)).scalars().all()
+    by_trip: dict[int, list] = {}
+    for notice in notices:
+        by_trip.setdefault(notice.trip_id, []).append(
+            {"id": notice.id, "message": notice.message, "sent_by": notice.sent_by_name,
+             "created_at": notice.created_at, "read": notice.read_at is not None})
+    return {
+        "unread": sum(1 for n in notices if n.read_at is None),
+        "trips": [{
+            "id": trip.id, "trip_date": trip.trip_date, "pickup_time": trip.pickup_time,
+            "pickup_point": trip.pickup_point, "subdivision": trip.subdivision, "status": trip.status,
+            "agent": {"full_name": trip.agent.full_name, "phone_number": trip.agent.phone_number} if trip.agent else None,
+            "updated_at": trip.updated_at, "notices": by_trip.get(trip.id, []),
+        } for trip in trips],
+    }
+
+
+@router.post("/trips/read", status_code=204)
+def read_trip_notices(user: User = Depends(get_current_client), db: Session = Depends(get_db)):
+    from fastapi.responses import Response
+
+    from app.models.trip import TripNotice
+
+    db.query(TripNotice).filter(TripNotice.client_id == user.client_id, TripNotice.read_at.is_(None)) \
+        .update({TripNotice.read_at: datetime.utcnow()}, synchronize_session=False)
+    db.commit()
+    return Response(status_code=204)

@@ -207,6 +207,48 @@ def _security(db: Session, now: datetime) -> list[dict[str, Any]]:
     ]
 
 
+def _bulletin(db: Session, now: datetime) -> list[dict[str, Any]]:
+    """Every new announcement and memo, for everyone."""
+    from app.models.bulletin import BulletinPost
+
+    rows = db.scalars(select(BulletinPost).where(BulletinPost.archived.is_(False),
+                                                 BulletinPost.created_at >= now - EVENT_WINDOW)
+                      .order_by(BulletinPost.created_at.desc()).limit(20)).all()
+    return [
+        _item(f"bulletin:{post.id}", category="bulletin", severity="info",
+              title="New announcement" if post.board == "ANNOUNCEMENT" else "New memo",
+              message=f"{post.title} · posted by {post.created_by_name or 'the Administrator'}",
+              at=post.created_at, page="bulletin")
+        for post in rows
+    ]
+
+
+def _trips(db: Session, now: datetime, user: User) -> list[dict[str, Any]]:
+    """Trips in the next two days, and trips changed in the last two days
+    (the agent's own for sellers)."""
+    from app.core.security import SELLER
+    from app.models.trip import Trip
+
+    today = now.date()
+    query = select(Trip).where(
+        (Trip.trip_date.between(today, today + timedelta(days=2))) | (Trip.updated_at >= now - timedelta(days=2)),
+        Trip.trip_date >= today)
+    if canonical_role(user.role) == SELLER:
+        query = query.where(Trip.agent_id == user.agent_id)
+    items = []
+    for trip in db.scalars(query.order_by(Trip.trip_date).limit(20)).all():
+        agent = trip.agent.full_name if trip.agent else trip.agent_id
+        status = trip.status.replace("_", " ").lower()
+        items.append(_item(
+            f"trip:{trip.id}:{trip.updated_at:%Y%m%d%H%M%S}", category="trips",
+            severity="danger" if trip.status == "CANCELLED" else "info",
+            title="Trip cancelled" if trip.status == "CANCELLED" else "Site tripping",
+            message=f"{trip.trip_date:%b %d} {trip.pickup_time} · {trip.subdivision} · agent {agent} "
+                    f"· pick-up {trip.pickup_point} · {status}",
+            at=trip.updated_at, page="trips"))
+    return items
+
+
 def _password_requests(db: Session) -> list[dict[str, Any]]:
     from app.services.password_requests import check_code, pending_for_notifications
     return [
@@ -234,6 +276,10 @@ def notifications_for(db: Session, user: User) -> dict[str, Any]:
         items += _client_accounts(db, now)
     if "properties" in pages:
         items += _listings(db)
+    if "bulletin" in pages:
+        items += _bulletin(db, now)
+    if "trips" in pages:
+        items += _trips(db, now, user)
     if admin:
         items += _sync(db, now)
         items += _security(db, now)

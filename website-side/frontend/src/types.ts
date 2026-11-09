@@ -26,6 +26,9 @@ export interface Property {
   listing_code?: string | null;
   status?: 'AVAILABLE' | 'RESERVED' | 'SOLD';
   media?: string[];
+  /** Floor plans and amenity pictures from the developer (quality-checked). */
+  floor_plans?: { url: string; caption: string | null }[];
+  amenity_media?: { url: string; caption: string | null }[];
   title: string;
   category?: string;
   price_total: number;

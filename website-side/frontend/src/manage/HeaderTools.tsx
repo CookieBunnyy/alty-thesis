@@ -8,7 +8,7 @@ import { t } from "./i18n"
 
 const PAGE_PATHS: Record<string, string> = {
   dashboard: "/manage", properties: "/manage/properties", clients: "/manage/clients", transactions: "/manage/transactions",
-  agents: "/manage/agents", documents: "/manage/documents", partners: "/manage/partners", media: "/manage/media", analytics: "/manage/analytics",
+  agents: "/manage/agents", documents: "/manage/documents", partners: "/manage/partners", bulletin: "/manage/bulletin", trips: "/manage/trips", analytics: "/manage/analytics",
   forecasting: "/manage/forecasting", dss: "/manage/insights", workforce: "/manage/workforce", users: "/manage/users",
   audit: "/manage/audit", settings: "/manage/settings", branches: "/manage/branches", recruitment: "/manage/recruitment", reports: "/manage/reports", commissions: "/manage/commissions",
 }
