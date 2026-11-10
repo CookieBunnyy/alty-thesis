@@ -5,11 +5,11 @@ import type { PublicPartner } from "@/types"
 function PartnerMark({ partner, hidden }: { partner: PublicPartner; hidden: boolean }) {
   const mark = partner.logo_url ? (
     <img src={`${API_URL}${partner.logo_url}`} alt={partner.name} loading="lazy" decoding="async"
-      className="partner-logo h-9 w-auto max-w-[150px] object-contain sm:h-10" />
+      className="h-full w-full object-contain" />
   ) : (
-    <span className="partner-wordmark whitespace-nowrap text-lg font-extrabold tracking-tight sm:text-xl">{partner.name}</span>
+    <span className="partner-wordmark line-clamp-2 text-center text-sm font-extrabold leading-tight tracking-tight">{partner.name}</span>
   )
-  const className = "partner-item flex h-16 shrink-0 items-center justify-center px-2"
+  const className = "partner-item flex h-20 w-40 shrink-0 items-center justify-center p-2.5 sm:h-24 sm:w-48"
   if (partner.website) {
     return (
       <a href={partner.website} target="_blank" rel="noopener noreferrer" className={className}
@@ -38,7 +38,7 @@ export function PartnersStrip({ partners }: { partners: PublicPartner[] }) {
       <div className="ab-marquee-wrap ab-marquee-mask min-w-0 overflow-hidden" aria-label="Our developers and partners" role="region">
         <div className="ab-marquee flex w-max items-center" style={{ ["--marquee-duration" as string]: `${Math.max(24, lap.length * 4)}s` }}>
           {[0, 1].map((half) => (
-            <ul key={half} className="flex shrink-0 items-center gap-14 pr-14" aria-hidden={half === 1 || undefined}>
+            <ul key={half} className="flex shrink-0 items-center gap-4 py-2 pr-4" aria-hidden={half === 1 || undefined}>
               {lap.map((partner, index) => (
                 <li key={`${partner.id}-${index}`} aria-hidden={half === 1 || index >= count || undefined}>
                   <PartnerMark partner={partner} hidden={half === 1 || index >= count} />

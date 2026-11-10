@@ -8,6 +8,7 @@ import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
 import { useBranchOptions, useSellerOptions } from "./branches"
+import { PasswordInput } from "@/components/PasswordInput"
 
 type Applicant = {
   id: number; full_name: string; email: string | null; phone_number: string | null; address: string | null
@@ -335,7 +336,7 @@ function OnboardDialog({ applicant, summary, onClose, onDone }: { applicant: App
         {account.create && (
           <>
             <label className="text-sm font-medium">{t("Username")}<input className={field} value={account.username} onChange={(e) => setAccount((a) => ({ ...a, username: e.target.value }))} autoComplete="off" /></label>
-            <label className="text-sm font-medium">{t("Initial password")}<input type="password" className={field} value={account.password} onChange={(e) => setAccount((a) => ({ ...a, password: e.target.value }))} autoComplete="new-password" /></label>
+            <label className="text-sm font-medium">{t("Initial password")}<PasswordInput showLabel={t("Show password")} hideLabel={t("Hide password")} className={field} value={account.password} onChange={(e) => setAccount((a) => ({ ...a, password: e.target.value }))} autoComplete="new-password" /></label>
             <label className="text-sm font-medium sm:col-span-2">{t("Email (for password recovery)")}<input type="email" className={field} value={account.email} onChange={(e) => setAccount((a) => ({ ...a, email: e.target.value }))} /></label>
           </>
         )}

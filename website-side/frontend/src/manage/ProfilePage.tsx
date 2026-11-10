@@ -10,6 +10,7 @@ import { photoBody } from "./photoBody"
 import { Button, Facts, PageHeader, Section } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
+import { PasswordInput } from "@/components/PasswordInput"
 
 // Page keys -> names (same as the sidebar).
 const PAGE_NAMES: Record<string, string> = {
@@ -124,13 +125,13 @@ function ChangePassword() {
     <Section title="Change password">
       <form onSubmit={submit} className="grid gap-3 sm:grid-cols-3" noValidate>
         <label className="text-sm font-medium">{t("Current password")}
-          <input type="password" autoComplete="current-password" className={field} value={form.current} onChange={set("current")} />
+          <PasswordInput showLabel={t("Show password")} hideLabel={t("Hide password")} autoComplete="current-password" className={field} value={form.current} onChange={set("current")} />
         </label>
         <label className="text-sm font-medium">{t("New password")}
-          <input type="password" autoComplete="new-password" className={field} value={form.next} onChange={set("next")} />
+          <PasswordInput showLabel={t("Show password")} hideLabel={t("Hide password")} autoComplete="new-password" className={field} value={form.next} onChange={set("next")} />
         </label>
         <label className="text-sm font-medium">{t("Confirm new password")}
-          <input type="password" autoComplete="new-password" className={field} value={form.confirm} onChange={set("confirm")} />
+          <PasswordInput showLabel={t("Show password")} hideLabel={t("Hide password")} autoComplete="new-password" className={field} value={form.confirm} onChange={set("confirm")} />
         </label>
         {error && <p role="alert" className="text-sm text-ab-danger sm:col-span-3">{error}</p>}
         <div className="sm:col-span-3">

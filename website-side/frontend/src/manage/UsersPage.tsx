@@ -11,6 +11,7 @@ import { photoBody } from "./photoBody"
 import { PhotoControls, StaffAvatar } from "./avatars"
 import { PasswordRequestsPanel } from "./passwordRequests"
 import { useBranchOptions } from "./branches"
+import { PasswordInput } from "@/components/PasswordInput"
 
 type StaffUser = { id: number; username: string; full_name: string; role: string; is_active: boolean; last_login_at: string | null; created_at: string; agent_id: string | null; agent_name: string | null; photo_version: number | null; email: string | null }
 type AgentOption = { agent_id: string; full_name: string; status: string }
@@ -246,8 +247,8 @@ function UserForm({ user, roles, agents, takenAgents, onClose, onSaved, onPhotoC
           )}
           {!user && (
             <>
-              <label className="block text-sm font-medium">{t("Password")}<input type="password" autoComplete="new-password" className={field} value={form.password} onChange={(e) => set("password", e.target.value)} /></label>
-              <label className="block text-sm font-medium">{t("Confirm password")}<input type="password" autoComplete="new-password" className={field} value={form.confirm} onChange={(e) => set("confirm", e.target.value)} /></label>
+              <label className="block text-sm font-medium">{t("Password")}<PasswordInput showLabel={t("Show password")} hideLabel={t("Hide password")} autoComplete="new-password" className={field} value={form.password} onChange={(e) => set("password", e.target.value)} /></label>
+              <label className="block text-sm font-medium">{t("Confirm password")}<PasswordInput showLabel={t("Show password")} hideLabel={t("Hide password")} autoComplete="new-password" className={field} value={form.confirm} onChange={(e) => set("confirm", e.target.value)} /></label>
               <p className="text-xs text-ab-faint">{t("At least 8 characters. Share it with the person privately; they can sign in to the desktop app or the website.")}</p>
             </>
           )}
@@ -292,8 +293,8 @@ function ResetPassword({ user, onClose, onDone }: { user: StaffUser; onClose: ()
       <form onSubmit={submit} noValidate className="ab-pop relative w-full max-w-sm rounded-2xl border border-ab-border bg-ab-card p-5 shadow-2xl">
         <h2 className="text-lg font-bold">{t("Reset password")}</h2>
         <p className="mt-1 text-sm text-ab-muted">{t("New password for {name} (@{user}).", { name: user.full_name, user: user.username })}</p>
-        <label className="mt-4 block text-sm font-medium">{t("New password")}<input type="password" autoComplete="new-password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} /></label>
-        <label className="mt-3 block text-sm font-medium">{t("Confirm")}<input type="password" autoComplete="new-password" className={field} value={confirm} onChange={(e) => setConfirm(e.target.value)} /></label>
+        <label className="mt-4 block text-sm font-medium">{t("New password")}<PasswordInput showLabel={t("Show password")} hideLabel={t("Hide password")} autoComplete="new-password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+        <label className="mt-3 block text-sm font-medium">{t("Confirm")}<PasswordInput showLabel={t("Show password")} hideLabel={t("Hide password")} autoComplete="new-password" className={field} value={confirm} onChange={(e) => setConfirm(e.target.value)} /></label>
         {error && <p role="alert" className="mt-3 text-sm text-ab-danger">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <Button onClick={onClose} disabled={busy}>{t("Cancel")}</Button>

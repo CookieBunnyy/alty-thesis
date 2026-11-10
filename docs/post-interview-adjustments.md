@@ -396,3 +396,12 @@ The default view is a **sales board by team**. There is one table per team or cl
   - `/client/trips`, `/client/trips/read`
 * **Migration** `20261109_0024`: `bulletin_posts`, `trips`, `trip_buyers`, `trip_notices`, `property_media.caption` and `property_listings.submitted_by_user_id`.
 * **Tests:** `tests/test_demo_features.py`.
+
+### Developers from the office board (2026-11-10)
+`desktop-side/backend/scripts/seed_developers.py` adds the 24 developers and partners from the office's "Developers and Partners" board, with 23 logos in `scripts/developer_logos/` (Jeika has no logo yet).
+* Re-running it is safe: existing names are kept, and a developer only gets a logo if it has none.
+* Run it with `--database-url "<url>"` for the live database.
+* It doesn't set accreditation. Record that on Partners / Developers.
+* The home page shows the logos in full colour on white cards, and the Partners table shows each logo.
+
+Every password field now has a show / hide button (`src/components/PasswordInput.tsx`).

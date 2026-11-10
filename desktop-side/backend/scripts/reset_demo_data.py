@@ -57,6 +57,13 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.database_url:
+        if not args.database_url.startswith(("postgresql://", "postgresql+psycopg://", "postgresql+psycopg2://", "postgres://")):
+            print("That isn't a database connection string. Use the Postgres URL that starts with "
+                  "postgresql:// (Render -> Environment -> DATABASE_URL, or Supabase -> Connect -> Session pooler), "
+                  "not the project URL https://....supabase.co.")
+            return 1
+        if args.database_url.startswith("postgres://"):
+            args.database_url = "postgresql://" + args.database_url[len("postgres://"):]
         os.environ["DATABASE_URL"] = args.database_url
     from sqlalchemy import inspect, text
     from sqlalchemy.orm import Session
@@ -88,6 +95,12 @@ def main() -> int:
         env = {**os.environ, "PGPASSWORD": url.password or ""}
         connection = [f"--host={url.host or 'localhost'}", f"--port={url.port or 5432}",
                       f"--username={url.username or 'postgres'}", f"--dbname={url.database}"]
+        # Only the schema the app's tables live in (on Supabase: alty_api).
+        # Supabase's own auth / storage schemas aren't readable by the app's
+        # account, and they aren't reset anyway.
+        with engine.connect() as probe:
+            schema = probe.execute(text("SELECT current_schema()")).scalar()
+        connection.append(f"--schema={schema}")
         if url.query.get("sslmode"):
             env["PGSSLMODE"] = str(url.query["sslmode"])
         result = subprocess.run([dump, "--format=custom", "--no-owner", f"--file={target}", *connection],

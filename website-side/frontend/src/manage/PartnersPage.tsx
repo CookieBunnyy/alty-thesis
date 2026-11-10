@@ -58,7 +58,7 @@ export function PartnersPage() {
       key: "name", label: "Partner", sort: (p) => p.name.toLowerCase(),
       render: (p) => (
         <span className="flex items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ab-accent-soft text-ab-accent"><Building2 className="h-4 w-4" /></span>
+          <PartnerThumb partner={p} />
           <span className="min-w-0">
             <span className="block truncate font-semibold">{p.name}</span>
             <span className="block truncate text-xs text-ab-faint">{typeLabel(p.partner_type)}{p.contact_person ? ` · ${p.contact_person}` : ""}</span>
@@ -110,6 +110,14 @@ export function PartnersPage() {
       )}
     </div>
   )
+}
+
+/** A small logo for the list (the building icon when there's none). */
+function PartnerThumb({ partner }: { partner: Partner }) {
+  const { url } = useBlobUrl(partner.logo_version ? `/partners/${partner.id}/logo?v=${partner.logo_version}` : null)
+  return url
+    ? <span className="flex h-9 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-ab-border bg-white p-0.5"><img src={url} alt="" className="max-h-full max-w-full object-contain" /></span>
+    : <span className="flex h-9 w-14 shrink-0 items-center justify-center rounded-lg bg-ab-accent-soft text-ab-accent"><Building2 className="h-4 w-4" /></span>
 }
 
 /** The partner's logo (shown on the public home page), with upload controls for management. */
