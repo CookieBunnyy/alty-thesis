@@ -5,7 +5,6 @@ import { CATEGORIES, categoryLabel, categoryOf } from "@/lib/categories"
 import { canEditListings, contains, date, dateTime, isManagement, peso, statusLabel, text, transactionDate } from "./format"
 import { SubjectInsights } from "./Insights"
 import { PropertyEditForm, type Listing } from "./PropertyEditForm"
-import { SyncButton } from "./SyncButton"
 import { Badge, Button, Confirm, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
@@ -99,7 +98,6 @@ export function PropertiesPage() {
     { key: "lot", label: "Lot area", sort: (l) => Number(l.lot_area_sqm ?? 0), render: (l) => lotAreaShort(l.lot_area_sqm) ?? "—", hideOnPhone: true },
     { key: "status", label: "Status", sort: (l) => l.status, render: (l) => <Badge value={l.status} /> },
     { key: "marketing", label: "Marketing", sort: (l) => l.marketing_status ?? "", render: (l) => <MarketingBadge status={l.marketing_status} /> },
-    { key: "sync", label: "Sync", sort: (l) => l.sync_status, render: (l) => <Badge value={l.sync_status} />, hideOnPhone: true },
   ]
 
   return (
@@ -109,7 +107,6 @@ export function PropertiesPage() {
         subtitle="Every property Abellar markets, each under its developer. Add a property here (sellers add theirs from My listings); reserved and sold statuses come from reservation and sale documents."
         actions={isManagement(user?.role) && (
           <>
-            <SyncButton path="/property-listings/sync" what="Listings" onDone={reload} />
             <Button variant="primary" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> {t("Add property")}</Button>
           </>
         )}
@@ -328,7 +325,6 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
         <Facts items={[
           ["Listing ID", listing.listing_id],
           ["External ID", listing.external_listing_id],
-          ["Sync status", statusLabel(listing.sync_status)],
           ["Last synced", listing.last_synced_at ? dateTime(listing.last_synced_at) : null],
           ["Status changed", history.data?.status_changed_at ? dateTime(history.data.status_changed_at) : null],
           ["Updated", listing.updated_at ? dateTime(listing.updated_at) : null],

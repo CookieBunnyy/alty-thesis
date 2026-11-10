@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from "react"
 import { Mail, MapPin, Phone, Trash2 } from "lucide-react"
 import { Link } from "@/components/Link"
 import { contains, date, dateTime, isManagement, peso, statusLabel, text, transactionDate } from "./format"
-import { SyncButton } from "./SyncButton"
 import { Badge, Button, Confirm, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
@@ -28,7 +27,7 @@ type Profile = {
 }
 
 export function ClientsPage() {
-  const { api, user } = useStaffAuth()
+  const { api } = useStaffAuth()
   const { id, open, close } = useOpenRecord()
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
@@ -64,7 +63,6 @@ export function ClientsPage() {
       <PageHeader
         title="Everyone buying or selling with Abellar Realty"
         subtitle="Clients are created automatically from buyer, reservation and sale documents and from website client accounts — there's no manual “Add client”."
-        actions={isManagement(user?.role) && <SyncButton path="/clients/sync" what="Clients" onDone={reload} />}
       />
       {summary && (
         <Tiles items={[
@@ -150,7 +148,6 @@ function ClientDrawer({ client, onClose, onDeleted }: { client: Client; onClose:
           ["Client ID", <span className="break-all font-mono text-xs">{client.client_id}</span>],
           ["External ID", client.external_client_id],
           ["Created", client.created_at ? dateTime(client.created_at) : null],
-          ["Sync status", statusLabel(client.sync_status)],
         ]} />
       </Section>
 

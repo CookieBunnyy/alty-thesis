@@ -7,9 +7,11 @@ any case) is left as it is, and only gets a logo if it has none.
 
 Logos are stored with the same file storage the API uses (Supabase Storage
 when SUPABASE_URL / the service key are set in .env), so the live site shows
-them too. Accreditation is not set here: record each developer's
-accreditation of Abellar Realty on the Partners / Developers page (it is
-needed before a listing can be approved for the website).
+them too. Every developer on the board is accredited with Abellar Realty
+(that is why it is on the official board), so each is recorded as VERIFIED
+unless its accreditation was already set to something else on the
+Partners / Developers page. Reference numbers and expiry dates aren't known
+here: add them on that page.
 """
 
 from __future__ import annotations
@@ -74,7 +76,7 @@ def main() -> int:
     from app.services.partner_logos import _logo_png
 
     print(f"Target database: {engine.url.database} on {engine.url.host}")
-    added = logos = kept = 0
+    added = logos = kept = verified = 0
     with SessionLocal() as db:
         for name, logo, note in DEVELOPERS:
             partner = db.execute(select(Partner).where(func.lower(Partner.name) == name.lower())).scalar_one_or_none()
@@ -87,6 +89,12 @@ def main() -> int:
                 added += 1
             else:
                 kept += 1
+            if (partner.accreditation_status or "NONE") == "NONE":
+                partner.accreditation_status = "VERIFIED"
+                partner.accreditation_notes = "Accredited developer on Abellar Realty's official Developers and Partners board."
+                partner.accreditation_verified_by = "Abellar Realty (office board)"
+                partner.accreditation_verified_at = datetime.utcnow()
+                verified += 1
             if logo and not partner.logo_path:
                 png = _logo_png((LOGOS / logo).read_bytes())
                 path = f"partner-logos/{partner.id}-{secrets.token_hex(6)}.png"
@@ -95,7 +103,8 @@ def main() -> int:
                 partner.logo_updated_at = datetime.utcnow()
                 logos += 1
             db.commit()
-    print(f"Developers added: {added}, already there: {kept}, logos uploaded: {logos}")
+    print(f"Developers added: {added}, already there: {kept}, logos uploaded: {logos}, "
+          f"accreditation recorded: {verified}")
     return 0
 
 

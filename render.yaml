@@ -58,8 +58,10 @@ services:
       # ---- Non-secret settings -------------------------------------------
       - key: APP_NAME
         value: Abellar Realty Management System
+      # Off: the API's own tables are the only copy (the website and the MIA
+      # chatbot read them through the API). The old public.* tables are not used.
       - key: CLOUD_SYNC_ENABLED
-        value: "true"
+        value: "false"
       # Render's disk is wiped on every deploy: keep files in Supabase Storage.
       - key: DOCUMENT_STORAGE_BACKEND
         value: supabase

@@ -401,7 +401,14 @@ The default view is a **sales board by team**. There is one table per team or cl
 `desktop-side/backend/scripts/seed_developers.py` adds the 24 developers and partners from the office's "Developers and Partners" board, with 23 logos in `scripts/developer_logos/` (Jeika has no logo yet).
 * Re-running it is safe: existing names are kept, and a developer only gets a logo if it has none.
 * Run it with `--database-url "<url>"` for the live database.
-* It doesn't set accreditation. Record that on Partners / Developers.
+* Every developer is recorded as accredited (Verified), because they are on the official board. Reference numbers and expiry dates can be added per developer.
 * The home page shows the logos in full colour on white cards, and the Partners table shows each logo.
 
 Every password field now has a show / hide button (`src/components/PasswordInput.tsx`).
+
+### One copy of the data: old website tables retired (2026-11-10)
+The desktop era copied records out to the old website tables in Supabase (`public.agents`, `public.listings`, `public.clients`, `public.transactions`). After the reset they still held the old sample data. New records then showed "Pending", and pushing them failed because new IDs such as AGT-0001 collided with the old ones.
+* **Copying is off:** `CLOUD_SYNC_ENABLED` now defaults to `false`, and `render.yaml` sets it to `false` too. The API's own tables (schema `alty_api`) are the only copy.
+* **MIA** reads listings and agents only from the API's public endpoints (`/api/v1/public/properties` and `/agents`). It recommends exactly what the website shows, and never reads the old tables.
+* **Management System:** the "Sync from Supabase" buttons and the Sync columns and labels are gone. The Settings push panel appears only if copying is switched back on.
+* The old `public.*` tables are no longer read by anything; deleting them is optional.

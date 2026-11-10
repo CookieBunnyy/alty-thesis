@@ -140,7 +140,7 @@ function AdminSettings() {
   return (
     <>
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
-      {sync && (
+      {sync?.enabled && (
         <Section title="Synchronization with the central database (Supabase)"
           action={<Button variant="primary" onClick={push} disabled={pushing || !sync.enabled}>{pushing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />} {t("Push pending records")}</Button>}>
           <p className="mb-3 text-sm text-ab-muted">{t(sync.enabled ? "Cloud sync is enabled." : "Cloud sync is disabled or not configured.")} {pending ? t("{n} record(s) are waiting to be pushed.", { n: pending }) : t("Nothing is waiting to be pushed.")}</p>

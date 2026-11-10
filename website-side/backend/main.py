@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from assistant import criteria as crit
 from assistant.faq import answer as faq_answer
 from assistant.search import filter_rows, nearby_bonus, peso, sort_key, why
-from config import supabase
 from keywords import (
     AREA_REGEX,
     WORKPLACE_REGEX,
@@ -38,22 +37,23 @@ recommender = PropertyRecommender()
 _loaded_at = 0.0
 
 
+def _main_api(path: str, **params) -> list[dict]:
+    """GET a list from the main ALTY API's public endpoints."""
+    if not MAIN_API_URL:
+        raise RuntimeError("MAIN_API_URL is not set")
+    res = requests.get(f"{MAIN_API_URL}/api/v1/public/{path}", params=params, timeout=20)
+    res.raise_for_status()
+    data = res.json()
+    if not isinstance(data, list):
+        raise RuntimeError(f"Unexpected answer from /public/{path}")
+    return data
+
+
 def _fetch_listings() -> list[dict]:
-    """Available listings, from the main ALTY API (the same data as the website,
-    with lot areas, boundaries and uploaded photos); Supabase if it can't be reached."""
-    if MAIN_API_URL:
-        try:
-            res = requests.get(f"{MAIN_API_URL}/api/v1/public/properties", params={"status": "AVAILABLE"}, timeout=20)
-            if res.status_code == 200 and isinstance(res.json(), list):
-                return [format_listing_row(row) for row in res.json()]
-        except Exception as exc:  # noqa: BLE001 - fall back to Supabase
-            print(f"Main API listings unavailable: {exc}")
-    response = supabase.table("listings").select("*").execute()
-    return [
-        format_listing_row(row)
-        for row in (response.data or [])
-        if str(row.get("status") or "AVAILABLE").upper() == "AVAILABLE"
-    ]
+    """Available listings, from the main ALTY API: exactly what the website
+    shows (approved for marketing, with lot areas, boundaries and photos).
+    The old Supabase tables are no longer read: they hold outdated copies."""
+    return [format_listing_row(row) for row in _main_api("properties", status="AVAILABLE")]
 
 
 def load_recommender():
@@ -96,35 +96,24 @@ app.add_middleware(
 
 @app.get("/properties")
 async def get_properties():
+    """The available listings MIA recommends from (the website's listings)."""
     try:
-        response = supabase.table("listings").select("*").execute()
-        return [
-            format_listing_row(row)
-            for row in (response.data or [])
-            if str(row.get("status") or "AVAILABLE").upper() == "AVAILABLE"
-        ]
+        return _fresh_listings() or _fetch_listings()
     except Exception as exc:
-        raise HTTPException(
-            status_code=502, detail="Unable to load available properties."
-        ) from exc
+        raise HTTPException(status_code=502, detail="Unable to load available properties.") from exc
 
 
 @app.get("/agents")
 async def get_active_agents():
+    """Active agents, from the main ALTY API."""
     try:
-        response = supabase.table("agents").select("agent_id, full_name, status").execute()
+        rows = _main_api("agents")
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Unable to load agents.") from exc
     return [
-        {
-            "agent_id": row["agent_id"],
-            "full_name": row["full_name"],
-            "status": row.get("status"),
-        }
-        for row in (response.data or [])
-        if str(row.get("status") or "").upper() == "ACTIVE"
-        and row.get("agent_id")
-        and row.get("full_name")
+        {"agent_id": row["agent_id"], "full_name": row["full_name"], "status": row.get("status") or "ACTIVE"}
+        for row in rows
+        if row.get("agent_id") and row.get("full_name")
     ]
 
 

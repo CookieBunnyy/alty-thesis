@@ -23,7 +23,10 @@ class Settings(BaseSettings):
     SUPABASE_DOCUMENTS_BUCKET: str = "documents"
     SUPABASE_MEDIA_BUCKET: str = "documents"
     # Push local document-derived records to Supabase after each change.
-    CLOUD_SYNC_ENABLED: bool = True
+    # Copying records out to the old website tables (public.agents,
+    # public.listings, ...) from the desktop era. Off: the system's own tables
+    # are the only copy, and the website and MIA read them through the API.
+    CLOUD_SYNC_ENABLED: bool = False
 
     # File storage: "supabase", "local", or "auto" (supabase when configured).
     DOCUMENT_STORAGE_BACKEND: str = "auto"

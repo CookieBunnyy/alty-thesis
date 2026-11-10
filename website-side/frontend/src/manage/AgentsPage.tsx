@@ -3,7 +3,6 @@ import { ExternalLink, Phone, Star } from "lucide-react"
 import { Link } from "@/components/Link"
 import { contains, date, dateTime, isManagement, peso, pesoShort, statusLabel, text, transactionDate } from "./format"
 import { SubjectInsights } from "./Insights"
-import { SyncButton } from "./SyncButton"
 import { Badge, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData, useOpenRecord } from "./useApiData"
@@ -50,7 +49,7 @@ function Stars({ value }: { value: number | null }) {
 }
 
 export function AgentsPage() {
-  const { api, user } = useStaffAuth()
+  const { api } = useStaffAuth()
   const { id, open, close } = useOpenRecord()
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
@@ -99,7 +98,6 @@ export function AgentsPage() {
       <PageHeader
         title="Your sellers and the work recorded for each"
         subtitle="Sellers (agents) and the clients, reservations and sales recorded for each one in ALTY, with verified client reviews."
-        actions={isManagement(user?.role) && <SyncButton path="/agents/sync" what="Agents" onDone={reload} />}
       />
       {data && (
         <Tiles items={[

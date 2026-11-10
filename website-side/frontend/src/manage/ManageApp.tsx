@@ -95,6 +95,14 @@ function ManageRoutes() {
     if (needsSignIn) navigate(`/manage/signin?next=${encodeURIComponent(href)}`, { replace: true })
   }, [needsSignIn, href])
 
+  // A page this account can't open (e.g. the previous account's last page,
+  // remembered at sign-in, or an old bookmark): go to this account's home.
+  const special = path === "/manage" || path === "/manage/profile" || (path === "/manage/my-work" && Boolean(user?.agent_id))
+  const notForThisAccount = Boolean(user) && !open && !special && !(PAGES[path] && can(PAGES[path][0]))
+  useEffect(() => {
+    if (notForThisAccount) navigate("/manage", { replace: true })
+  }, [notForThisAccount])
+
   if (path === "/manage/signin") return <ManageSignIn />
   if (path === "/manage/forgot-password") return <ManageSignIn view="forgot" />
   if (path === "/manage/reset-password") return <ManageSignIn view="reset" />

@@ -445,7 +445,6 @@ function DocumentDrawer({ doc, types, folders, label, canEdit, onClose, onChange
           ["Uploaded by", doc.uploaded_by_name],
           ["Uploaded", dateTime(doc.created_at)],
           ["Processed", doc.processing?.processed_at ? dateTime(doc.processing.processed_at) : null],
-          ["Sync status", statusLabel(doc.sync_status)],
           ["Document ID", <span className="break-all font-mono text-xs">{doc.document_id}</span>],
           ["Format", doc.mime_type],
         ]} />

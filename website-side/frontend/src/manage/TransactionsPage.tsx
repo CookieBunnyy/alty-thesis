@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { Link } from "@/components/Link"
 import { contains, date, dateTime, isManagement, peso, pesoShort, statusLabel, text, transactionDate } from "./format"
-import { SyncButton } from "./SyncButton"
 import { Badge, Button, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData, useOpenRecord } from "./useApiData"
@@ -80,7 +79,6 @@ export function TransactionsPage() {
       <PageHeader
         title="Every reservation and sale on record"
         subtitle="Reservations and sales recorded from processed documents and from the central database. Management records the payments on a reservation and marks it sold when it proceeds to a purchase; every change is audited."
-        actions={isManagement(user?.role) && <SyncButton path="/transactions/sync" what="Transactions" onDone={reload} />}
       />
       <div role="tablist" aria-label={t("Transactions view")} className="flex w-fit rounded-xl border border-ab-border bg-ab-card p-1">
         {([["board", "Sales board by team"], ["records", "Reservations & sales"], ["pipeline", "Pipeline: inquiry to closing"]] as const).map(([key, label]) => (
@@ -238,7 +236,6 @@ function TransactionDrawer({ transaction: tx, related, onClose, canCancel, onCha
           ["Source", statusLabel(tx.source)],
           ["Source document", tx.source_document_id ? <span className="break-all font-mono text-xs">{tx.source_document_id}</span> : null],
           ["Notes", tx.notes],
-          ["Sync status", statusLabel(tx.sync_status)],
           ["Recorded", dateTime(tx.created_at)],
           ["Updated", dateTime(tx.updated_at)],
         ]} />
