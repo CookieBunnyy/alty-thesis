@@ -116,6 +116,9 @@ export function NearbyAgents({ listingId, selectedAgentId, onSelect, onLoaded }:
                       <LogIn className="h-3.5 w-3.5 text-ab-accent" /> Sign in to call or text
                     </SignInToContact>
                   )}
+                  {!agent.has_phone && (
+                    <span className="inline-flex min-h-10 items-center text-xs text-ab-faint">No mobile number on file yet{onSelect ? ": use “Request this agent”." : "."}</span>
+                  )}
                   {agent.phone_number && (
                     <>
                       <CallButton

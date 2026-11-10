@@ -329,6 +329,43 @@ def update_location(agent_id: str, payload: LocationInput, db: Session = Depends
     return _with_reviews(agent, review_service.review_stats(db, [agent_id]), agent_recorded_stats(db, [agent_id]))
 
 
+class PhoneInput(BaseModel):
+    """The mobile number signed-in buyers call or text from the website."""
+    model_config = ConfigDict(extra="forbid")
+
+    phone_number: str | None = Field(default=None, max_length=40)
+
+    @field_validator("phone_number")
+    @classmethod
+    def valid_phone(cls, value):
+        value = " ".join((value or "").split())
+        if not value:
+            return None
+        digits = sum(ch.isdigit() for ch in value)
+        if not all(ch.isdigit() or ch in "+()- " for ch in value) or not 7 <= digits <= 15:
+            raise ValueError("Enter a valid mobile number, e.g. 0917 123 4567")
+        return value
+
+
+@router.put("/{agent_id}/phone", response_model=AgentResponse)
+def update_phone(agent_id: str, payload: PhoneInput, db: Session = Depends(get_db),
+                 actor: User = Depends(get_current_user)):
+    """Management sets any agent's number; a seller sets their own."""
+    own = canonical_role(actor.role) == SELLER and actor.agent_id == agent_id
+    if not own and canonical_role(actor.role) not in MANAGEMENT_ROLES:
+        raise HTTPException(status_code=403, detail="You can only change your own number")
+    agent = db.get(Agent, agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if agent.phone_number != payload.phone_number:
+        record_audit(db, "AGENT_PHONE_UPDATED", actor=actor, entity_type="agents", entity_id=agent_id,
+                     details={"from": agent.phone_number, "to": payload.phone_number})
+        agent.phone_number = payload.phone_number
+    db.commit()
+    db.refresh(agent)
+    return _with_reviews(agent, review_service.review_stats(db, [agent_id]), agent_recorded_stats(db, [agent_id]))
+
+
 @router.put("/{agent_id}/assignment", response_model=AgentResponse)
 def update_assignment(agent_id: str, payload: AssignmentInput, db: Session = Depends(get_db),
                       actor: User = Depends(require_management)):

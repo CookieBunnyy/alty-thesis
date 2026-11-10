@@ -418,3 +418,24 @@ The desktop era copied records out to the old website tables in Supabase (`publi
 * **Second step:** **Draw lot boundary** lets the seller outline the lot in red on satellite imagery. It measures the area, the perimeter and each side, and can set the lot area.
 * **Who may draw the boundary:** management on any property; a seller only on a property they added, until it is approved (`PUT /property-listings/{id}/boundary`).
 * **Agent location** (`PUT /agents/{id}/location`): sellers pin where they're based on **My Work**, and the Administrator can do it from the seller's drawer on the Sellers page. Without a pin, "Reserve / Purchase" on the website lists the agent as "Location not on the map" and can't rank by distance.
+
+## Recruitment form uploads, agent mobile numbers, document folders (2026-11-10)
+
+- **Recruitment form upload.** Each applicant has a "Recruitment form" section: photos or PDF scans of the
+  form they filled in, one per page ("Add pages", or "Take a photo" on a phone), viewable full size.
+  The pages can also be chosen while recording a new applicant. Table `applicant_forms`
+  (migration `20261110_0025`); endpoints `POST/GET/DELETE /recruitment/applicants/{id}/forms[/{form_id}]`.
+- **Filing Manager on Recruitment.** The Filing Manager can open Recruitment, record and edit applicants and
+  upload their forms. Moving applicants through the stages, rejecting, onboarding and deleting stay with the
+  Administrator.
+- **No "Applying as".** Recruitment is only for sellers / agents, so the field is gone from the form, table and
+  details; onboarding sets the designation (default Trainee Agent).
+- **Agent mobile number.** Signed-in buyers call or text an agent from "Reserve / Purchase" only when the agent
+  has a mobile number. It could only be entered when the account was created; now the seller adds or changes
+  it on My Work, and the Administrator in the Sellers drawer (`PUT /agents/{id}/phone`). The website says
+  "No mobile number on file yet" instead of showing no buttons.
+- **Document folders.** Top-level folders are now Commission Documents (was Commission Vouchers), Vouchers,
+  Properties, Buyers, Sellers, Agents, Transactions and Archived. "Financial" and "Contracts" are removed:
+  vouchers go to Vouchers; receipts, proof of payment, invoices and contracts are filed under
+  Buyers / <client> with the rest of the client's purchase. The migration moves existing folders and documents
+  (same-named client folders are merged) and then deletes the emptied folders.

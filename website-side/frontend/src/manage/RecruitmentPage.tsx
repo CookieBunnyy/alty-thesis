@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type FormEvent } from "react"
 import { ArrowRight, BadgeCheck, LoaderCircle, Mail, Pencil, Phone, Plus, Trash2, UserPlus, X } from "lucide-react"
 import { Link } from "@/components/Link"
-import { contains, date, dateTime, statusLabel, text } from "./format"
+import { contains, date, dateTime, isManagement, statusLabel, text } from "./format"
 import { Badge, Button, Confirm, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
@@ -9,6 +9,8 @@ import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
 import { useBranchOptions, useSellerOptions } from "./branches"
 import { PasswordInput } from "@/components/PasswordInput"
+import { FormFilePicker, RecruitmentForms } from "./recruitmentForms"
+import { uploadForms, type ApplicantFormFile } from "./recruitmentFormsApi"
 
 type Applicant = {
   id: number; full_name: string; email: string | null; phone_number: string | null; address: string | null
@@ -19,6 +21,7 @@ type Applicant = {
   interview_on: string | null; status: string; notes: string | null
   history: { status: string; at: string; by: string; note: string | null }[]
   agent_id: string | null; created_by: string | null; created_at: string; updated_at: string
+  forms: ApplicantFormFile[]
 }
 type Summary = {
   by_status: Record<string, number>; total: number; open: number; acceptance_rate: number | null
@@ -35,7 +38,8 @@ const STEP_HELP: Record<string, string> = {
 
 /** Agent recruitment: applicants from application to onboarding (management roles). */
 export function RecruitmentPage() {
-  const { api } = useStaffAuth()
+  const { api, user } = useStaffAuth()
+  const manage = isManagement(user?.role)
   const { id, open, close } = useOpenRecord()
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
@@ -45,7 +49,7 @@ export function RecruitmentPage() {
   const [applicants, summary] = data ?? [null, null]
   const rows = useMemo(() => applicants ?? [], [applicants])
   const shown = rows.filter((a) => (!status || (status === "OPEN" ? NEXT[a.status] || a.status === "APPROVED" : a.status === status)) &&
-    contains([a.full_name, a.email, a.phone_number, a.branch_name, a.desired_designation, a.recruiter_name], search))
+    contains([a.full_name, a.email, a.phone_number, a.branch_name, a.recruiter_name], search))
   const selected = id ? rows.find((a) => String(a.id) === id) ?? null : null
 
   const columns: Column<Applicant>[] = [
@@ -59,7 +63,7 @@ export function RecruitmentPage() {
       ),
     },
     { key: "recruiter", label: "Recruiter", sort: (a) => a.recruiter_name ?? "", render: (a) => text(a.recruiter_name), hideOnPhone: true },
-    { key: "position", label: "Applying as", sort: (a) => a.desired_designation ?? "", render: (a) => t(a.desired_designation ?? "Not set"), hideOnPhone: true },
+    { key: "form", label: "Recruitment form", sort: (a) => a.forms.length, render: (a) => (a.forms.length ? t("{n} page(s)", { n: a.forms.length }) : <span className="text-ab-warning">{t("Not uploaded")}</span>), hideOnPhone: true },
     { key: "branch", label: "Team / Cluster", sort: (a) => a.branch_name ?? "", render: (a) => text(a.branch_name) },
     { key: "score", label: "Screening score", align: "right", sort: (a) => a.screening_score ?? -1, render: (a) => (a.screening_score != null ? `${a.screening_score}/100` : "—"), hideOnPhone: true },
     { key: "license", label: "License", sort: (a) => (a.has_license ? 1 : 0), render: (a) => (a.has_license ? t("Licensed") : t("None")), hideOnPhone: true },
@@ -71,7 +75,8 @@ export function RecruitmentPage() {
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
         title="Agent recruitment, from application to onboarding"
-        subtitle="Record applicants, move them through screening and interviews, and onboard approved ones: onboarding creates their agent record with a branch and designation."
+        subtitle={manage ? "Record applicants with their recruitment form, move them through screening and interviews, and onboard approved ones: onboarding creates their seller record with a team and designation."
+          : "Record applicants and upload the recruitment form they filled in. The Administrator moves them through screening, interviews and onboarding."}
         actions={<Button variant="primary" onClick={() => setEditing("new")}><Plus className="h-4 w-4" /> {t("New applicant")}</Button>}
       />
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
@@ -84,7 +89,7 @@ export function RecruitmentPage() {
           ]} />
           <Pipeline summary={summary} />
           <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-            <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, contact, team, recruiter or position" /></div>
+            <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, contact, team or recruiter" /></div>
             <Select label="Stage" value={status} onChange={setStatus} options={[{ value: "", label: "All stages" }, { value: "OPEN", label: "Open applications" },
               ...[...summary.stages, ...summary.closed].map((s) => ({ value: s, label: statusLabel(s) }))]} />
           </div>
@@ -93,7 +98,7 @@ export function RecruitmentPage() {
         </>
       )}
       {selected && summary && (
-        <ApplicantDrawer applicant={selected} summary={summary} onClose={close} onEdit={() => setEditing(selected)}
+        <ApplicantDrawer applicant={selected} summary={summary} manage={manage} onClose={close} onEdit={() => setEditing(selected)}
           onChanged={() => void reload()} onDeleted={() => { close(); void reload() }} />
       )}
       {editing && summary && (
@@ -123,8 +128,8 @@ function Pipeline({ summary }: { summary: Summary }) {
   )
 }
 
-function ApplicantDrawer({ applicant, summary, onClose, onEdit, onChanged, onDeleted }: {
-  applicant: Applicant; summary: Summary; onClose: () => void; onEdit: () => void; onChanged: () => void; onDeleted: () => void
+function ApplicantDrawer({ applicant, summary, manage, onClose, onEdit, onChanged, onDeleted }: {
+  applicant: Applicant; summary: Summary; manage: boolean; onClose: () => void; onEdit: () => void; onChanged: () => void; onDeleted: () => void
 }) {
   const { api } = useStaffAuth()
   const toast = useToast()
@@ -162,19 +167,19 @@ function ApplicantDrawer({ applicant, summary, onClose, onEdit, onChanged, onDel
   return (
     <Drawer
       title={applicant.full_name}
-      subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={applicant.status} /> {t(applicant.desired_designation ?? "Position not set")}{applicant.branch_name ? ` · ${applicant.branch_name}` : ""}</span>}
+      subtitle={<span className="flex flex-wrap items-center gap-2"><Badge value={applicant.status} />{applicant.branch_name ? ` ${applicant.branch_name}` : ""}</span>}
       onClose={onClose}
       footer={(
         <>
-          {applicant.status !== "ONBOARDED" && <Button variant="danger" onClick={() => setConfirmDelete(true)}><Trash2 className="h-4 w-4" /> {t("Delete")}</Button>}
+          {manage && applicant.status !== "ONBOARDED" && <Button variant="danger" onClick={() => setConfirmDelete(true)}><Trash2 className="h-4 w-4" /> {t("Delete")}</Button>}
           <Button onClick={onEdit}><Pencil className="h-4 w-4" /> {t("Edit")}</Button>
-          {next && <Button variant="primary" disabled={busy} onClick={() => void move(next)}><ArrowRight className="h-4 w-4" /> {t("Move to {stage}", { stage: statusLabel(next) })}</Button>}
-          {applicant.status === "APPROVED" && <Button variant="primary" onClick={() => setOnboarding(true)}><UserPlus className="h-4 w-4" /> {t("Onboard as agent")}</Button>}
+          {manage && next && <Button variant="primary" disabled={busy} onClick={() => void move(next)}><ArrowRight className="h-4 w-4" /> {t("Move to {stage}", { stage: statusLabel(next) })}</Button>}
+          {manage && applicant.status === "APPROVED" && <Button variant="primary" onClick={() => setOnboarding(true)}><UserPlus className="h-4 w-4" /> {t("Onboard as agent")}</Button>}
         </>
       )}
     >
       <Stepper status={applicant.status} stages={summary.stages} />
-      {isOpen && (
+      {manage && isOpen && (
         <div className="rounded-xl bg-ab-card-2 p-3 text-sm text-ab-muted">
           <p>{t(STEP_HELP[applicant.status] ?? "")}</p>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -193,6 +198,7 @@ function ApplicantDrawer({ applicant, summary, onClose, onEdit, onChanged, onDel
         {applicant.phone_number && <a href={`tel:${applicant.phone_number.replace(/[^\d+]/g, "")}`} className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1 hover:border-ab-accent"><Phone className="h-3.5 w-3.5 text-ab-accent" />{applicant.phone_number}</a>}
         {applicant.email && <a href={`mailto:${applicant.email}`} className="inline-flex items-center gap-1.5 rounded-full border border-ab-border bg-ab-card px-3 py-1 hover:border-ab-accent"><Mail className="h-3.5 w-3.5 text-ab-accent" />{applicant.email}</a>}
       </div>
+      <RecruitmentForms applicantId={applicant.id} forms={applicant.forms} onChanged={onChanged} />
       <Section title="Application">
         <Facts items={[
           ["Birthday", applicant.birthday ? date(applicant.birthday) : null],
@@ -200,7 +206,6 @@ function ApplicantDrawer({ applicant, summary, onClose, onEdit, onChanged, onDel
           ["Team / Cluster", applicant.branch_name],
           ["Not bound to another broker", applicant.not_bound_to_other_broker == null ? t("Not declared yet")
             : `${applicant.not_bound_to_other_broker ? t("Yes, declared") : t("No")}${applicant.declaration_date ? ` · ${date(applicant.declaration_date)}` : ""}`],
-          ["Applying as", applicant.desired_designation ? t(applicant.desired_designation) : null],
           ["Source", applicant.source ? statusLabel(applicant.source) : null],
           ["Experience", applicant.experience_years != null ? t("{n} year(s)", { n: applicant.experience_years }) : null],
           ["Real estate license", applicant.has_license ? `${t("Yes")}${applicant.license_number ? ` · ${applicant.license_number}` : ""}` : t("No")],
@@ -290,7 +295,7 @@ function OnboardDialog({ applicant, summary, onClose, onDone }: { applicant: App
   const { api } = useStaffAuth()
   const toast = useToast()
   const branches = useBranchOptions()
-  const [form, setForm] = useState({ designation: applicant.desired_designation ?? "Trainee Agent", branch_id: applicant.branch_id ? String(applicant.branch_id) : "", work_area: "", hired_on: new Date().toISOString().slice(0, 10) })
+  const [form, setForm] = useState({ designation: "Trainee Agent", branch_id: applicant.branch_id ? String(applicant.branch_id) : "", work_area: "", hired_on: new Date().toISOString().slice(0, 10) })
   const [account, setAccount] = useState({ create: false, username: (applicant.email ?? "").split("@")[0], password: "", email: applicant.email ?? "" })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -355,13 +360,14 @@ function ApplicantForm({ applicant, summary, onClose, onSaved }: { applicant: Ap
     full_name: applicant?.full_name ?? "", email: applicant?.email ?? "", phone_number: applicant?.phone_number ?? "", address: applicant?.address ?? "",
     birthday: applicant?.birthday ?? "", recruiter_agent_id: applicant?.recruiter_agent_id ?? "", recruiter_name: applicant?.recruiter_agent_id ? "" : applicant?.recruiter_name ?? "",
     not_bound_to_other_broker: applicant?.not_bound_to_other_broker ?? false, declaration_date: applicant?.declaration_date ?? "",
-    branch_id: applicant?.branch_id ? String(applicant.branch_id) : "", desired_designation: applicant?.desired_designation ?? "",
+    branch_id: applicant?.branch_id ? String(applicant.branch_id) : "",
     source: applicant?.source ?? "", experience_years: applicant?.experience_years != null ? String(applicant.experience_years) : "",
     has_license: applicant?.has_license ?? false, license_number: applicant?.license_number ?? "",
     screening_score: applicant?.screening_score != null ? String(applicant.screening_score) : "", interview_on: applicant?.interview_on ?? "", notes: applicant?.notes ?? "",
   })
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
+  const [pages, setPages] = useState<File[]>([])
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }))
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -372,7 +378,6 @@ function ApplicantForm({ applicant, summary, onClose, onSaved }: { applicant: Ap
       const body = JSON.stringify({
         ...form,
         branch_id: form.branch_id ? Number(form.branch_id) : null,
-        desired_designation: form.desired_designation || null,
         source: form.source || null,
         experience_years: form.experience_years === "" ? null : Number(form.experience_years),
         screening_score: form.screening_score === "" ? null : Number(form.screening_score),
@@ -385,7 +390,9 @@ function ApplicantForm({ applicant, summary, onClose, onSaved }: { applicant: Ap
       const saved = applicant
         ? await api<Applicant>(`/recruitment/applicants/${applicant.id}`, { method: "PUT", body })
         : await api<Applicant>("/recruitment/applicants", { method: "POST", body })
-      toast(t(applicant ? "Saved {name}." : "Added {name}.", { name: saved.full_name }))
+      const failed = pages.length ? await uploadForms(api, saved.id, pages) : []
+      if (failed.length) toast(t("Saved, but these pages didn't upload: {files}", { files: failed.join(", ") }), "error")
+      else toast(t(applicant ? "Saved {name}." : "Added {name}.", { name: saved.full_name }))
       onSaved(saved)
     } catch (saveError) {
       setError(t((saveError as Error).message))
@@ -396,6 +403,7 @@ function ApplicantForm({ applicant, summary, onClose, onSaved }: { applicant: Ap
     <Dialog title={applicant ? t("Edit {name}", { name: applicant.full_name }) : t("New applicant")} onClose={onClose} onSubmit={submit}
       footer={<><Button onClick={onClose} disabled={busy}>{t("Cancel")}</Button><Button type="submit" variant="primary" disabled={busy}>{busy && <LoaderCircle className="h-4 w-4 animate-spin" />} {applicant ? t("Save") : t("Add applicant")}</Button></>}>
       <div className="grid gap-3 overflow-y-auto p-5 sm:grid-cols-2">
+        {!applicant && <FormFilePicker files={pages} onChange={setPages} />}
         <label className="text-sm font-medium sm:col-span-2">{t("Full name *")}<input className={field} value={form.full_name} onChange={set("full_name")} /></label>
         <label className="text-sm font-medium">{t("Phone")}<input className={field} value={form.phone_number} onChange={set("phone_number")} /></label>
         <label className="text-sm font-medium">{t("Email")}<input type="email" className={field} value={form.email} onChange={set("email")} /></label>
@@ -408,12 +416,6 @@ function ApplicantForm({ applicant, summary, onClose, onSaved }: { applicant: Ap
           </select>
         </label>
         {!form.recruiter_agent_id && <label className="text-sm font-medium sm:col-span-2">{t("Recruiter's name (if not a seller in ALTY)")}<input className={field} value={form.recruiter_name} onChange={set("recruiter_name")} /></label>}
-        <label className="text-sm font-medium">{t("Applying as")}
-          <select className={field} value={form.desired_designation} onChange={set("desired_designation")}>
-            <option value="">{t("Not set")}</option>
-            {summary.designations.map((d) => <option key={d} value={d}>{t(d)}</option>)}
-          </select>
-        </label>
         <label className="text-sm font-medium">{t("Team / Cluster")}
           <select className={field} value={form.branch_id} onChange={set("branch_id")}>
             <option value="">{t("Not set")}</option>

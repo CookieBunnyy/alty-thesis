@@ -251,3 +251,131 @@ def test_sellers_pin_their_location_and_draw_their_own_lot(api, admin, db):
     api.post(f"{API}/property-listings/{listing['listing_id']}/marketing", headers=admin, json={"action": "approve"})
     assert api.put(path, headers=seller, json=body).status_code == 403
     assert api.delete(path, headers=admin).status_code == 200
+
+
+def test_filing_manager_uploads_the_recruitment_form(api, admin, db):
+    _make_user("filer", "Filing Manager")
+    filer = login(api, "filer")
+    _make_user("seller1", "Seller")
+    seller = login(api, "seller1")
+    base = f"{API}/recruitment/applicants"
+    assert api.get(base, headers=seller).status_code == 403
+    created = api.post(base, headers=filer, json={"full_name": "Maria Clara", "phone_number": "0917 111 2222"})
+    assert created.status_code == 201, created.text
+    applicant = created.json()
+    assert applicant["forms"] == []
+
+    page = api.post(f"{base}/{applicant['id']}/forms", headers=filer,
+                    files={"file": ("form-page-1.png", _image(drawing=True), "image/png")})
+    assert page.status_code == 201, page.text
+    forms = page.json()["forms"]
+    assert len(forms) == 1 and forms[0]["file_name"] == "form-page-1.png" and forms[0]["uploaded_by"] == "Filer"
+    assert api.post(f"{base}/{applicant['id']}/forms", headers=filer,
+                    files={"file": ("notes.txt", b"hello", "text/plain")}).status_code == 415
+    assert api.post(f"{base}/{applicant['id']}/forms", headers=seller,
+                    files={"file": ("x.png", _image(), "image/png")}).status_code == 403
+
+    picture = api.get(forms[0]["url"], headers=admin)
+    assert picture.status_code == 200 and picture.headers["content-type"] == "image/png"
+    listed = next(a for a in api.get(base, headers=admin).json() if a["id"] == applicant["id"])
+    assert [f["id"] for f in listed["forms"]] == [forms[0]["id"]]
+
+    # Stages, onboarding and deleting stay with the Administrator.
+    assert api.post(f"{base}/{applicant['id']}/stage", headers=filer, json={"status": "SCREENING"}).status_code == 403
+    assert api.delete(f"{base}/{applicant['id']}", headers=filer).status_code == 403
+
+    left = api.delete(f"{base}/{applicant['id']}/forms/{forms[0]['id']}", headers=filer)
+    assert left.status_code == 200 and left.json()["forms"] == []
+    api.post(f"{base}/{applicant['id']}/forms", headers=filer, files={"file": ("p.png", _image(), "image/png")})
+    assert api.delete(f"{base}/{applicant['id']}", headers=admin).status_code == 204
+
+
+def test_document_folders_layout(api, admin):
+    names = {f["name"] for f in api.get(f"{API}/documents/folders", headers=admin).json() if f["parent_id"] is None}
+    assert {"Commission Documents", "Vouchers", "Buyers", "Properties", "Archived"} <= names
+    assert not names & {"Financial", "Contracts", "Commission Vouchers"}
+    from app.services.document_filing import CATEGORY_BY_TYPE
+    assert CATEGORY_BY_TYPE["VOUCHER"] == ("Vouchers",)
+    assert CATEGORY_BY_TYPE["COMMISSION_VOUCHER"] == ("Commission Documents",)
+    assert CATEGORY_BY_TYPE["RECEIPT"] == CATEGORY_BY_TYPE["CONTRACT"] == ("Buyers",)
+
+
+def test_folder_migration_moves_documents(api, admin, db):
+    """The 0025 migration: Financial / Contracts emptied into Buyers and removed,
+    Vouchers moved to the top level, Commission Vouchers renamed."""
+    import importlib.util
+    import uuid
+    from pathlib import Path
+
+    from app.models.document import Document, DocumentFolder
+    from app.models.user import User
+
+    spec = importlib.util.spec_from_file_location(
+        "m0025", Path(__file__).parents[1] / "alembic/versions/20261110_0025_recruitment_forms_and_folders.py")
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    def folder(name, parent=None):
+        row = DocumentFolder(name=name, parent_id=parent.id if parent else None)
+        db.add(row)
+        db.flush()
+        return row
+
+    def document(name, where):
+        row = Document(document_id=str(uuid.uuid4()), document_name=name, document_type="RECEIPT",
+                       storage_path=name, storage_bucket="local:documents", mime_type="application/pdf",
+                       file_size=1, file_hash="0" * 64, status="SUCCESS", uploaded_by=owner, folder_id=where.id)
+        db.add(row)
+        db.flush()
+        return row.id
+
+    owner = db.query(User.id).filter(User.username == "admin").scalar()
+    buyers = folder("Buyers")
+    existing = folder("Juan Cruz", buyers)
+    commission = folder("Commission Vouchers")
+    financial = folder("Financial")
+    receipts = folder("Receipts", financial)
+    vouchers = folder("Vouchers", financial)
+    contracts = folder("Contracts")
+    juan_receipts = folder("Juan Cruz", receipts)
+    ana_contracts = folder("Ana Reyes", contracts)
+    custom = folder("Bank statements", financial)
+    in_juan = document("juan-receipt.pdf", juan_receipts)
+    in_ana = document("ana-contract.pdf", ana_contracts)
+    in_contracts = document("loose-contract.pdf", contracts)
+    in_vouchers = document("voucher.pdf", vouchers)
+    in_commission = document("cv.pdf", commission)
+    db.commit()
+    ids = {name: row.id for name, row in [("buyers", buyers), ("existing", existing), ("commission", commission),
+                                          ("receipts", receipts), ("vouchers", vouchers), ("juan", juan_receipts),
+                                          ("ana", ana_contracts), ("custom", custom)]}
+
+    with db.bind.begin() as connection:
+        migration._reorganise_folders(connection)
+    db.expire_all()
+
+    tops = {f.name: f.id for f in db.query(DocumentFolder).filter(DocumentFolder.parent_id.is_(None))}
+    assert "Financial" not in tops and "Contracts" not in tops and "Commission Vouchers" not in tops
+    assert tops["Commission Documents"] == ids["commission"] and tops["Vouchers"] == ids["vouchers"]
+    assert tops["Bank statements"] == ids["custom"]
+    assert db.get(DocumentFolder, ids["receipts"]) is None and db.get(DocumentFolder, ids["juan"]) is None
+    assert db.get(Document, in_juan).folder_id == ids["existing"]      # merged into Buyers / Juan Cruz
+    assert db.get(DocumentFolder, ids["ana"]).parent_id == ids["buyers"]
+    assert db.get(Document, in_ana).folder_id == ids["ana"]
+    assert db.get(Document, in_contracts).folder_id == ids["buyers"]
+    assert db.get(Document, in_vouchers).folder_id == ids["vouchers"]
+    assert db.get(Document, in_commission).folder_id == ids["commission"]
+
+
+def test_sellers_set_the_number_buyers_call(api, admin, db):
+    user, seller = _new_seller(api, admin)
+    other_user, _other = _new_seller(api, admin, "nina", "Nina Castillo")
+    path = f"{API}/agents/{user['agent_id']}/phone"
+    saved = api.put(path, headers=seller, json={"phone_number": " 0917  123 4567 "})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["phone_number"] == "0917 123 4567"
+    assert api.put(path, headers=seller, json={"phone_number": "call me"}).status_code == 422
+    assert api.put(f"{API}/agents/{other_user['agent_id']}/phone", headers=seller,
+                   json={"phone_number": "09170000000"}).status_code == 403
+    assert api.put(f"{API}/agents/{other_user['agent_id']}/phone", headers=admin,
+                   json={"phone_number": "09170000000"}).status_code == 200

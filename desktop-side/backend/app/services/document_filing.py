@@ -22,12 +22,12 @@ from app.models.agent import Agent
 from app.models.document import Document, DocumentFolder
 
 # Category folders (also created by GET /documents/folders).
-DEFAULT_FOLDERS = ("Commission Vouchers", "Properties", "Buyers", "Sellers", "Agents", "Transactions",
-                   "Financial", "Contracts", "Archived")
-FINANCIAL_SUBFOLDERS = ("Receipts", "Vouchers", "Proof of Payment", "Invoices")
+DEFAULT_FOLDERS = ("Commission Documents", "Vouchers", "Properties", "Buyers", "Sellers", "Agents",
+                   "Transactions", "Archived")
 
-# document type -> category path. Everything about a client's purchase is kept
-# together under Buyers / <client>.
+# document type -> category path. Everything about a client's purchase
+# (contracts, receipts, proof of payment, invoices) is kept together under
+# Buyers / <client>.
 CATEGORY_BY_TYPE: dict[str, tuple[str, ...]] = {
     "BUYER_DOCUMENT": ("Buyers",),
     "RESERVATION_AGREEMENT": ("Buyers",),
@@ -38,12 +38,12 @@ CATEGORY_BY_TYPE: dict[str, tuple[str, ...]] = {
     "SELLER_DOCUMENT": ("Sellers",),
     "AGENT_INFORMATION": ("Agents",),
     "PROPERTY_INFORMATION": ("Properties",),
-    "RECEIPT": ("Financial", "Receipts"),
-    "VOUCHER": ("Financial", "Vouchers"),
+    "RECEIPT": ("Buyers",),
+    "PROOF_OF_PAYMENT": ("Buyers",),
+    "INVOICE": ("Buyers",),
+    "VOUCHER": ("Vouchers",),
     # The primary document Abellar Realty keeps (interview).
-    "COMMISSION_VOUCHER": ("Commission Vouchers",),
-    "PROOF_OF_PAYMENT": ("Financial", "Proof of Payment"),
-    "INVOICE": ("Financial", "Invoices"),
+    "COMMISSION_VOUCHER": ("Commission Documents",),
 }
 MAX_NAME = 160
 
@@ -77,10 +77,7 @@ def is_category_folder(db: Session, folder_id: int | None) -> bool:
     folder = db.get(DocumentFolder, folder_id)
     if folder is None:
         return True
-    if folder.parent_id is None:
-        return folder.name in DEFAULT_FOLDERS
-    parent = db.get(DocumentFolder, folder.parent_id)
-    return bool(parent and parent.parent_id is None and parent.name == "Financial" and folder.name in FINANCIAL_SUBFOLDERS)
+    return folder.parent_id is None and folder.name in DEFAULT_FOLDERS
 
 
 def subject_name(db: Session, document: Document, processing: dict) -> str | None:
@@ -117,7 +114,7 @@ def file_document(db: Session, document: Document, processing: dict, actor_id: i
 
 
 def folder_path(db: Session, folder_id: int | None) -> str | None:
-    """'Financial / Receipts / John Doe' for a folder (None when unfiled)."""
+    """'Buyers / John Doe' for a folder (None when unfiled)."""
     names: list[str] = []
     seen: set[int] = set()
     while folder_id is not None and folder_id not in seen:

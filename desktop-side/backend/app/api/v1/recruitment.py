@@ -1,24 +1,32 @@
 """Agent recruitment: applicants moving through screening and interviews to
-onboarding. Onboarding creates the agent record (pushed to the central
-agents table like any new ALTY record). Management roles only.
+onboarding. Onboarding creates the agent record.
+
+The Filing Manager records applicants and uploads photos / scans of the
+recruitment form they filled in; moving an applicant through the stages,
+onboarding and deleting stay with the Administrator.
 """
 
 import re
+import uuid
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import SELLER, get_password_hash, require_management
+from app.core.security import SELLER, get_company_user, get_password_hash, require_management
 from app.models.agent import DESIGNATIONS, Agent
 from app.models.branch import Branch
 from app.models.user import User
 from app.models.workforce import (APPLICANT_CLOSED, APPLICANT_SOURCES, APPLICANT_STAGES, APPLICANT_STATUSES,
-                                  AgentApplicant)
+                                  AgentApplicant, ApplicantForm)
 from app.services.audit import record_audit
+from app.services.document_storage import (StorageError, UnsupportedFileError, delete_file, detect_file_kind,
+                                           read_file, store_file)
 from app.services.cloud_sync import try_push_pending
 
 router = APIRouter(prefix="/recruitment", tags=["Recruitment"])
@@ -121,7 +129,24 @@ class OnboardInput(BaseModel):
         return value
 
 
-def _serialize(applicant: AgentApplicant, branches: dict[int, str], recruiters: dict[str, str] | None = None) -> dict:
+def _form(form: ApplicantForm) -> dict:
+    return {"id": form.id, "file_name": form.file_name, "mime_type": form.mime_type, "size_bytes": form.size_bytes,
+            "uploaded_by": form.uploaded_by, "uploaded_at": form.uploaded_at,
+            "url": f"/api/v1/recruitment/applicants/{form.applicant_id}/forms/{form.id}"}
+
+
+def _forms_by_applicant(db: Session, applicant_ids: list[int] | None = None) -> dict[int, list[dict]]:
+    statement = select(ApplicantForm).order_by(ApplicantForm.uploaded_at, ApplicantForm.id)
+    if applicant_ids is not None:
+        statement = statement.where(ApplicantForm.applicant_id.in_(applicant_ids))
+    found: dict[int, list[dict]] = {}
+    for form in db.execute(statement).scalars():
+        found.setdefault(form.applicant_id, []).append(_form(form))
+    return found
+
+
+def _serialize(applicant: AgentApplicant, branches: dict[int, str], recruiters: dict[str, str] | None = None,
+               forms: list[dict] | None = None) -> dict:
     recruiters = recruiters or {}
     return {
         "id": applicant.id, "full_name": applicant.full_name, "email": applicant.email,
@@ -138,7 +163,13 @@ def _serialize(applicant: AgentApplicant, branches: dict[int, str], recruiters: 
         "status": applicant.status, "notes": applicant.notes, "history": applicant.history or [],
         "agent_id": applicant.agent_id, "created_by": applicant.created_by,
         "created_at": applicant.created_at, "updated_at": applicant.updated_at,
+        "forms": forms or [],
     }
+
+
+def _one(db: Session, applicant: AgentApplicant) -> dict:
+    return _serialize(applicant, _branch_names(db), _recruiter_names(db),
+                      _forms_by_applicant(db, [applicant.id]).get(applicant.id))
 
 
 def _branch_names(db: Session) -> dict[int, str]:
@@ -183,15 +214,16 @@ def next_agent_id(db: Session) -> str:
 
 
 @router.get("/applicants")
-def list_applicants(db: Session = Depends(get_db), _user: User = Depends(require_management)):
+def list_applicants(db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     names = _branch_names(db)
     rows = db.execute(select(AgentApplicant).order_by(AgentApplicant.created_at.desc())).scalars()
     recruiters = _recruiter_names(db)
-    return [_serialize(a, names, recruiters) for a in rows]
+    forms = _forms_by_applicant(db)
+    return [_serialize(a, names, recruiters, forms.get(a.id)) for a in rows]
 
 
 @router.get("/summary")
-def recruitment_summary(db: Session = Depends(get_db), _user: User = Depends(require_management)):
+def recruitment_summary(db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     counts = dict(db.execute(select(AgentApplicant.status, func.count()).group_by(AgentApplicant.status)).all())
     total = sum(counts.values())
     onboarded = counts.get("ONBOARDED", 0)
@@ -205,7 +237,7 @@ def recruitment_summary(db: Session = Depends(get_db), _user: User = Depends(req
 
 @router.post("/applicants", status_code=201)
 def create_applicant(payload: ApplicantInput, db: Session = Depends(get_db),
-                     actor: User = Depends(require_management)):
+                     actor: User = Depends(get_company_user)):
     if not payload.full_name:
         raise HTTPException(status_code=422, detail="Enter the applicant's name")
     _check_branch(db, payload.branch_id)
@@ -220,12 +252,12 @@ def create_applicant(payload: ApplicantInput, db: Session = Depends(get_db),
     record_audit(db, "APPLICANT_CREATED", actor=actor, entity_type="agent_applicants", entity_id=applicant.id,
                  details={"name": applicant.full_name})
     db.commit()
-    return _serialize(applicant, _branch_names(db), _recruiter_names(db))
+    return _one(db, applicant)
 
 
 @router.put("/applicants/{applicant_id}")
 def update_applicant(applicant_id: int, payload: ApplicantInput, db: Session = Depends(get_db),
-                     actor: User = Depends(require_management)):
+                     actor: User = Depends(get_company_user)):
     applicant = _applicant_or_404(db, applicant_id)
     values = payload.model_dump(exclude_unset=True)
     if "full_name" in values and not values["full_name"]:
@@ -243,7 +275,7 @@ def update_applicant(applicant_id: int, payload: ApplicantInput, db: Session = D
         record_audit(db, "APPLICANT_UPDATED", actor=actor, entity_type="agent_applicants", entity_id=applicant.id,
                      details=changes)
     db.commit()
-    return _serialize(applicant, _branch_names(db), _recruiter_names(db))
+    return _one(db, applicant)
 
 
 @router.post("/applicants/{applicant_id}/stage")
@@ -268,7 +300,7 @@ def move_applicant(applicant_id: int, payload: StageInput, db: Session = Depends
     record_audit(db, "APPLICANT_STAGE_CHANGED", actor=actor, entity_type="agent_applicants", entity_id=applicant.id,
                  details={"from": previous, "to": target, "note": payload.note})
     db.commit()
-    return _serialize(applicant, _branch_names(db), _recruiter_names(db))
+    return _one(db, applicant)
 
 
 @router.post("/applicants/{applicant_id}/onboard")
@@ -297,7 +329,7 @@ def onboard_applicant(applicant_id: int, payload: OnboardInput, db: Session = De
                  details={"agent_id": agent.agent_id, "name": agent.full_name})
     db.commit()
     try_push_pending(db)
-    return {**_serialize(applicant, _branch_names(db), _recruiter_names(db)),
+    return {**_one(db, applicant),
             "agent": {"agent_id": agent.agent_id, "full_name": agent.full_name},
             "account": {"username": account.username} if account else None}
 
@@ -326,5 +358,83 @@ def delete_applicant(applicant_id: int, db: Session = Depends(get_db), actor: Us
         raise HTTPException(status_code=409, detail="Onboarded applicants are kept as the agent's hiring record")
     record_audit(db, "APPLICANT_DELETED", actor=actor, entity_type="agent_applicants", entity_id=applicant.id,
                  details={"name": applicant.full_name, "status": applicant.status})
+    # The form rows go with the applicant (ON DELETE CASCADE); the stored files are removed after.
+    stored = [(form.bucket, form.path) for form in
+              db.execute(select(ApplicantForm).where(ApplicantForm.applicant_id == applicant.id)).scalars()]
     db.delete(applicant)
     db.commit()
+    for bucket, path in stored:
+        try:
+            delete_file(bucket, path)
+        except StorageError:
+            pass
+
+
+# The recruitment form the applicant filled in: photos or scans, one per page.
+
+@router.post("/applicants/{applicant_id}/forms", status_code=201)
+def upload_form(applicant_id: int, file: UploadFile = File(...), db: Session = Depends(get_db),
+                actor: User = Depends(get_company_user)):
+    applicant = _applicant_or_404(db, applicant_id)
+    name = (file.filename or "").replace("\\", "/").split("/")[-1].strip()[:255] or "recruitment-form"
+    content = file.file.read(settings.MAX_UPLOAD_MB * 1024 * 1024 + 1)
+    if not content:
+        raise HTTPException(status_code=400, detail="The selected file is empty")
+    if len(content) > settings.MAX_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(status_code=413, detail=f"Files must be {settings.MAX_UPLOAD_MB} MB or smaller")
+    try:
+        kind = detect_file_kind(name, content)
+    except UnsupportedFileError as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+    if kind.source_format not in ("IMAGE", "PDF"):
+        raise HTTPException(status_code=415, detail="Upload a photo or a PDF scan of the recruitment form")
+    path = f"recruitment/{applicant.id}-{uuid.uuid4().hex}{kind.extension}"
+    try:
+        bucket = store_file("documents", path, content, kind.mime_type)
+    except StorageError as exc:
+        raise HTTPException(status_code=502, detail="The file could not be stored") from exc
+    form = ApplicantForm(applicant_id=applicant.id, file_name=name, bucket=bucket, path=path,
+                         mime_type=kind.mime_type, size_bytes=len(content),
+                         uploaded_by=actor.full_name or actor.username)
+    db.add(form)
+    db.flush()
+    _log(applicant, applicant.status, actor, f"Recruitment form uploaded ({name})")
+    record_audit(db, "APPLICANT_FORM_UPLOADED", actor=actor, entity_type="agent_applicants", entity_id=applicant.id,
+                 details={"file_name": name, "form_id": form.id})
+    db.commit()
+    return _one(db, applicant)
+
+
+def _form_or_404(db: Session, applicant_id: int, form_id: int) -> ApplicantForm:
+    form = db.get(ApplicantForm, form_id)
+    if form is None or form.applicant_id != applicant_id:
+        raise HTTPException(status_code=404, detail="Recruitment form not found")
+    return form
+
+
+@router.get("/applicants/{applicant_id}/forms/{form_id}")
+def get_form(applicant_id: int, form_id: int, db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
+    form = _form_or_404(db, applicant_id, form_id)
+    try:
+        content = read_file(form.bucket, form.path)
+    except StorageError as exc:
+        raise HTTPException(status_code=502, detail="The file is currently unavailable") from exc
+    return Response(content=content, media_type=form.mime_type,
+                    headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"})
+
+
+@router.delete("/applicants/{applicant_id}/forms/{form_id}")
+def delete_form(applicant_id: int, form_id: int, db: Session = Depends(get_db),
+                actor: User = Depends(get_company_user)):
+    applicant = _applicant_or_404(db, applicant_id)
+    form = _form_or_404(db, applicant_id, form_id)
+    stored = (form.bucket, form.path)
+    record_audit(db, "APPLICANT_FORM_DELETED", actor=actor, entity_type="agent_applicants", entity_id=applicant.id,
+                 details={"file_name": form.file_name, "form_id": form.id})
+    db.delete(form)
+    db.commit()
+    try:
+        delete_file(*stored)
+    except StorageError:
+        pass
+    return _one(db, applicant)

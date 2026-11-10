@@ -148,7 +148,9 @@ def test_capacity_plan_reallocates_then_recruits(api, admin, agents, db):
 def test_recruitment_pipeline_onboards_an_agent(api, admin, employee, agents, db):
     branch = _branch(api, admin, "Cavite Branch")
     base = f"{API}/recruitment/applicants"
-    assert api.get(base, headers=employee).status_code == 403
+    # The Filing Manager (the "Employee" legacy role) records applicants; only the Administrator
+    # moves them through the stages.
+    assert api.get(base, headers=employee).status_code == 200
     assert api.post(base, headers=admin, json={"full_name": "Jo", "email": "bad"}).status_code == 422
     created = api.post(base, headers=admin, json={"full_name": "Jose Rizal", "phone_number": "0917 000 0000",
                                                   "branch_id": branch, "desired_designation": "Sales Agent",
@@ -158,6 +160,7 @@ def test_recruitment_pipeline_onboards_an_agent(api, admin, employee, agents, db
     applicant = created.json()
     assert applicant["status"] == "APPLIED" and applicant["source"] == "REFERRAL" and len(applicant["history"]) == 1
     stage = f"{base}/{applicant['id']}/stage"
+    assert api.post(stage, headers=employee, json={"status": "SCREENING"}).status_code == 403
     assert api.post(stage, headers=admin, json={"status": "INTERVIEW"}).status_code == 409   # skips screening
     assert api.post(f"{base}/{applicant['id']}/onboard", headers=admin, json={}).status_code == 409
     for status in ("SCREENING", "INTERVIEW", "APPROVED"):

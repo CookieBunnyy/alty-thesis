@@ -14,7 +14,7 @@ from app.models.notification import NotificationRead
 from app.models.partner import Partner
 from app.models.auth_security import AuthAttempt, PasswordResetRequest, PasswordResetToken
 from app.models.payment import TransactionPayment
-from app.models.workforce import AgentApplicant, AgentAssessment
+from app.models.workforce import AgentApplicant, AgentAssessment, ApplicantForm
 from app.models.listing_assignment import ListingAssignment
 from app.models.deal import Deal, DealEvent
 from app.models.commission import CommissionRecord, CommissionStructure
@@ -45,6 +45,7 @@ __all__ = [
 	"TransactionPayment",
 	"AgentApplicant",
 	"AgentAssessment",
+	"ApplicantForm",
 	"ListingAssignment",
 	"Deal",
 	"DealEvent",

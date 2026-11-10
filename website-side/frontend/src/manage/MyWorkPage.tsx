@@ -10,7 +10,7 @@ import { AgentLocation } from "./agentLocation"
 import { CancelReason } from "./cancellation"
 
 type Work = {
-  agent: { agent_id: string; full_name: string; agent_location: string | null; latitude: string | null; longitude: string | null; status: string; transactions_count: number; completed_sales: number; total_sales: string | null; performance_score: string | null; client_rating: number | null; review_count: number }
+  agent: { agent_id: string; full_name: string; phone_number: string | null; agent_location: string | null; latitude: string | null; longitude: string | null; status: string; transactions_count: number; completed_sales: number; total_sales: string | null; performance_score: string | null; client_rating: number | null; review_count: number }
   activity: {
     recorded: { clients: number; transactions: number; active_reservations: number; completed_sales: number; sales_value: number; properties: number }
     clients: { client_id: string; full_name: string; status: string; property_id: number | null }[]

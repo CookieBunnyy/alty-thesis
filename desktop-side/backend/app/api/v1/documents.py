@@ -25,7 +25,6 @@ from app.schemas.document import (
 )
 from app.services.document_filing import (
     DEFAULT_FOLDERS,
-    FINANCIAL_SUBFOLDERS,
     file_document,
     folder_path,
     is_category_folder,
@@ -521,32 +520,16 @@ def verify_document_extraction(document_id: str, payload: VerificationInput, db:
 @router.get("/folders", response_model=list[DocumentFolderResponse])
 def get_folders(include_archived: bool = False, db: Session = Depends(get_db),
                 actor: User = Depends(get_company_user)):
-    parents: dict[str, DocumentFolder] = {}
     created = False
-    # One query for the top-level folders and one for Financial's, rather than
-    # one per default folder (each query is a round trip to the database).
+    # One query for the top-level folders, rather than one per default folder
+    # (each query is a round trip to the database).
     top = {}
     for folder in db.execute(select(DocumentFolder).where(DocumentFolder.parent_id.is_(None))
                              .order_by(DocumentFolder.id)).scalars():
         top.setdefault(folder.name, folder)
     for name in DEFAULT_FOLDERS:
-        folder = top.get(name)
-        if folder is None:
+        if name not in top:
             folder = DocumentFolder(name=name, created_by=actor.id)
-            db.add(folder)
-            db.flush()
-            _record_event(db, "FOLDER_CREATED", actor, folder=folder, details={"name": name})
-            created = True
-        parents[name] = folder
-    parent = parents["Financial"]
-    children = {}
-    for folder in db.execute(select(DocumentFolder).where(DocumentFolder.parent_id == parent.id)
-                             .order_by(DocumentFolder.id)).scalars():
-        children.setdefault(folder.name, folder)
-    for name in FINANCIAL_SUBFOLDERS:
-        folder = children.get(name)
-        if folder is None:
-            folder = DocumentFolder(name=name, parent_id=parent.id, created_by=actor.id)
             db.add(folder)
             db.flush()
             _record_event(db, "FOLDER_CREATED", actor, folder=folder, details={"name": name})

@@ -86,7 +86,7 @@ export function DocumentsPage() {
 
   // Delete folder: only for a selected folder that isn't one of the standard ones.
   const selectedFolder = folder === null ? null : folders.find((f) => f.id === folder) ?? null
-  const standard = selectedFolder ? isStandardFolder(selectedFolder, folders) : false
+  const standard = selectedFolder ? isStandardFolder(selectedFolder) : false
   const canDeleteFolder = Boolean(selectedFolder) && !standard && canFile(user?.role)
   const deleteFolderTitle = !selectedFolder ? t("Select a folder first")
     : standard ? t("“{name}” is a standard folder and can't be deleted", { name: selectedFolder.name })

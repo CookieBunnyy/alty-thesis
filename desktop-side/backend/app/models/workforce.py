@@ -60,6 +60,24 @@ class AgentApplicant(Base):
                                                  onupdate=datetime.utcnow)
 
 
+class ApplicantForm(Base):
+    """A photo or scan of the recruitment form the applicant filled in,
+    uploaded by the Filing Manager (or the Administrator). One per page."""
+
+    __tablename__ = "applicant_forms"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    applicant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("agent_applicants.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    bucket: Mapped[str] = mapped_column(String(120), nullable=False)
+    path: Mapped[str] = mapped_column(String(300), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    uploaded_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class AgentAssessment(Base):
     """A periodic evaluation of an agent: scored criteria plus the recorded
     figures for the period, so the score can be checked later."""

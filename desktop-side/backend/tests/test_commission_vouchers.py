@@ -33,7 +33,7 @@ def test_voucher_is_read_for_review_and_linked_after_verification(api, admin, em
     original = build.docx(VOUCHER)
     doc = upload(api, employee, "voucher.docx", original)
     assert doc["document_type"] == "COMMISSION_VOUCHER" and doc["processing_stage"] == "COMPLETE", doc
-    assert doc["folder_path"] == "Commission Vouchers"
+    assert doc["folder_path"] == "Commission Documents"
     path = f"{API}/documents/{doc['document_id']}/extraction"
     review = api.get(path, headers=employee).json()
     labels = {p["label"]: p["value"] for p in review["detected_pairs"]}

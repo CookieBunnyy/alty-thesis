@@ -54,7 +54,7 @@ _COMPANY_PAGES = [
 ROLE_PERMISSIONS: dict[str, list[str]] = {
     ADMINISTRATOR: _COMPANY_PAGES,
     FILING_MANAGER: ["dashboard", "bulletin", "trips", "reports", "transactions", "commissions", "documents",
-                     "properties", "settings"],
+                     "recruitment", "properties", "settings"],
     SELLER: ["my-work", "bulletin", "trips", "my-listings", "my-deals", "my-commissions", "settings"],
 }
 
