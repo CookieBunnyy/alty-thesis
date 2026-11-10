@@ -45,6 +45,20 @@ MANUAL_STATUSES = {"AVAILABLE", "ON_HOLD", "UNAVAILABLE"}
 require_editor = require_roles(*MANAGEMENT_ROLES)  # listings are managed by Admin / Marketing staff
 
 
+def _may_draw_boundary(db: Session, user: User, listing: PropertyListing) -> None:
+    """Management draws any lot boundary; a seller only on the property they
+    added themselves, until it is approved for marketing."""
+    role = canonical_role(user.role)
+    if role in MANAGEMENT_ROLES:
+        return
+    if (role == SELLER and listing.submitted_by_user_id == user.id and listing.marketing_status != "APPROVED"
+            and db.scalar(select(ListingAssignment.id).where(
+                ListingAssignment.listing_id == listing.listing_id, ListingAssignment.agent_id == user.agent_id,
+                ListingAssignment.removed_at.is_(None)))):
+        return
+    raise HTTPException(status_code=403, detail="You can only draw the lot of a property you added, before it is approved")
+
+
 def _listing_or_404(db: Session, listing_id: int) -> PropertyListing:
     listing = db.get(PropertyListing, listing_id)
     if listing is None:
@@ -232,9 +246,10 @@ def update_property_listing(listing_id: int, payload: PropertyListingUpdate,
 
 @router.put("/{listing_id}/boundary", response_model=PropertyListingResponse)
 def save_boundary(listing_id: int, payload: BoundaryInput, db: Session = Depends(get_db),
-                  user: User = Depends(require_editor)):
+                  user: User = Depends(get_current_user)):
     """Save the lot outline drawn on the map (validated; never invented)."""
     listing = _listing_or_404(db, listing_id)
+    _may_draw_boundary(db, user, listing)
     try:
         geometry = lot_geometry.normalize(payload.geometry)
     except lot_geometry.BoundaryError as exc:
@@ -257,8 +272,9 @@ def save_boundary(listing_id: int, payload: BoundaryInput, db: Session = Depends
 
 
 @router.delete("/{listing_id}/boundary", response_model=PropertyListingResponse)
-def delete_boundary(listing_id: int, db: Session = Depends(get_db), user: User = Depends(require_editor)):
+def delete_boundary(listing_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     listing = _listing_or_404(db, listing_id)
+    _may_draw_boundary(db, user, listing)
     if listing.boundary is None:
         raise HTTPException(status_code=404, detail="This property has no boundary")
     listing.boundary = None

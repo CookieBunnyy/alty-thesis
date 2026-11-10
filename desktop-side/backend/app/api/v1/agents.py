@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_management, get_company_user
+from app.core.security import MANAGEMENT_ROLES, SELLER, canonical_role, get_company_user, get_current_user, require_management
 from decimal import Decimal
 
 from app.models.agent import DESIGNATIONS, Agent
@@ -291,6 +291,42 @@ class AssignmentInput(BaseModel):
 @router.get("/designations/options")
 def designation_options(_user: User = Depends(get_company_user)):
     return {"designations": DESIGNATIONS, "criteria": ASSESSMENT_CRITERIA}
+
+
+class LocationInput(BaseModel):
+    """Where the agent is based: buyers see the agents nearest a property."""
+    model_config = ConfigDict(extra="forbid")
+
+    agent_location: str | None = Field(default=None, max_length=255)
+    latitude: Decimal | None = Field(default=None, ge=-90, le=90, max_digits=9, decimal_places=6)
+    longitude: Decimal | None = Field(default=None, ge=-180, le=180, max_digits=9, decimal_places=6)
+
+
+@router.put("/{agent_id}/location", response_model=AgentResponse)
+def update_location(agent_id: str, payload: LocationInput, db: Session = Depends(get_db),
+                    actor: User = Depends(get_current_user)):
+    """Management sets any agent's location; a seller sets their own."""
+    own = canonical_role(actor.role) == SELLER and actor.agent_id == agent_id
+    if not own and canonical_role(actor.role) not in MANAGEMENT_ROLES:
+        raise HTTPException(status_code=403, detail="You can only set your own location")
+    agent = db.get(Agent, agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if (payload.latitude is None) != (payload.longitude is None):
+        raise HTTPException(status_code=422, detail="Set both latitude and longitude, or neither")
+    values = payload.model_dump()
+    values["agent_location"] = (values["agent_location"] or "").strip() or None
+    changes = {}
+    for field, value in values.items():
+        if getattr(agent, field) != value:
+            changes[field] = {"from": str(getattr(agent, field)), "to": str(value)}
+            setattr(agent, field, value)
+    if changes:
+        record_audit(db, "AGENT_LOCATION_UPDATED", actor=actor, entity_type="agents", entity_id=agent_id,
+                     details=changes)
+    db.commit()
+    db.refresh(agent)
+    return _with_reviews(agent, review_service.review_stats(db, [agent_id]), agent_recorded_stats(db, [agent_id]))
 
 
 @router.put("/{agent_id}/assignment", response_model=AgentResponse)

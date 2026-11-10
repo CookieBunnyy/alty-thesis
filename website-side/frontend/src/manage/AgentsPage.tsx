@@ -7,6 +7,7 @@ import { Badge, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Sect
 import { useStaffAuth } from "./staffContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { locale, t } from "./i18n"
+import { AgentLocation } from "./agentLocation"
 import { CancelReason } from "./cancellation"
 import { callLabels } from "./callLabels"
 import { CallButton } from "@/components/CallButton"
@@ -263,6 +264,7 @@ function AgentDrawer({ agent, onClose, onChanged }: { agent: Agent; onClose: () 
       )}
 
       <Section title="Contact & location">
+        {canManage && <div className="mb-3"><AgentLocation agent={agent} onSaved={onChanged} /></div>}
         <Facts items={[
           ["Phone number", agent.phone_number],
           ["Location", agent.agent_location],

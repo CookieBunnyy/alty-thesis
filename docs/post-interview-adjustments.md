@@ -412,3 +412,9 @@ The desktop era copied records out to the old website tables in Supabase (`publi
 * **MIA** reads listings and agents only from the API's public endpoints (`/api/v1/public/properties` and `/agents`). It recommends exactly what the website shows, and never reads the old tables.
 * **Management System:** the "Sync from Supabase" buttons and the Sync columns and labels are gone. The Settings push panel appears only if copying is switched back on.
 * The old `public.*` tables are no longer read by anything; deleting them is optional.
+
+### Map pins and lot boundaries (2026-11-10)
+* **Adding a property:** there are no latitude/longitude boxes. **Find on map** opens a map that searches the address already typed. Click the spot to drop a red pin; drag it to adjust. The pin's address fills the location field if that's empty.
+* **Second step:** **Draw lot boundary** lets the seller outline the lot in red on satellite imagery. It measures the area, the perimeter and each side, and can set the lot area.
+* **Who may draw the boundary:** management on any property; a seller only on a property they added, until it is approved (`PUT /property-listings/{id}/boundary`).
+* **Agent location** (`PUT /agents/{id}/location`): sellers pin where they're based on **My Work**, and the Administrator can do it from the seller's drawer on the Sellers page. Without a pin, "Reserve / Purchase" on the website lists the agent as "Location not on the map" and can't rank by distance.

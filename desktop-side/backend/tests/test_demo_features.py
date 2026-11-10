@@ -221,3 +221,33 @@ def test_tripping_schedule_live_updates_and_buyer_notices(api, admin, db):
     assert any(n["page"] == "trips" for n in api.get(f"{API}/notifications", headers=admin).json()["items"])
     assert api.post(f"{API}/client/trips/read", headers=buyer_headers).status_code == 204
     assert api.get(f"{API}/client/trips", headers=buyer_headers).json()["unread"] == 0
+
+
+def test_sellers_pin_their_location_and_draw_their_own_lot(api, admin, db):
+    from tests.test_lot_boundary import LOT, polygon
+
+    user, seller = _new_seller(api, admin)
+    other_user, other = _new_seller(api, admin, "nina", "Nina Castillo")
+    # Their own location (buyers see the nearest agents), not anyone else's.
+    pin = {"agent_location": "Dasmariñas, Cavite", "latitude": "14.3294", "longitude": "120.9367"}
+    saved = api.put(f"{API}/agents/{user['agent_id']}/location", headers=seller, json=pin)
+    assert saved.status_code == 200, saved.text
+    assert float(saved.json()["latitude"]) == 14.3294
+    assert api.put(f"{API}/agents/{other_user['agent_id']}/location", headers=seller, json=pin).status_code == 403
+    assert api.put(f"{API}/agents/{other_user['agent_id']}/location", headers=admin, json=pin).status_code == 200
+    assert api.put(f"{API}/agents/{user['agent_id']}/location", headers=seller,
+                   json={"latitude": "14.3"}).status_code == 422
+
+    # The lot of the property they added, until it is approved.
+    developer = _developer(db)
+    listing = api.post(f"{API}/property-listings", headers=seller,
+                       json={**LISTING, "partner_id": developer, "category": "House and Lot"}).json()
+    path = f"{API}/property-listings/{listing['listing_id']}/boundary"
+    body = {"geometry": polygon(LOT), "use_as_lot_area": True}
+    assert api.put(path, headers=other, json=body).status_code == 403
+    drawn = api.put(path, headers=seller, json=body)
+    assert drawn.status_code == 200, drawn.text
+    assert float(drawn.json()["lot_area_sqm"]) > 0
+    api.post(f"{API}/property-listings/{listing['listing_id']}/marketing", headers=admin, json={"action": "approve"})
+    assert api.put(path, headers=seller, json=body).status_code == 403
+    assert api.delete(path, headers=admin).status_code == 200

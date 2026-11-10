@@ -3,7 +3,7 @@
 // with the developer the property belongs to. Step 2: photos, floor plans and
 // amenity pictures, each checked for quality as it is uploaded.
 import { useCallback, useState, type FormEvent, type ReactNode } from "react"
-import { Building2, Check, LoaderCircle, MapPin, X } from "lucide-react"
+import { Building2, Check, LoaderCircle, MapPin, PencilRuler, X } from "lucide-react"
 import { Link } from "@/components/Link"
 import { CATEGORIES } from "@/lib/categories"
 import { isManagement } from "./format"
@@ -12,6 +12,10 @@ import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData } from "./useApiData"
 import { ListingImages } from "./listingImages"
+import { LocationPicker } from "./LocationPicker"
+import { BoundaryEditor } from "./BoundaryEditor"
+import type { Listing } from "./PropertyEditForm"
+import { lotAreaLong } from "@/lib/area"
 import { t } from "./i18n"
 
 type Developer = { id: number; name: string; status: string; accredited?: boolean; partner_type?: string | null; accreditation_status?: string }
@@ -22,6 +26,7 @@ export type DraftListing = {
   lat: number | string | null; lng: number | string | null; amenity_list: unknown; details: string | null
   has_balcony: boolean | null; has_kitchen: boolean | null; has_backyard: boolean | null; has_garage: boolean | null
   garage_spaces: number | null; lot_area_sqm: number | string | null; floor_area_sqm: number | string | null
+  boundary?: unknown
 }
 
 const field = "mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm focus:border-ab-accent focus:outline-none"
@@ -71,28 +76,13 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
   })
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
-  const [locating, setLocating] = useState(false)
+  const [picking, setPicking] = useState(false)
+  const [drawing, setDrawing] = useState(false)
+  // The saved listing, for the lot boundary drawn after saving the details.
+  const [saved, setSaved] = useState<Listing | null>(listing ? (listing as unknown as Listing) : null)
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }))
   const developer = developers.data?.find((d) => String(d.id) === form.partner_id)
-
-  const locate = async () => {
-    const query = [form.village_name, form.project_name].filter(Boolean).join(", ")
-    if (!query.trim()) return setError(t("Enter the village / location first."))
-    setLocating(true)
-    setError("")
-    try {
-      const { results } = await api<{ results: { name: string; address: string; lat: number; lng: number }[] }>(`/maps/geocode?q=${encodeURIComponent(query)}`)
-      if (!results.length) setError(t("That place wasn't found on the map. Enter the latitude and longitude instead."))
-      else {
-        setForm((f) => ({ ...f, lat: results[0].lat.toFixed(6), lng: results[0].lng.toFixed(6) }))
-        toast(t("Pinned at {place}", { place: results[0].address || results[0].name }))
-      }
-    } catch (locateError) {
-      setError(t((locateError as Error).message))
-    } finally {
-      setLocating(false)
-    }
-  }
+  const pinned = form.lat !== "" && form.lng !== ""
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -117,13 +107,15 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
     setBusy(true)
     try {
       if (listing) {
-        await api(`/seller/listings/${listing.listing_id}`, { method: "PUT", body: JSON.stringify(body) })
+        const updated = await api<Listing>(`/seller/listings/${listing.listing_id}`, { method: "PUT", body: JSON.stringify(body) })
+        setSaved((current) => ({ ...(current ?? updated), ...updated, listing_id: listing.listing_id }))
         toast(t("Saved {name}.", { name: body.title }))
         onSaved(listing.listing_id)
         setStep("images")
       } else {
-        const created = await api<{ listing_id: number }>("/property-listings", { method: "POST", body: JSON.stringify(body) })
+        const created = await api<Listing>("/property-listings", { method: "POST", body: JSON.stringify(body) })
         setSavedId(created.listing_id)
+        setSaved(created)
         toast(t("Property added. Now add its photos, floor plans and amenities."))
         onSaved(created.listing_id)
         setStep("images")
@@ -188,10 +180,18 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
             <Field label="Floor area (sqm)"><input className={field} inputMode="decimal" value={form.floor_area_sqm} onChange={(e) => set("floor_area_sqm", e.target.value)} /></Field>
             <Field label="Lot area (sqm)" hint={t("Leave blank for condominium units.")}><input className={field} inputMode="decimal" value={form.lot_area_sqm} onChange={(e) => set("lot_area_sqm", e.target.value)} /></Field>
             <Field label="Village / location" wide><input className={field} value={form.village_name} onChange={(e) => set("village_name", e.target.value)} placeholder={t("e.g. Las Piñas City")} /></Field>
-            <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2 sm:col-span-2">
-              <Field label="Latitude"><input className={field} inputMode="decimal" value={form.lat} onChange={(e) => set("lat", e.target.value)} /></Field>
-              <Field label="Longitude"><input className={field} inputMode="decimal" value={form.lng} onChange={(e) => set("lng", e.target.value)} /></Field>
-              <Button onClick={() => void locate()} disabled={locating}>{locating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />} {t("Find on map")}</Button>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ab-border bg-ab-card-2 p-3 sm:col-span-2">
+              <p className="min-w-0 text-sm">
+                <span className="font-medium">{t("Location on the map")}</span>
+                <span className="block text-xs text-ab-muted">
+                  {pinned ? <><MapPin className="mr-0.5 inline h-3.5 w-3.5 text-ab-danger" aria-hidden />{t("Pinned")} · {Number(form.lat).toFixed(5)}, {Number(form.lng).toFixed(5)}</>
+                    : t("Optional, but needed for the website map, travel times and the nearest agents.")}
+                </span>
+              </p>
+              <span className="flex gap-2">
+                {pinned && <Button onClick={() => setForm((f) => ({ ...f, lat: "", lng: "" }))}>{t("Remove pin")}</Button>}
+                <Button onClick={() => setPicking(true)}><MapPin className="h-4 w-4" /> {t(pinned ? "Move pin" : "Find on map")}</Button>
+              </span>
             </div>
             <fieldset className="sm:col-span-2">
               <legend className="text-sm font-medium">{t("Features")}</legend>
@@ -214,7 +214,20 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
             </p>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto p-5">
+          <div className="flex-1 space-y-5 overflow-y-auto p-5">
+            {saved && (
+              <section className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ab-border p-3" aria-labelledby="lot-boundary">
+                <div className="min-w-0">
+                  <h3 id="lot-boundary" className="text-sm font-bold">{t("Lot boundary (optional)")}</h3>
+                  <p className="text-xs text-ab-faint">
+                    {saved.boundary
+                      ? t("Drawn · lot area {area}", { area: lotAreaLong(saved.lot_area_sqm) ?? "—" })
+                      : t("Outline the lot on the satellite map in red to measure its area and sides. Skip for condominium units.")}
+                  </p>
+                </div>
+                <Button onClick={() => setDrawing(true)}><PencilRuler className="h-4 w-4" /> {t(saved.boundary ? "Redraw lot boundary" : "Draw lot boundary")}</Button>
+              </section>
+            )}
             {savedId && <ListingImages listingId={savedId} editable />}
           </div>
         )}
@@ -245,6 +258,21 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
         <form onSubmit={submit} noValidate className="ab-pop relative flex max-h-[94dvh] w-full max-w-3xl flex-col rounded-t-2xl border border-ab-border bg-ab-card shadow-2xl sm:rounded-2xl">{body}</form>
       ) : (
         <div className="ab-pop relative flex max-h-[94dvh] w-full max-w-3xl flex-col rounded-t-2xl border border-ab-border bg-ab-card shadow-2xl sm:rounded-2xl">{body}</div>
+      )}
+      {picking && (
+        <LocationPicker title={t("Where is the property?")}
+          initial={pinned ? { lat: Number(form.lat), lng: Number(form.lng) } : null}
+          initialQuery={[form.project_name, form.village_name].filter(Boolean).join(", ")}
+          onClose={() => setPicking(false)}
+          onPick={(picked) => {
+            setForm((f) => ({ ...f, lat: String(picked.lat), lng: String(picked.lng),
+              village_name: f.village_name.trim() || (picked.address ?? "").split(",").slice(0, 3).join(",").trim() }))
+            setPicking(false)
+          }} />
+      )}
+      {drawing && saved && (
+        <BoundaryEditor listing={saved} onClose={() => setDrawing(false)}
+          onSaved={(updated) => { setSaved(updated); setForm((f) => ({ ...f, lot_area_sqm: str(updated.lot_area_sqm) })); setDrawing(false) }} />
       )}
     </div>
   )
