@@ -51,7 +51,11 @@ export const transactionDate = (value: unknown): string => {
 }
 
 /** RESERVED -> Reserved, ON_HOLD -> On hold (in the chosen language). */
+// Codes whose label isn't just the code in words (Abellar's own terms).
+const STATUS_NAMES: Record<string, string> = { DEVELOPER_PROCESSING: "Under evaluation" }
 export const statusLabel = (value: unknown): string => {
+  const named = STATUS_NAMES[String(value ?? "").toUpperCase()]
+  if (named) return t(named)
   const text = String(value ?? "").replace(/_/g, " ").trim().toLowerCase()
   return text ? t(text[0].toUpperCase() + text.slice(1)) : "—"
 }

@@ -212,6 +212,13 @@ class PropertyListing(Base):
     submitted_by_user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     floor_area_sqm: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    # Listing details Abellar shows (interview 2): RFO or pre-selling, the
+    # financing accepted, and the sample computation's reservation fee and
+    # equity terms (with price_total, initial_dp and monthly_rate).
+    property_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    financing_options: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    reservation_fee: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    equity_terms_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
     marketing_status: Mapped[str] = mapped_column(String(20), nullable=False, default="DRAFT",
                                                   server_default="DRAFT", index=True)
     marketing_approved_by: Mapped[str | None] = mapped_column(String(200), nullable=True)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { AgentPhoto } from "@/components/AgentPhoto"
-import { CheckCircle2, ExternalLink, LoaderCircle, LogIn, MapPin, MessageSquareText, Phone, UserRound } from "lucide-react"
+import { CheckCircle2, ExternalLink, LoaderCircle, LogIn, Mail, MapPin, MessageSquareText, Phone, UserRound } from "lucide-react"
 import { getNearbyAgents } from "@/lib/mapApi"
 import { useAuth } from "@/lib/auth"
 import { useLocation } from "@/lib/router"
@@ -47,9 +47,9 @@ export function NearbyAgents({ listingId, selectedAgentId, onSelect, onLoaded }:
     <section aria-labelledby="nearby-agents-title" className="space-y-2">
       <div className="flex items-end justify-between gap-2">
         <h3 id="nearby-agents-title" className="text-sm font-semibold text-ab-text">
-          Agents near this property
+          Contact an agent
         </h3>
-        {data && <span className="text-[10px] text-ab-faint">Nearest first (straight-line)</span>}
+        {data && <span className="text-[10px] text-ab-faint">This property's agents, then the nearest</span>}
       </div>
 
       {!data && !error && (
@@ -81,6 +81,9 @@ export function NearbyAgents({ listingId, selectedAgentId, onSelect, onLoaded }:
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-x-2 text-sm font-semibold text-ab-text">
                       {agent.full_name}
+                      {agent.assigned && (
+                        <span className="rounded-full bg-ab-accent-soft px-2 py-0.5 text-[10px] font-semibold text-ab-accent">Handles this property</span>
+                      )}
                       <a
                         href={`/agents/${encodeURIComponent(agent.agent_id)}`}
                         target="_blank"
@@ -137,6 +140,11 @@ export function NearbyAgents({ listingId, selectedAgentId, onSelect, onLoaded }:
                         <MessageSquareText className="h-3.5 w-3.5 text-ab-accent" /> Text
                       </CallButton>
                     </>
+                  )}
+                  {agent.email && (
+                    <a href={`mailto:${agent.email}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-ab-border bg-ab-card px-3 text-xs font-semibold text-ab-text transition hover:bg-ab-hover">
+                      <Mail className="h-3.5 w-3.5 text-ab-accent" /> Email
+                    </a>
                   )}
                   {onSelect && (
                     <button

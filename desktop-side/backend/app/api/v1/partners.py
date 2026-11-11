@@ -15,13 +15,15 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_management, get_company_user
-from app.models.partner import ACCREDITATION_STATUSES, PARTNER_STATUSES, PARTNER_TYPES, Partner
+from app.models.partner import (ACCREDITATION_SCOPES, ACCREDITATION_STATUSES, ACCREDITATION_VALID_MONTHS,
+                                PARTNER_STATUSES, PARTNER_TYPES, Partner)
 from app.models.property_listing import PropertyListing
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
 from app.services.accreditation import accreditation_of
 from app.services.audit import record_audit
 from app.services.partner_logos import logo_bytes, logo_version, remove_logo, save_logo
+from app.services.payment_plan import add_months
 
 router = APIRouter(prefix="/partners", tags=["Partners"])
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -44,6 +46,29 @@ class PartnerInput(BaseModel):
     accreditation_valid_from: date | None = None
     accreditation_valid_until: date | None = None
     accreditation_notes: str | None = None
+    accreditation_scope: str | None = None
+    accreditation_region: str | None = Field(default=None, max_length=200)
+    accreditation_projects: list[str] | None = Field(default=None, max_length=100)
+
+    @field_validator("accreditation_projects")
+    @classmethod
+    def clean_projects(cls, value):
+        if value is None:
+            return value
+        seen, out = set(), []
+        for name in value:
+            name = " ".join(str(name).split())[:200]
+            if name and name.casefold() not in seen:
+                seen.add(name.casefold())
+                out.append(name)
+        return out
+
+    @field_validator("accreditation_scope")
+    @classmethod
+    def known_scope(cls, value):
+        if value is not None and value.upper() not in ACCREDITATION_SCOPES:
+            raise ValueError(f"Scope must be one of: {', '.join(ACCREDITATION_SCOPES)}")
+        return value.upper() if value else value
 
     @field_validator("*", mode="before")
     @classmethod
@@ -129,6 +154,9 @@ def _serialize(partner: Partner, stats: dict) -> dict:
         "accreditation_valid_from": partner.accreditation_valid_from,
         "accreditation_valid_until": partner.accreditation_valid_until,
         "accreditation_notes": partner.accreditation_notes,
+        "accreditation_scope": partner.accreditation_scope or "ALL_PROJECTS",
+        "accreditation_region": partner.accreditation_region,
+        "accreditation_projects": partner.accreditation_projects or [],
         "accreditation_verified_by": partner.accreditation_verified_by,
         "accreditation_verified_at": partner.accreditation_verified_at,
         "accreditation": accreditation_of(partner),
@@ -151,8 +179,19 @@ def _name_taken(db: Session, name: str, exclude: int | None = None) -> bool:
     return db.scalar(statement) is not None
 
 
+def _check_scope(partner: Partner) -> None:
+    if partner.accreditation_scope == "SPECIFIC_PROJECTS" and not partner.accreditation_projects:
+        raise HTTPException(status_code=422, detail="Name the projects or clusters the accreditation covers")
+    if partner.accreditation_scope == "REGIONAL" and not partner.accreditation_region:
+        raise HTTPException(status_code=422, detail="Enter the region the accreditation covers")
+
+
 def _stamp_accreditation(partner: Partner, actor: User) -> None:
-    """Who verified the developer's accreditation of Abellar, and when."""
+    """Who verified the developer's accreditation of Abellar, and when. A new
+    verification without an end date is valid for a year (usually renewed yearly)."""
+    if partner.accreditation_status == "VERIFIED" and partner.accreditation_valid_until is None \
+            and partner.accreditation_valid_from is not None:
+        partner.accreditation_valid_until = add_months(partner.accreditation_valid_from, ACCREDITATION_VALID_MONTHS)
     if partner.accreditation_status == "VERIFIED":
         partner.accreditation_verified_by = actor.full_name or actor.username
         partner.accreditation_verified_at = datetime.utcnow()
@@ -186,7 +225,10 @@ def create_partner(payload: PartnerInput, db: Session = Depends(get_db), actor: 
     if _name_taken(db, payload.name):
         raise HTTPException(status_code=409, detail="A partner with that name already exists")
     partner = Partner(**{**payload.model_dump(), "status": payload.status or "ACTIVE",
-                         "accreditation_status": payload.accreditation_status or "NONE"})
+                         "accreditation_status": payload.accreditation_status or "NONE",
+                         "accreditation_scope": payload.accreditation_scope or "ALL_PROJECTS",
+                         "accreditation_projects": payload.accreditation_projects or []})
+    _check_scope(partner)
     _stamp_accreditation(partner, actor)
     db.add(partner)
     db.flush()
@@ -209,16 +251,43 @@ def update_partner(partner_id: int, payload: PartnerInput, db: Session = Depends
         values.pop("status")
     if values.get("accreditation_status") is None:
         values.pop("accreditation_status", None)
+    if values.get("accreditation_scope") is None:
+        values.pop("accreditation_scope", None)
+    if "accreditation_projects" in values and values["accreditation_projects"] is None:
+        values["accreditation_projects"] = []
     changes = {}
     for field, value in values.items():
         if getattr(partner, field) != value:
             changes[field] = {"old": getattr(partner, field), "new": value}
             setattr(partner, field, value)
+    _check_scope(partner)
     if "accreditation_status" in changes:
         _stamp_accreditation(partner, actor)
     if changes:
         record_audit(db, "PARTNER_UPDATED", actor=actor, entity_type="partners", entity_id=partner_id,
                      details={"name": partner.name, "changes": changes})
+    db.commit()
+    return _serialize(partner, _stats(db, [partner_id]))
+
+
+@router.post("/{partner_id}/accreditation/renew")
+def renew_accreditation(partner_id: int, db: Session = Depends(get_db), actor: User = Depends(require_management)):
+    """The yearly renewal: a new year from the end of the current one (or from today when it already ended)."""
+    partner = _partner_or_404(db, partner_id)
+    if (partner.partner_type or "").upper() != "DEVELOPER":
+        raise HTTPException(status_code=422, detail="Only developers accredit Abellar Realty")
+    today = date.today()
+    current_end = partner.accreditation_valid_until
+    start = current_end if current_end and current_end >= today else today
+    before = {"valid_from": str(partner.accreditation_valid_from), "valid_until": str(current_end),
+              "status": partner.accreditation_status}
+    partner.accreditation_valid_from = start
+    partner.accreditation_valid_until = add_months(start, ACCREDITATION_VALID_MONTHS)
+    partner.accreditation_status = "VERIFIED"
+    _stamp_accreditation(partner, actor)
+    record_audit(db, "ACCREDITATION_RENEWED", actor=actor, entity_type="partners", entity_id=partner_id,
+                 details={"name": partner.name, "before": before,
+                          "valid_until": partner.accreditation_valid_until.isoformat()})
     db.commit()
     return _serialize(partner, _stats(db, [partner_id]))
 

@@ -84,9 +84,10 @@ def test_cancelled_reservation_marks_the_deal_lost(api, admin, agents, db):
     assert summary["by_stage"]["LOST"] == 1
 
 
-def test_unconfirmed_financial_features_are_off_by_default(api, admin, agents, db):
+def test_payment_schedule_on_cost_estimate_off(api, admin, agents, db):
     reservation = _reserve(api, admin, db)
-    assert api.get(f"{API}/transactions/features", headers=admin).json() == {"payment_schedule": False,
+    assert api.get(f"{API}/transactions/features", headers=admin).json() == {"payment_schedule": True,
                                                                             "cost_estimate": False}
-    for path in ("payment-plan", "cost-breakdown"):
-        assert api.get(f"{API}/transactions/{reservation.transaction_id}/{path}", headers=admin).status_code == 404
+    # The payment schedule is on since the second interview; the tax and fee estimate is still off.
+    assert api.get(f"{API}/transactions/{reservation.transaction_id}/payment-plan", headers=admin).status_code == 200
+    assert api.get(f"{API}/transactions/{reservation.transaction_id}/cost-breakdown", headers=admin).status_code == 404

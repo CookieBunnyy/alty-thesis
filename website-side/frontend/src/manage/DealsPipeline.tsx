@@ -9,6 +9,8 @@ import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
+import { DealSteps } from "./dealSteps"
+import { FINANCING_LABEL, nextStep, type Milestone } from "./dealStepsData"
 
 type Deal = {
   id: number; stage: string; client_id: string; buyer_name: string | null; buyer_phone: string | null; buyer_email: string | null
@@ -17,13 +19,14 @@ type Deal = {
   reservation_status: string | null; developer_status: string; closing_date: string | null; lost_reason: string | null
   reservation_transaction_id: string | null; sale_transaction_id: string | null; notes: string | null; created_by: string | null
   created_at: string; updated_at: string
+  financing_type: string | null; equity_terms_months: number | null; milestones?: Milestone[]
   events?: { id: number; from_stage: string | null; to_stage: string | null; changes: Record<string, { old: string | null; new: string | null }>; note: string | null; actor: string | null; created_at: string }[]
 }
-type Summary = { by_stage: Record<string, number>; stages: string[]; viewing_types: string[]; developer_statuses: string[] }
+type Summary = { by_stage: Record<string, number>; stages: string[]; viewing_types: string[]; developer_statuses: string[]; financing_types: string[] }
 type Option = { id: string; label: string }
 
 const STAGE_LABEL: Record<string, string> = {
-  INQUIRY: "Inquiry", VIEWING: "Viewing", RESERVED: "Reserved", DEVELOPER_PROCESSING: "Developer processing", CLOSED: "Closed", LOST: "Lost",
+  INQUIRY: "Inquiry", VIEWING: "Viewing", RESERVED: "Reserved", DEVELOPER_PROCESSING: "Under evaluation", CLOSED: "Closed", LOST: "Lost",
 }
 const DEV_LABEL: Record<string, string> = { NOT_STARTED: "Not started", SUBMITTED: "Submitted", IN_PROCESS: "In process", APPROVED: "Approved", RETURNED: "Returned" }
 const stageLabel = (s: string) => t(STAGE_LABEL[s] ?? s)
@@ -32,7 +35,7 @@ const stageLabel = (s: string) => t(STAGE_LABEL[s] ?? s)
 export function SellerDealsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <PageHeader title="Your deals, from inquiry to closing" subtitle="Record your buyers' inquiries and viewings (physical or virtual). Reservation, developer processing and closing are recorded by Abellar Realty." />
+      <PageHeader title="Your deals, from inquiry to closing" subtitle="Record your buyers' inquiries and viewings (physical or virtual), and follow each sale: pending, reserved, under evaluation, closed. Abellar Realty records the reservation, the steps after it and the closing." />
       <DealsPipeline mode="seller" />
     </div>
   )
@@ -56,7 +59,8 @@ export function DealsPipeline({ mode }: { mode: "company" | "seller" }) {
     { key: "buyer", label: "Buyer", sort: (d) => d.buyer_name ?? "", render: (d) => <span className="font-semibold">{text(d.buyer_name)}</span> },
     { key: "property", label: "Property / project", sort: (d) => d.property_title ?? "", render: (d) => <span className="min-w-0"><span className="block truncate">{text(d.property_title)}</span>{d.project_name && <span className="block truncate text-xs text-ab-faint">{d.project_name}</span>}</span> },
     ...(mode === "company" ? [{ key: "seller", label: "Seller", sort: (d: Deal) => d.seller_name ?? "", render: (d: Deal) => text(d.seller_name), hideOnPhone: true }] : []),
-    { key: "stage", label: "Stage", sort: (d) => d.stage, render: (d) => <Badge value={d.stage} /> },
+    { key: "stage", label: "Stage", sort: (d) => d.stage, render: (d) => <span className="inline-flex items-center gap-1.5"><Badge value={d.stage} />{(d.stage === "INQUIRY" || d.stage === "VIEWING") && <span className="text-xs text-ab-faint">{t("Pending")}</span>}</span> },
+    { key: "next", label: "Next step", sort: (d) => nextStep(d.milestones) ?? "", render: (d) => (["RESERVED", "DEVELOPER_PROCESSING", "CLOSED"].includes(d.stage) ? text(nextStep(d.milestones) ? t(nextStep(d.milestones)!) : null) : "—"), hideOnPhone: true },
     { key: "viewing", label: "Viewing", sort: (d) => d.viewing_at ?? "", render: (d) => (d.viewing_type ? `${statusLabel(d.viewing_type)}${d.viewing_at ? ` · ${dateTime(d.viewing_at)}` : ""}` : "—"), hideOnPhone: true },
     { key: "inquiry", label: "Inquiry date", sort: (d) => d.inquiry_date ?? "", render: (d) => (d.inquiry_date ? date(d.inquiry_date) : "—"), hideOnPhone: true },
     { key: "updated", label: "Last update", sort: (d) => d.updated_at, render: (d) => date(d.updated_at) },
@@ -142,6 +146,7 @@ function DealDrawer({ deal: listed, summary, mode, canManage, onClose, onChanged
           ["Viewing", deal.viewing_type ? `${statusLabel(deal.viewing_type)}${deal.viewing_at ? ` · ${dateTime(deal.viewing_at)}` : ""}` : null],
           ["Reservation date", deal.reservation_date ? date(deal.reservation_date) : null],
           ["Reservation status", deal.reservation_status ? statusLabel(deal.reservation_status) : null],
+          ["Financing", deal.financing_type ? t(FINANCING_LABEL[deal.financing_type] ?? deal.financing_type) : null],
           ["Developer processing", t(DEV_LABEL[deal.developer_status] ?? deal.developer_status)],
           ["Closing date", deal.closing_date ? date(deal.closing_date) : null],
           ["Why it was lost", deal.lost_reason],
@@ -165,6 +170,7 @@ function DealDrawer({ deal: listed, summary, mode, canManage, onClose, onChanged
           <p className="mt-2 text-xs text-ab-faint">{t("The deal closes when its sale is recorded: from the sale document, or Proceed to sale on the reservation.")}</p>
         </Section>
       )}
+      <DealSteps deal={deal} financingTypes={summary.financing_types ?? []} onChanged={async () => { await detail.reload(); onChanged() }} />
       <Section title="History">
         <LoadState loading={detail.loading && !detail.data} error={detail.error} onRetry={detail.reload} />
         <ol className="space-y-2">

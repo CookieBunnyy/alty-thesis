@@ -14,6 +14,27 @@ from sqlalchemy.orm import Session
 from app.models.extraction import DocumentExtraction, DocumentSchema
 
 REVIEWED_TYPES = {"COMMISSION_VOUCHER"}
+# The voucher details Abellar Realty listed (second interview); set up by
+# migration 0026, and editable in Document Repository > voucher fields.
+DEFAULT_VOUCHER_FIELDS = [
+    {"key": "agent_name", "label": "Agent name", "aliases": ["Agent", "Name of agent", "Seller", "Payee", "Pay to"],
+     "type": "text", "required": True},
+    {"key": "voucher_date", "label": "Date", "aliases": ["Voucher date", "Date prepared", "Date issued"],
+     "type": "date", "required": True},
+    {"key": "tcp", "label": "TCP", "aliases": ["Total contract price", "Contract price", "Selling price"],
+     "type": "money", "required": True},
+    {"key": "particulars", "label": "Particulars", "aliases": ["Description", "Details", "Remarks"],
+     "type": "text", "required": True},
+    {"key": "amount", "label": "Amount", "aliases": ["Amount paid", "Total amount", "Gross amount"],
+     "type": "money", "required": True},
+    {"key": "payment_method", "label": "Mode of payment",
+     "aliases": ["Paid through", "Payment method", "Paid via", "Payment mode", "Mode"], "type": "text",
+     "required": True},
+    {"key": "commission_amount", "label": "Commission amount",
+     "aliases": ["Commission", "Net commission", "Commission due"], "type": "money", "required": True},
+    {"key": "bank_name", "label": "Bank name", "aliases": ["Bank", "Bank / branch"], "type": "text",
+     "required": True},
+]
 _PAIR = re.compile(r"^\s*([A-Za-z][A-Za-z0-9 ./'()#&%-]{0,62}?)\s*[:\t]\s*(.*?)\s*$")
 _SPACED = re.compile(r"^\s*([A-Za-z][A-Za-z0-9 ./'()#&%-]{1,40}?)\s{3,}(\S.*?)\s*$")
 

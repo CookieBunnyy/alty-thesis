@@ -12,6 +12,7 @@ export type Series = { key: string; label: string; color: string; values: number
 /** "2026-07" -> "Jul" (plus the year on January and the first column). */
 function monthLabel(month: string, index: number): string {
   const [year, m] = month.split("-")
+  if (m?.startsWith("Q")) return index === 0 || m === "Q1" ? `${m} ${year}` : m
   const index0 = Number(m) - 1
   const name = index0 >= 0 && index0 < 12 ? new Date(2000, index0, 1).toLocaleString(locale(), { month: "short" }) : month
   return index === 0 || m === "01" ? `${name} ${year.slice(2)}` : name

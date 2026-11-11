@@ -6,6 +6,8 @@ import { statusLabel } from "./format"
 import { Button } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { t } from "./i18n"
+import { SalesTermsFields } from "./listingTerms"
+import { termsBody, termsFrom } from "./listingTermsData"
 import { lotAreaLong } from "@/lib/area"
 
 export type Listing = {
@@ -21,6 +23,10 @@ export type Listing = {
   lot_area_sqm?: number | string | null
   project_name?: string | null
   floor_area_sqm?: number | string | null
+  property_status?: string | null
+  financing_options?: string[] | null
+  reservation_fee?: number | string | null
+  equity_terms_months?: number | null
   marketing_status?: string
   marketing_approved_by?: string | null
   marketing_approved_at?: string | null
@@ -104,6 +110,7 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
     branch_id: listing.branch_id == null ? "" : String(listing.branch_id),
     cancellation_reason: "",
   })
+  const [terms, setTerms] = useState(() => termsFrom(listing))
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }))
@@ -128,8 +135,11 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
     if ((lat === null) !== (lng === null)) return setError(t("Enter both latitude and longitude, or neither."))
     if (lat !== null && (lat < -90 || lat > 90 || lng! < -180 || lng! > 180)) return setError(t("Latitude must be −90 to 90 and longitude −180 to 180."))
     if (cancelsReservation && form.cancellation_reason.trim().length < 3) return setError(t("Please give the reason for cancelling the reservation."))
+    const salesTerms = termsBody(terms)
+    if (typeof salesTerms === "string") return setError(t(salesTerms))
 
     const next: Record<string, unknown> = {
+      ...salesTerms,
       title: form.title.trim(),
       category: form.category.trim() || null,
       ...numbers,
@@ -147,7 +157,8 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
       partner_id: form.partner_id ? Number(form.partner_id) : null,
       branch_id: form.branch_id ? Number(form.branch_id) : null,
     }
-    const current: Record<string, unknown> = { ...listing, amenity_list: amenities, photos: listing.photos ?? [] }
+    const current: Record<string, unknown> = { ...listing, amenity_list: amenities, photos: listing.photos ?? [], financing_options: listing.financing_options ?? [],
+      reservation_fee: listing.reservation_fee == null ? null : Number(listing.reservation_fee) }
     const changes = Object.fromEntries(
       Object.entries(next).filter(([key, value]) => JSON.stringify(value ?? null) !== JSON.stringify(current[key] ?? null)
         && !(typeof value === "number" && Number(current[key]) === value)),
@@ -208,6 +219,7 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
           <Field label="Total price (₱)"><input className={field} inputMode="decimal" value={form.price_total} onChange={(e) => set("price_total", e.target.value)} /></Field>
           <Field label="Initial down payment (₱)"><input className={field} inputMode="decimal" value={form.initial_dp} onChange={(e) => set("initial_dp", e.target.value)} /></Field>
           <Field label="Monthly rate (₱)"><input className={field} inputMode="decimal" value={form.monthly_rate} onChange={(e) => set("monthly_rate", e.target.value)} /></Field>
+          <SalesTermsFields terms={terms} onChange={setTerms} price={form.price_total} downPayment={form.initial_dp} monthly={form.monthly_rate} />
           <Field label="Layout type"><input className={field} value={form.layout_type} onChange={(e) => set("layout_type", e.target.value)} /></Field>
           <Field label="Bedrooms"><input className={field} inputMode="numeric" value={form.num_bedrooms} onChange={(e) => set("num_bedrooms", e.target.value)} /></Field>
           <Field label="Bathrooms"><input className={field} inputMode="numeric" value={form.num_bathrooms} onChange={(e) => set("num_bathrooms", e.target.value)} /></Field>

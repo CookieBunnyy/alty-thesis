@@ -12,7 +12,7 @@ import { t } from "./i18n"
 type Group = { name: string; sales?: number; revenue?: number; applications?: number; recruited?: number }
 type Dashboard = {
   year: number
-  sales: { totals: { sales: number; revenue: number; commission: number }; top_sellers: Group[]; by_team: Group[]; trend: { period: string; sales: number; revenue: number }[] }
+  sales: { totals: { sales: number; revenue: number; commission: number }; top_sellers: Group[]; top_sellers_month?: Group[]; top_sellers_quarter?: Group[]; by_team: Group[]; trend: { period: string; sales: number; revenue: number }[] }
   recruitment?: { totals: { applications: number; recruited: number }; top_recruiters: Group[]; by_team: Group[]; trend: { period: string; applications: number; recruited: number }[] }
 }
 
@@ -52,7 +52,9 @@ export function SalesRecruitmentPanel() {
             ))}
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Ranked title="Top sellers" rows={sales.top_sellers} value={(g) => pesoShort(g.revenue ?? 0)} empty="No completed sales yet this year." />
+            <Ranked title="Top sellers this month" rows={sales.top_sellers_month ?? []} value={(g) => pesoShort(g.revenue ?? 0)} empty="No completed sales yet this month." />
+            <Ranked title="Top sellers this quarter" rows={sales.top_sellers_quarter ?? []} value={(g) => pesoShort(g.revenue ?? 0)} empty="No completed sales yet this quarter." />
+            <Ranked title="Top sellers this year" rows={sales.top_sellers} value={(g) => pesoShort(g.revenue ?? 0)} empty="No completed sales yet this year." />
             <Ranked title="By team / cluster" rows={sales.by_team} value={(g) => pesoShort(g.revenue ?? 0)} empty="No completed sales yet this year." />
           </div>
           <div className="mt-4">

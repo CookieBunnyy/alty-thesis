@@ -17,7 +17,7 @@ from app.models.payment import TransactionPayment
 from app.models.workforce import AgentApplicant, AgentAssessment, ApplicantForm
 from app.models.listing_assignment import ListingAssignment
 from app.models.deal import Deal, DealEvent
-from app.models.commission import CommissionRecord, CommissionStructure
+from app.models.commission import CommissionRecord, CommissionRelease, CommissionStructure
 from app.models.extraction import DocumentExtraction, DocumentSchema
 from app.models.bulletin import BulletinPost
 from app.models.trip import Trip, TripBuyer, TripNotice
@@ -50,6 +50,7 @@ __all__ = [
 	"Deal",
 	"DealEvent",
 	"CommissionRecord",
+	"CommissionRelease",
 	"CommissionStructure",
 	"BulletinPost",
 	"Trip",

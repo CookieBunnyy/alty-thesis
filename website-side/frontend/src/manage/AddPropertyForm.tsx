@@ -17,6 +17,8 @@ import { BoundaryEditor } from "./BoundaryEditor"
 import type { Listing } from "./PropertyEditForm"
 import { lotAreaLong } from "@/lib/area"
 import { t } from "./i18n"
+import { SalesTermsFields } from "./listingTerms"
+import { termsBody, termsFrom } from "./listingTermsData"
 
 type Developer = { id: number; name: string; status: string; accredited?: boolean; partner_type?: string | null; accreditation_status?: string }
 export type DraftListing = {
@@ -27,6 +29,7 @@ export type DraftListing = {
   has_balcony: boolean | null; has_kitchen: boolean | null; has_backyard: boolean | null; has_garage: boolean | null
   garage_spaces: number | null; lot_area_sqm: number | string | null; floor_area_sqm: number | string | null
   boundary?: unknown
+  property_status?: string | null; financing_options?: string[] | null; reservation_fee?: number | string | null; equity_terms_months?: number | null
 }
 
 const field = "mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm focus:border-ab-accent focus:outline-none"
@@ -74,6 +77,7 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
     has_balcony: Boolean(listing?.has_balcony), has_kitchen: Boolean(listing?.has_kitchen),
     has_backyard: Boolean(listing?.has_backyard), has_garage: Boolean(listing?.has_garage), garage_spaces: str(listing?.garage_spaces ?? 0),
   })
+  const [terms, setTerms] = useState(() => termsFrom(listing))
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const [picking, setPicking] = useState(false)
@@ -97,7 +101,10 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
     const lat = num(form.lat)
     const lng = num(form.lng)
     if ((lat === null) !== (lng === null)) return setError(t("Enter both latitude and longitude, or neither."))
+    const salesTerms = termsBody(terms)
+    if (typeof salesTerms === "string") return setError(t(salesTerms))
     const body = {
+      ...salesTerms,
       partner_id: Number(form.partner_id), title: form.title.trim(), category: form.category.trim(),
       project_name: form.project_name.trim() || null, ...numbers, ...areas, lat, lng,
       layout_type: form.layout_type.trim() || null, village_name: form.village_name.trim() || null,
@@ -174,6 +181,7 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
             <Field label="Total contract price (₱)"><input className={field} inputMode="decimal" value={form.price_total} onChange={(e) => set("price_total", e.target.value)} /></Field>
             <Field label="Initial down payment (₱)"><input className={field} inputMode="decimal" value={form.initial_dp} onChange={(e) => set("initial_dp", e.target.value)} /></Field>
             <Field label="Monthly rate (₱)"><input className={field} inputMode="decimal" value={form.monthly_rate} onChange={(e) => set("monthly_rate", e.target.value)} /></Field>
+            <SalesTermsFields terms={terms} onChange={setTerms} price={form.price_total} downPayment={form.initial_dp} monthly={form.monthly_rate} />
             <Field label="Layout / unit type"><input className={field} value={form.layout_type} onChange={(e) => set("layout_type", e.target.value)} placeholder={t("e.g. Studio, 2-BR")} /></Field>
             <Field label="Bedrooms"><input className={field} inputMode="numeric" value={form.num_bedrooms} onChange={(e) => set("num_bedrooms", e.target.value)} /></Field>
             <Field label="Bathrooms"><input className={field} inputMode="numeric" value={form.num_bathrooms} onChange={(e) => set("num_bathrooms", e.target.value)} /></Field>

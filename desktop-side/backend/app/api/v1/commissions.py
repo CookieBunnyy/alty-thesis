@@ -2,8 +2,14 @@
 
 Company staff can read them; the Administrator records,
 approves and releases them; the Filing Manager and management attach the
-supporting commission vouchers. A seller sees their own records only when
-management has turned that on for them (``agents.commission_visible``).
+supporting commission vouchers. Sellers see their own records (received and
+upcoming) unless management turned that off for them (``agents.commission_visible``).
+
+Second interview: the rate depends on the agreement, usually 3-5% of the TCP
+(mostly 5%), so new sale records start at ``DEFAULT_COMMISSION_RATE_PERCENT``
+of the TCP when no amount is given. The buyer's bank / Pag-IBIG / SSS loan
+usually pays in one lump sum, so a commission is released all at once or in
+parts; each payout records how it was paid (ATM, bank transfer...) and the bank.
 """
 
 from __future__ import annotations
@@ -16,11 +22,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_company_user, get_seller_user, require_filing, require_management
 from app.models.agent import Agent
 from app.models.commission import (APPROVAL_STATUSES, COMMISSION_BASES, COMMISSION_KINDS, COMMISSION_STATUSES,
-                                   CommissionRecord, CommissionStructure)
+                                   RELEASE_METHODS, CommissionRecord, CommissionRelease, CommissionStructure)
 from app.models.document import Document
 from app.models.partner import Partner
 from app.models.property_listing import PropertyListing
@@ -102,6 +109,25 @@ class ApprovalInput(BaseModel):
 class ReleaseInput(BaseModel):
     released_on: date
     amount: Decimal | None = Money
+    method: str | None = None
+    bank_name: str | None = Field(default=None, max_length=120)
+    reference: str | None = Field(default=None, max_length=120)
+    particulars: str | None = Field(default=None, max_length=500)
+
+    @field_validator("method")
+    @classmethod
+    def known_method(cls, value):
+        if value is None or not value.strip():
+            return None
+        value = value.strip().upper()
+        if value not in RELEASE_METHODS:
+            raise ValueError(f"Method must be one of: {', '.join(RELEASE_METHODS)}")
+        return value
+
+    @field_validator("bank_name", "reference", "particulars")
+    @classmethod
+    def blank_is_none(cls, value):
+        return (value or "").strip() or None
 
 
 class VoucherInput(BaseModel):
@@ -151,6 +177,11 @@ def _record(db: Session, r: CommissionRecord) -> dict:
         "status": r.status, "approval_status": r.approval_status, "approved_by": r.approved_by,
         "approved_at": r.approved_at, "approval_note": r.approval_note,
         "released_amount": _num(r.released_amount), "released_on": r.released_on,
+        "releases": [{"id": x.id, "amount": _num(x.amount), "released_on": x.released_on, "method": x.method,
+                      "bank_name": x.bank_name, "reference": x.reference, "particulars": x.particulars,
+                      "recorded_by": x.recorded_by}
+                     for x in db.execute(select(CommissionRelease).where(CommissionRelease.record_id == r.id)
+                                         .order_by(CommissionRelease.released_on, CommissionRelease.id)).scalars()],
         "voucher_document_id": r.voucher_document_id,
         "voucher": {"id": voucher.id, "document_id": voucher.document_id, "name": voucher.document_name} if voucher else None,
         "record_date": r.record_date, "created_by": r.created_by, "created_at": r.created_at, "updated_at": r.updated_at,
@@ -259,7 +290,8 @@ def summary(db: Session = Depends(get_db), _user: User = Depends(get_company_use
             "released": {"count": released[0], "amount": released[1]},
             "without_voucher": int(without_voucher),
             "kinds": COMMISSION_KINDS, "statuses": COMMISSION_STATUSES, "approval_statuses": APPROVAL_STATUSES,
-            "bases": COMMISSION_BASES}
+            "bases": COMMISSION_BASES, "release_methods": RELEASE_METHODS,
+            "default_rate_percent": settings.DEFAULT_COMMISSION_RATE_PERCENT}
 
 
 @router.get("/{record_id}")
@@ -288,6 +320,13 @@ def _apply(db: Session, record: CommissionRecord, values: dict) -> dict:
         values["amount"] = commissions.suggest(structure, values.get("basis_amount") or record.basis_amount,
                                                values.get("monthly_rent") or record.monthly_rent)
         values["rate_percent"] = values.get("rate_percent") or structure.rate_percent
+    # A rate of the TCP (the usual 5% when none is given) for a sale with no amount.
+    basis = values.get("basis_amount") or record.basis_amount
+    if values.get("amount") is None and structure is None and (values.get("kind") or record.kind) == "SALE" \
+            and basis and not record.amount:
+        rate = values.get("rate_percent") or record.rate_percent or Decimal(str(settings.DEFAULT_COMMISSION_RATE_PERCENT))
+        values["rate_percent"] = rate
+        values["amount"] = (Decimal(basis) * Decimal(rate) / 100).quantize(commissions.CENT)
     changes = {}
     for field, value in values.items():
         if getattr(record, field) != value:
@@ -308,8 +347,8 @@ def create_record(payload: RecordInput, db: Session = Depends(get_db), user: Use
                               amount=Decimal(0))
     _apply(db, record, values)
     if values.get("amount") is None and record.amount == 0:
-        raise HTTPException(status_code=422, detail="Enter the agreed commission amount (or choose a structure "
-                                                    "that gives one)")
+        raise HTTPException(status_code=422, detail="Enter the agreed commission amount, or the TCP for the "
+                                                    "usual rate (or choose a structure that gives one)")
     db.add(record)
     db.flush()
     record_audit(db, "COMMISSION_RECORDED", actor=user, entity_type="commission_records", entity_id=record.id,
@@ -368,10 +407,16 @@ def release(record_id: int, payload: ReleaseInput, db: Session = Depends(get_db)
     paid = Decimal(record.released_amount or 0) + Decimal(amount)
     if paid > Decimal(record.amount):
         raise HTTPException(status_code=422, detail="That is more than the commission amount")
+    if Decimal(amount) <= 0:
+        raise HTTPException(status_code=422, detail="Enter the amount released")
     record.released_amount, record.released_on = paid, payload.released_on
     record.status = "RELEASED" if paid >= Decimal(record.amount) else "PARTIALLY_RELEASED"
+    db.add(CommissionRelease(record_id=record.id, amount=amount, released_on=payload.released_on,
+                             method=payload.method, bank_name=payload.bank_name, reference=payload.reference,
+                             particulars=payload.particulars, recorded_by=_actor(user)))
     record_audit(db, "COMMISSION_RELEASED", actor=user, entity_type="commission_records", entity_id=record_id,
-                 details={"amount": str(amount), "released_on": payload.released_on.isoformat()})
+                 details={"amount": str(amount), "released_on": payload.released_on.isoformat(),
+                          "method": payload.method, "bank_name": payload.bank_name})
     db.commit()
     return _record(db, record)
 
@@ -406,7 +451,7 @@ def attach_voucher(record_id: int, payload: VoucherInput, db: Session = Depends(
 
 @seller_router.get("/commissions")
 def my_commissions(db: Session = Depends(get_db), user: User = Depends(get_seller_user)):
-    """My commission records, when management has allowed me to see them."""
+    """My commission records (received and upcoming), unless management turned them off for me."""
     agent = db.get(Agent, user.agent_id)
     if agent is None or not agent.commission_visible:
         raise HTTPException(status_code=403, detail="Your commission records aren't shared with you yet. "
@@ -416,5 +461,5 @@ def my_commissions(db: Session = Depends(get_db), user: User = Depends(get_selle
                       .order_by(CommissionRecord.record_date.desc())).scalars()
     keep = ("id", "kind", "transaction_date", "buyer_name", "property_title", "project_name", "property_description",
             "amount", "seller_share_amount", "status", "approval_status", "released_amount", "released_on",
-            "record_date", "agreement_reference")
+            "record_date", "agreement_reference", "rate_percent", "basis_amount", "releases")
     return [{k: v for k, v in _record(db, r).items() if k in keep} for r in rows]

@@ -55,6 +55,26 @@ export interface Property {
   nearby_establishments?: any;
   details?: string;
   commute_info?: CommuteInfo; // set by the chat service (OSRM driving route) for recommendations
+  /** RFO or pre-selling, financing the developer accepts, and the sample computation. */
+  property_status?: "RFO" | "PRE_SELLING" | null;
+  financing_options?: string[];
+  reservation_fee?: number | null;
+  equity_terms_months?: number | null;
+  sample_computation?: SampleComputation | null;
+  developer?: string | null;
+  project_name?: string | null;
+}
+
+export interface SampleComputation {
+  tcp: number;
+  reservation_fee: number | null;
+  down_payment: number | null;
+  net_equity: number | null;
+  equity_terms_months: number | null;
+  monthly_equity: number | null;
+  amount_to_finance: number | null;
+  monthly_amortization: number | null;
+  note: string;
 }
 
 export interface ChatMessage {
@@ -170,6 +190,10 @@ export interface NearbyAgent {
   straight_line_km: number | null;
   road_distance_km: number | null;
   travel_time_min: number | null;
+  /** Assigned by Abellar to market this property (listed first). */
+  assigned?: boolean;
+  /** Only sent to signed-in clients, when the agent's account has one. */
+  email?: string | null;
 }
 
 export interface NearbyAgentsResult {

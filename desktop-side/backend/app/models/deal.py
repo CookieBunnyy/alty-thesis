@@ -20,6 +20,26 @@ DEAL_STAGES = ("INQUIRY", "VIEWING", "RESERVED", "DEVELOPER_PROCESSING", "CLOSED
 DEAL_CLOSED = ("CLOSED", "LOST")
 VIEWING_TYPES = ("PHYSICAL", "VIRTUAL")
 DEVELOPER_STATUSES = ("NOT_STARTED", "SUBMITTED", "IN_PROCESS", "APPROVED", "RETURNED")
+# How the buyer pays the balance after the equity (interview 2): through a bank,
+# Pag-IBIG or SSS loan (paid to the developer in one lump sum on loan takeout),
+# the developer's in-house financing (monthly), or cash.
+FINANCING_TYPES = ("BANK", "PAGIBIG", "SSS", "IN_HOUSE", "CASH")
+LOAN_FINANCING = ("BANK", "PAGIBIG", "SSS")
+# The steps after the reservation is sent to the developer, in order
+# (interview 2). Loan steps don't apply to cash or in-house buyers.
+MILESTONES = (
+    ("DOC_RESERVATION_AGREEMENT", "Reservation Agreement signed"),
+    ("DOC_BUYER_INFO_SHEET", "Buyer's Information Sheet"),
+    ("DOC_VALID_IDS", "Valid IDs"),
+    ("DOC_PROOF_OF_INCOME", "Proof of income"),
+    ("EQUITY_PAID", "Equity / down payment fully paid"),
+    ("LOAN_APPLIED", "Loan application submitted"),
+    ("LOAN_APPROVED", "Loan approved: Letter of Guarantee (LOG) released"),
+    ("TURNOVER", "House inspection and turnover (move-in)"),
+    ("FULLY_PAID", "Fully paid: mortgage released, title transferred to the buyer"),
+)
+MILESTONE_KEYS = tuple(key for key, _ in MILESTONES)
+LOAN_MILESTONES = ("LOAN_APPLIED", "LOAN_APPROVED")
 
 
 class Deal(Base):
@@ -46,6 +66,11 @@ class Deal(Base):
     sale_transaction_id: Mapped[str | None] = mapped_column(
         Uuid(as_uuid=False), ForeignKey("transactions.transaction_id", ondelete="SET NULL"), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    financing_type: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    # Months over which the buyer pays the equity (net down payment), e.g. 12 to 24.
+    equity_terms_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # {milestone key: {"done_on": "YYYY-MM-DD", "by": name, "note": text}}
+    milestones: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow,

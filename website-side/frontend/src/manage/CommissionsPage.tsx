@@ -19,11 +19,14 @@ type Record_ = {
   approved_by: string | null; approved_at: string | null; approval_note: string | null; released_amount: number | null; released_on: string | null
   voucher_document_id: number | null; voucher: { id: number; document_id: string; name: string } | null
   record_date: string; created_by: string | null; updated_at: string
+  releases?: Release[]
 }
+type Release = { id: number; amount: number; released_on: string; method: string | null; bank_name: string | null; reference: string | null; particulars: string | null; recorded_by: string | null }
 type Summary = {
   pending_approval: { count: number; amount: number }; approved_unreleased: { count: number; amount: number }
   released: { count: number; amount: number }; without_voucher: number
   kinds: string[]; statuses: string[]; approval_statuses: string[]; bases: string[]
+  release_methods: string[]; default_rate_percent: number
 }
 type Structure = {
   id: number; name: string; kind: string; partner_id: number | null; partner_name: string | null; listing_id: number | null; basis: string
@@ -34,6 +37,8 @@ type Structure = {
 const BASIS: Record<string, string> = { PERCENT_OF_PRICE: "% of the price", FIXED_AMOUNT: "Fixed amount", MONTHS_OF_RENT: "Months of rent", AS_AGREED: "As agreed (no formula)" }
 const APPROVAL_TONE: Record<string, string> = { PENDING: "bg-ab-warning/15 text-ab-warning", APPROVED: "bg-ab-success/15 text-ab-success", REJECTED: "bg-ab-danger/10 text-ab-danger" }
 const field = "mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm focus:border-ab-accent focus:outline-none"
+const METHOD: Record<string, string> = { ATM: "ATM", BANK_TRANSFER: "Bank transfer", CHECK: "Check", CASH: "Cash", E_WALLET: "E-wallet (GCash, Maya)", OTHER: "Other" }
+const releaseLine = (x: Release) => [peso(x.amount), date(x.released_on), x.method ? t(METHOD[x.method] ?? x.method) : null, x.bank_name, x.reference].filter(Boolean).join(" · ")
 const describe = (r: Record_) => (r.kind === "RENTAL" ? r.property_description ?? r.property_title : r.property_title) ?? "—"
 
 export function CommissionsPage() {
@@ -69,7 +74,7 @@ export function CommissionsPage() {
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
         title="Commissions and their vouchers"
-        subtitle="Each sale or rental commission with its agreed amount, approval, release and supporting commission voucher. ALTY doesn't assume any commission rate: amounts are entered as agreed, or suggested by a structure management sets up."
+        subtitle="Each sale or rental commission with its agreed amount, approval, release and supporting commission voucher. The rate depends on the agreement (usually 3–5% of the TCP, mostly 5%); it's released all at once or in parts."
         actions={canManage && <Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t("New commission")}</Button>}
       />
       <div role="tablist" aria-label={t("Commissions view")} className="flex w-fit rounded-xl border border-ab-border bg-ab-card p-1">
@@ -96,13 +101,13 @@ export function CommissionsPage() {
         </>
       )}
       {structures && view === "structures" && <Structures structures={structures} canManage={canManage} onChanged={() => void reload()} />}
-      {selected && summary && <RecordDrawer record={selected} canManage={canManage} onClose={close} onChanged={() => void reload()} />}
-      {creating && structures && <RecordForm structures={structures} onClose={() => setCreating(false)} onSaved={(r) => { setCreating(false); void reload().then(() => open(String(r.id))) }} />}
+      {selected && summary && <RecordDrawer record={selected} methods={summary.release_methods ?? Object.keys(METHOD)} canManage={canManage} onClose={close} onChanged={() => void reload()} />}
+      {creating && structures && <RecordForm structures={structures} defaultRate={summary?.default_rate_percent ?? 5} onClose={() => setCreating(false)} onSaved={(r) => { setCreating(false); void reload().then(() => open(String(r.id))) }} />}
     </div>
   )
 }
 
-function RecordDrawer({ record: r, canManage, onClose, onChanged }: { record: Record_; canManage: boolean; onClose: () => void; onChanged: () => void }) {
+function RecordDrawer({ record: r, methods, canManage, onClose, onChanged }: { record: Record_; methods: string[]; canManage: boolean; onClose: () => void; onChanged: () => void }) {
   const { api } = useStaffAuth()
   const toast = useToast()
   const [busy, setBusy] = useState(false)
@@ -159,9 +164,22 @@ function RecordDrawer({ record: r, canManage, onClose, onChanged }: { record: Re
           ["Approval", `${statusLabel(r.approval_status)}${r.approved_by ? ` · ${r.approved_by}, ${dateTime(r.approved_at)}` : ""}`],
           ["Approval note", r.approval_note],
           ["Released", r.released_amount ? `${peso(r.released_amount)} · ${date(r.released_on)}` : null],
+          ["Still to release", r.status !== "CANCELLED" && r.amount - (r.released_amount ?? 0) > 0 ? peso(r.amount - (r.released_amount ?? 0)) : null],
           ["Recorded by", r.created_by ? `${r.created_by} · ${date(r.record_date)}` : null],
         ]} />
       </Section>
+      {(r.releases?.length ?? 0) > 0 && (
+        <Section title="Payouts">
+          <ol className="space-y-1.5 text-sm">
+            {r.releases!.map((x, index) => (
+              <li key={x.id} className="rounded-xl border border-ab-border px-3 py-2">
+                <span className="font-semibold">{t("Payout {n}", { n: index + 1 })}</span> · {releaseLine(x)}
+                {(x.particulars || x.recorded_by) && <span className="block text-xs text-ab-faint">{[x.particulars, x.recorded_by].filter(Boolean).join(" · ")}</span>}
+              </li>
+            ))}
+          </ol>
+        </Section>
+      )}
       <Section title="Commission voucher">
         {r.voucher ? (
           <p className="text-sm"><Link to={`/manage/documents?id=${r.voucher.document_id}`} className="font-semibold text-ab-accent hover:underline">{r.voucher.name}</Link></p>
@@ -169,7 +187,7 @@ function RecordDrawer({ record: r, canManage, onClose, onChanged }: { record: Re
       </Section>
       {dialog === "reject" && <NoteDialog title={t("Reject commission")} label={t("Reason *")} busy={busy} onClose={() => setDialog(null)}
         onConfirm={(note) => void run(api(`/commissions/${r.id}/approval`, { method: "POST", body: JSON.stringify({ decision: "REJECTED", note }) }), t("Commission rejected."))} />}
-      {dialog === "release" && <ReleaseDialog record={r} busy={busy} onClose={() => setDialog(null)}
+      {dialog === "release" && <ReleaseDialog record={r} methods={methods} busy={busy} onClose={() => setDialog(null)}
         onConfirm={(body) => void run(api(`/commissions/${r.id}/release`, { method: "POST", body: JSON.stringify(body) }), t("Release recorded."))} />}
       {dialog === "voucher" && <VoucherDialog record={r} busy={busy} onClose={() => setDialog(null)}
         onConfirm={(documentId) => void run(api(`/commissions/${r.id}/voucher`, { method: "PUT", body: JSON.stringify({ document_id: documentId }) }), t("Voucher saved."))} />}
@@ -205,17 +223,28 @@ function NoteDialog({ title, label, busy, onClose, onConfirm }: { title: string;
   )
 }
 
-function ReleaseDialog({ record, busy, onClose, onConfirm }: { record: Record_; busy: boolean; onClose: () => void; onConfirm: (body: { released_on: string; amount: string | null }) => void }) {
+function ReleaseDialog({ record, methods, busy, onClose, onConfirm }: { record: Record_; methods: string[]; busy: boolean; onClose: () => void; onConfirm: (body: Record<string, string | null>) => void }) {
   const remaining = record.amount - (record.released_amount ?? 0)
   const [day, setDay] = useState(new Date().toISOString().slice(0, 10))
   const [amount, setAmount] = useState(String(remaining))
+  const [how, setHow] = useState({ method: "", bank_name: "", reference: "", particulars: "" })
+  const setH = (key: keyof typeof how) => (e: { target: { value: string } }) => setHow((h) => ({ ...h, [key]: e.target.value }))
   return (
-    <Modal title={t("Record release")} onClose={onClose} onSubmit={(e) => { e.preventDefault(); onConfirm({ released_on: day, amount: amount || null }) }}
+    <Modal title={t("Record release")} onClose={onClose} onSubmit={(e) => { e.preventDefault(); onConfirm({ released_on: day, amount: amount || null, method: how.method || null, bank_name: how.bank_name.trim() || null, reference: how.reference.trim() || null, particulars: how.particulars.trim() || null }) }}
       footer={<><Button onClick={onClose} disabled={busy}>{t("Cancel")}</Button><Button type="submit" variant="primary" disabled={busy}>{busy && <LoaderCircle className="h-4 w-4 animate-spin" />} {t("Save")}</Button></>}>
       <div className="grid gap-3 p-5 sm:grid-cols-2">
         <label className="text-sm font-medium">{t("Release date")}<input type="date" className={field} value={day} onChange={(e) => setDay(e.target.value)} /></label>
         <label className="text-sm font-medium">{t("Amount released")}<input className={field} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
-        <p className="text-xs text-ab-faint sm:col-span-2">{t("Still unpaid: {v}.", { v: peso(remaining) })}</p>
+        <p className="text-xs text-ab-faint sm:col-span-2">{t("Still unpaid: {v}. Release it all at once, or part of it now and the rest later.", { v: peso(remaining) })}</p>
+        <label className="text-sm font-medium">{t("Paid through")}
+          <select className={field} value={how.method} onChange={setH("method")}>
+            <option value="">{t("Not set")}</option>
+            {methods.map((m) => <option key={m} value={m}>{t(METHOD[m] ?? m)}</option>)}
+          </select>
+        </label>
+        <label className="text-sm font-medium">{t("Bank name")}<input className={field} value={how.bank_name} onChange={setH("bank_name")} placeholder={t("e.g. BDO, BPI, Landbank")} /></label>
+        <label className="text-sm font-medium">{t("Reference no.")}<input className={field} value={how.reference} onChange={setH("reference")} /></label>
+        <label className="text-sm font-medium">{t("Particulars")}<input className={field} value={how.particulars} onChange={setH("particulars")} placeholder={t("as written on the voucher")} /></label>
       </div>
     </Modal>
   )
@@ -244,7 +273,7 @@ function VoucherDialog({ record, busy, onClose, onConfirm }: { record: Record_; 
   )
 }
 
-function RecordForm({ structures, onClose, onSaved }: { structures: Structure[]; onClose: () => void; onSaved: (r: Record_) => void }) {
+function RecordForm({ structures, defaultRate, onClose, onSaved }: { structures: Structure[]; defaultRate: number; onClose: () => void; onSaved: (r: Record_) => void }) {
   const { api } = useStaffAuth()
   const toast = useToast()
   const loadOptions = useCallback(() => Promise.all([
@@ -255,12 +284,19 @@ function RecordForm({ structures, onClose, onSaved }: { structures: Structure[];
   const [txs, sellers] = options.data ?? [[], []]
   const sales = txs.filter((tx) => tx.transaction_type === "SOLD" && tx.status !== "CANCELLED")
   const [form, setForm] = useState({ kind: "SALE", transaction_id: "", agent_id: "", property_description: "", lessor_name: "", lessee_name: "", monthly_rent: "", lease_term_months: "",
-    basis_amount: "", structure_id: "", amount: "", seller_share_amount: "", agreement_reference: "", agreement_notes: "" })
+    basis_amount: "", structure_id: "", amount: "", seller_share_amount: "", agreement_reference: "", agreement_notes: "", rate_percent: String(defaultRate) })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [suggested, setSuggested] = useState<string | null>(null)
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }))
   const sale = sales.find((tx) => tx.transaction_id === form.transaction_id)
+  // The usual rate of the TCP fills the amount (the agreed amount can still be typed).
+  const byRate = (tcp: number | undefined, rate: string) => (tcp && Number(rate) > 0 ? (Math.round(tcp * Number(rate)) / 100).toFixed(2) : "")
+  const pickSale = (id: string) => {
+    const chosen = sales.find((tx) => tx.transaction_id === id)
+    setForm((f) => ({ ...f, transaction_id: id, amount: f.structure_id ? f.amount : byRate(chosen?.amount, f.rate_percent) }))
+  }
+  const setRate = (rate: string) => setForm((f) => ({ ...f, rate_percent: rate, amount: f.structure_id ? f.amount : byRate(sale?.amount, rate) }))
   const usable = structures.filter((s) => s.is_active && s.kind === form.kind)
   const suggest = async (structureId: string) => {
     setForm((f) => ({ ...f, structure_id: structureId }))
@@ -284,6 +320,7 @@ function RecordForm({ structures, onClose, onSaved }: { structures: Structure[];
     setError("")
     const body: Record<string, unknown> = { kind: form.kind }
     for (const [key, value] of Object.entries(form)) if (key !== "kind" && value !== "") body[key] = key === "structure_id" || key === "lease_term_months" ? Number(value) : value
+    if (form.kind !== "SALE" || form.structure_id) delete body.rate_percent
     try {
       const saved = await api<Record_>("/commissions", { method: "POST", body: JSON.stringify(body) })
       toast(t("Commission recorded."))
@@ -310,7 +347,7 @@ function RecordForm({ structures, onClose, onSaved }: { structures: Structure[];
         <LoadState loading={options.loading && !options.data} error={options.error} onRetry={options.reload} />
         {form.kind === "SALE" ? (
           <label className="text-sm font-medium sm:col-span-2">{t("Sale *")}
-            <select className={field} value={form.transaction_id} onChange={set("transaction_id")}>
+            <select className={field} value={form.transaction_id} onChange={(e) => pickSale(e.target.value)}>
               <option value="">{t("Choose a recorded sale…")}</option>
               {sales.map((tx) => <option key={tx.transaction_id} value={tx.transaction_id}>{[date(tx.transaction_date), tx.property_title, tx.client_name, tx.agent_name, peso(tx.amount)].filter(Boolean).join(" · ")}</option>)}
             </select>
@@ -337,6 +374,11 @@ function RecordForm({ structures, onClose, onSaved }: { structures: Structure[];
           </select>
           {suggested && <span className="mt-1 block text-xs font-normal text-ab-faint">{t("Suggested by the structure: {v}. You can change it.", { v: suggested })}</span>}
         </label>
+        {form.kind === "SALE" && !form.structure_id && (
+          <label className="text-sm font-medium">{t("Rate (% of the TCP)")}<input className={field} inputMode="decimal" value={form.rate_percent} onChange={(e) => setRate(e.target.value)} />
+            <span className="mt-1 block text-xs font-normal text-ab-faint">{t("Usually 3–5%, mostly 5%: use what was agreed.")}</span>
+          </label>
+        )}
         <label className="text-sm font-medium">{t("Commission amount *")}<input className={field} inputMode="decimal" value={form.amount} onChange={set("amount")} /></label>
         <label className="text-sm font-medium">{t("Seller's share (if agreed)")}<input className={field} inputMode="decimal" value={form.seller_share_amount} onChange={set("seller_share_amount")} /></label>
         <label className="text-sm font-medium">{t("Agreement reference")}<input className={field} value={form.agreement_reference} onChange={set("agreement_reference")} /></label>
@@ -424,28 +466,43 @@ function StructureForm({ structure, onClose, onSaved }: { structure: Structure |
   )
 }
 
-/** The seller's own commissions, when management shares them. */
+/** The seller's own commissions: received and upcoming (second interview). */
 export function SellerCommissionsPage() {
   const { api } = useStaffAuth()
   const load = useCallback(() => api<Record_[]>("/seller/commissions"), [api])
   const { data, error, loading, reload } = useApiData(load, "seller-commissions")
+  const rows = data ?? []
+  const share = (r: Record_) => r.seller_share_amount ?? r.amount
+  const received = rows.reduce((sum, r) => sum + (r.released_amount ?? 0), 0)
+  const upcoming = rows.filter((r) => r.approval_status !== "REJECTED" && r.status !== "RELEASED").reduce((sum, r) => sum + Math.max(r.amount - (r.released_amount ?? 0), 0), 0)
+  const waiting = rows.filter((r) => r.approval_status === "PENDING").length
   const columns: Column<Record_>[] = [
     { key: "date", label: "Date", sort: (r) => r.transaction_date ?? r.record_date, render: (r) => date(r.transaction_date ?? r.record_date) },
-    { key: "property", label: "Property", sort: (r) => describe(r), render: (r) => describe(r) },
-    { key: "amount", label: "Commission", align: "right", sort: (r) => r.amount, render: (r) => peso(r.amount) },
-    { key: "share", label: "Your share", align: "right", sort: (r) => r.seller_share_amount ?? 0, render: (r) => (r.seller_share_amount != null ? peso(r.seller_share_amount) : "—") },
-    { key: "status", label: "Release", sort: (r) => r.status, render: (r) => <Badge value={r.status} /> },
+    { key: "property", label: "Property", sort: (r) => describe(r), render: (r) => <span className="min-w-0"><span className="block truncate">{describe(r)}</span>{r.buyer_name && <span className="block truncate text-xs text-ab-faint">{r.buyer_name}</span>}</span> },
+    { key: "amount", label: "Commission", align: "right", sort: (r) => r.amount, render: (r) => <span>{peso(r.amount)}{r.rate_percent != null && <span className="block text-xs text-ab-faint">{r.rate_percent}% {t("of the TCP")}</span>}</span> },
+    { key: "share", label: "Your share", align: "right", sort: (r) => share(r), render: (r) => (r.seller_share_amount != null ? peso(r.seller_share_amount) : "—"), hideOnPhone: true },
+    { key: "received", label: "Received", align: "right", sort: (r) => r.released_amount ?? 0, render: (r) => <span>{peso(r.released_amount ?? 0)}{(r.releases ?? []).map((x) => <span key={x.id} className="block text-xs text-ab-faint">{releaseLine(x)}</span>)}</span> },
+    { key: "status", label: "Status", sort: (r) => r.status, render: (r) => <span className="inline-flex flex-col items-start gap-1"><Badge value={r.status} />{r.approval_status !== "APPROVED" && <span className="text-xs text-ab-faint">{statusLabel(r.approval_status)}</span>}</span> },
   ]
   const blocked = error && /aren't shared/.test(error)
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <PageHeader title="Your commissions" subtitle="Your own commission records, when Abellar Realty's management shares them with you." />
+      <PageHeader title="Your commissions" subtitle="What you've received and what's still coming from your sales. Commissions are released all at once or in parts, as the buyer's financing pays." />
       {blocked ? (
         <div className="rounded-2xl border border-dashed border-ab-border bg-ab-card p-6 text-center text-sm text-ab-muted">{t("Your commission records aren't shared with you yet. Ask Abellar Realty's management.")}</div>
       ) : (
         <>
           <LoadState loading={loading && !data} error={error} onRetry={reload} />
-          {data && <DataTable rows={data} columns={columns} rowKey={(r) => String(r.id)} empty="No commission records yet." initialSort={{ key: "date", dir: "desc" }} />}
+          {data && (
+            <>
+              <Tiles items={[
+                { label: "Received", value: pesoShort(received), detail: "Released to you so far" },
+                { label: "Upcoming", value: pesoShort(upcoming), detail: "Recorded, not yet released" },
+                { label: "Waiting for approval", value: waiting },
+              ]} />
+              <DataTable rows={rows} columns={columns} rowKey={(r) => String(r.id)} empty="No commission records yet." initialSort={{ key: "date", dir: "desc" }} />
+            </>
+          )}
         </>
       )}
     </div>

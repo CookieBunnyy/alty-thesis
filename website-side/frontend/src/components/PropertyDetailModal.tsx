@@ -4,6 +4,7 @@ import type { PropertyDetailModalProps, NearbyEstablishmentsMap, LocationPoint }
 
 import { PropertyImageGallery } from '@/components/property-detail-modal/PropertyImageGaller';
 import { PropertyPricingGrid } from '@/components/property-detail-modal/PropertyPricingGrid';
+import { PropertyComputation } from '@/components/property-detail-modal/PropertyComputation';
 import { PropertyFeatures } from '@/components/property-detail-modal/PropertyFeatures';
 import { PropertyAmenities } from '@/components/property-detail-modal/PropertyAmenities';
 import { PropertyNearby } from '@/components/property-detail-modal/PropertyNearby';
@@ -71,6 +72,11 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
                     {categoryLabel(property.category)}
                   </span>
                 )}
+                {property.property_status && (
+                  <span className="inline-block px-2.5 py-1 bg-ab-success/15 text-ab-success text-xs font-semibold rounded-full">
+                    {property.property_status === "RFO" ? "RFO" : "Pre-selling"}
+                  </span>
+                )}
                 {property.layout_type && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-ab-card-2 text-ab-muted text-xs font-semibold rounded-full">
                     <Home className="h-3 w-3" />
@@ -86,6 +92,8 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
             </div>
 
             <PropertyPricingGrid property={property} />
+
+            <PropertyComputation property={property} />
 
             {/* Commute & Route Convenience Score Container */}
             <CommuteCard

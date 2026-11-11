@@ -245,7 +245,7 @@ def test_recruitment_details_and_seller_login(api, admin, agents, db):
     assert onboarded.status_code == 200, onboarded.text
     agent_id = onboarded.json()["agent"]["agent_id"]
     agent = db.get(Agent, agent_id)
-    assert agent.recruited_by_agent_id == agents[0] and agent.branch_id == team and not agent.commission_visible
+    assert agent.recruited_by_agent_id == agents[0] and agent.branch_id == team and agent.commission_visible
     # The recruit signs in to their own seller pages, linked to their record.
     login = api.post(f"{API}/auth/login", data={"username": "rosa.linda", "password": "seller-pass-1"})
     assert login.status_code == 200

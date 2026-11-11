@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { Link } from "@/components/Link"
+import { useLocation } from "@/lib/router"
 import { contains, date, dateTime, isManagement, peso, pesoShort, statusLabel, text, transactionDate } from "./format"
 import { Badge, Button, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
@@ -37,7 +38,8 @@ export function TransactionsPage() {
   const [status, setStatus] = useState("")
   const [type, setType] = useState("")
   const [period, setPeriod] = useState("")
-  const [view, setView] = useState<"board" | "records" | "pipeline">("board")
+  const location = useLocation()
+  const [view, setView] = useState<"board" | "records" | "pipeline">(location.search.get("tab") === "deals" ? "pipeline" : "board")
   const load = useCallback(() => Promise.all([api<Transaction[]>("/transactions?limit=2000"), api<Summary>("/transactions/summary")]), [api])
   const { data, error, loading, reload } = useApiData(load, "transactions")
   const [rows, summary] = data ?? [[], null]

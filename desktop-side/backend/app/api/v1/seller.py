@@ -40,6 +40,7 @@ OWN_DRAFT_FIELDS = {
     "title", "category", "project_name", "partner_id", "price_total", "initial_dp", "monthly_rate",
     "num_bedrooms", "num_bathrooms", "layout_type", "village_name", "lat", "lng", "amenity_list", "details",
     "has_balcony", "has_kitchen", "has_backyard", "has_garage", "garage_spaces", "lot_area_sqm", "floor_area_sqm",
+    "property_status", "financing_options", "reservation_fee", "equity_terms_months",
 }
 
 

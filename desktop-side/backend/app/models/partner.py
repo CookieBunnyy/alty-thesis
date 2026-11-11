@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Date, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -11,6 +11,11 @@ PARTNER_TYPES = ("DEVELOPER", "BROKERAGE", "BANK", "CONTRACTOR", "OTHER")
 PARTNER_STATUSES = ("ACTIVE", "INACTIVE")
 # The accreditation a developer grants Abellar Realty to market its properties.
 ACCREDITATION_STATUSES = ("NONE", "PENDING", "VERIFIED", "EXPIRED", "REVOKED")
+# What the accreditation covers (interview 2): every project nationwide, the
+# projects in a region, or only named projects / clusters. Usually valid for
+# one year and renewed yearly.
+ACCREDITATION_SCOPES = ("ALL_PROJECTS", "REGIONAL", "SPECIFIC_PROJECTS")
+ACCREDITATION_VALID_MONTHS = 12
 
 
 class Partner(Base):
@@ -38,6 +43,11 @@ class Partner(Base):
                                                       server_default="NONE")
     accreditation_reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
     accreditation_valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    accreditation_scope: Mapped[str] = mapped_column(String(20), nullable=False, default="ALL_PROJECTS",
+                                                     server_default="ALL_PROJECTS")
+    accreditation_region: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Project / cluster names, when the scope is SPECIFIC_PROJECTS.
+    accreditation_projects: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     accreditation_valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     accreditation_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     accreditation_verified_by: Mapped[str | None] = mapped_column(String(200), nullable=True)

@@ -19,13 +19,19 @@ from app.models.transaction import PropertyTransaction
 from app.models.workforce import AgentApplicant
 from app.services import commissions
 
-PERIODS = ("day", "month", "year")
+PERIODS = ("day", "month", "quarter", "year")
 NO_TEAM = "No team"
 
 
 def _bucket(day: date, period: str) -> str:
+    if period == "quarter":
+        return f"{day.year:04d}-Q{(day.month - 1) // 3 + 1}"
     return day.isoformat() if period == "day" else f"{day.year:04d}-{day.month:02d}" if period == "month" \
         else f"{day.year:04d}"
+
+
+def quarter_start(day: date) -> date:
+    return date(day.year, (day.month - 1) // 3 * 3 + 1, 1)
 
 
 def _day(value) -> date:
@@ -172,7 +178,10 @@ def dashboard(db: Session, include_recruitment: bool) -> dict:
     sales_trend = sales_report(db, trend_start, today, "month")
     body = {
         "year": today.year,
+        # Top sellers by sales amount, this month and this quarter (second interview).
         "sales": {"totals": sales_year["totals"], "top_sellers": sales_year["top_sellers"][:5],
+                  "top_sellers_month": sales_report(db, date(today.year, today.month, 1), today)["top_sellers"][:5],
+                  "top_sellers_quarter": sales_report(db, quarter_start(today), today)["top_sellers"][:5],
                   "by_team": sales_year["by_team"], "trend": sales_trend["by_period"]},
     }
     if include_recruitment:

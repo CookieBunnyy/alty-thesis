@@ -26,7 +26,7 @@ def _range(start: date | None, end: date | None) -> tuple[date, date]:
 
 @router.get("/sales")
 def sales(start: date | None = None, end: date | None = None,
-          period: str = Query(default="month", pattern="^(day|month|year)$"), agent_id: str | None = None,
+          period: str = Query(default="month", pattern="^(day|month|quarter|year)$"), agent_id: str | None = None,
           team_id: int | None = None, project: str | None = None, listing_id: int | None = None,
           db: Session = Depends(get_db), _user: User = Depends(get_company_user)):
     start, end = _range(start, end)
@@ -35,7 +35,7 @@ def sales(start: date | None = None, end: date | None = None,
 
 @router.get("/recruitment")
 def recruitment(start: date | None = None, end: date | None = None,
-                period: str = Query(default="month", pattern="^(day|month|year)$"), recruiter: str | None = None,
+                period: str = Query(default="month", pattern="^(day|month|quarter|year)$"), recruiter: str | None = None,
                 team_id: int | None = None, db: Session = Depends(get_db), _user: User = Depends(require_management)):
     start, end = _range(start, end)
     return reports.recruitment_report(db, start, end, period, recruiter, team_id)

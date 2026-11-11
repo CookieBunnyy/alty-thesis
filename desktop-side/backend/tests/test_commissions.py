@@ -22,11 +22,18 @@ def _sale(api, admin, db):
     return sold.json()
 
 
-def test_no_rate_is_assumed_and_structures_only_suggest(api, admin, agents, db):
+def test_usual_rate_and_structures_suggest(api, admin, agents, db):
     sale = _sale(api, admin, db)
-    # No amount and no structure: refused (nothing is invented).
-    refused = api.post(f"{API}/commissions", headers=admin, json={"transaction_id": sale["transaction_id"]})
-    assert refused.status_code == 422
+    # No amount and no structure: the usual 5% of the TCP (second interview), editable.
+    usual = api.post(f"{API}/commissions", headers=admin, json={"transaction_id": sale["transaction_id"]})
+    assert usual.status_code == 201, usual.text
+    assert usual.json()["rate_percent"] == 5 and usual.json()["amount"] == round(usual.json()["basis_amount"] * 0.05, 2)
+    agreed_rate = api.post(f"{API}/commissions", headers=admin, json={"transaction_id": sale["transaction_id"],
+                                                                      "rate_percent": "3"}).json()
+    assert agreed_rate["amount"] == round(agreed_rate["basis_amount"] * 0.03, 2)
+    # A rental without an amount is still refused (no rate is assumed for rentals).
+    assert api.post(f"{API}/commissions", headers=admin, json={"kind": "RENTAL", "agent_id": agents[0],
+                                                               "property_description": "Unit"}).status_code == 422
     structure = api.post(f"{API}/commissions/structures", headers=admin, json={
         "name": "Developer X sale terms", "basis": "PERCENT_OF_PRICE", "rate_percent": "4.5",
         "seller_share_percent": "60"}).json()
@@ -57,12 +64,17 @@ def test_approval_release_and_voucher(api, admin, employee, agents, db):
     assert approved["approval_status"] == "APPROVED" and approved["approved_by"]
     future = str(date.today() + timedelta(days=3))
     assert api.post(f"{path}/release", headers=admin, json={"released_on": future}).status_code == 422
-    part = api.post(f"{path}/release", headers=admin, json={"released_on": str(date.today()), "amount": "50000"}).json()
+    assert api.post(f"{path}/release", headers=admin, json={"released_on": str(date.today()), "amount": "1",
+                                                            "method": "PIGEON"}).status_code == 422
+    part = api.post(f"{path}/release", headers=admin, json={"released_on": str(date.today()), "amount": "50000",
+                                                            "method": "atm", "bank_name": "BDO"}).json()
     assert part["status"] == "PARTIALLY_RELEASED" and part["released_amount"] == 50000
+    assert part["releases"][0]["method"] == "ATM" and part["releases"][0]["bank_name"] == "BDO"
     assert api.post(f"{path}/release", headers=admin, json={"released_on": str(date.today()),
                                                             "amount": "90000"}).status_code == 422
     rest = api.post(f"{path}/release", headers=admin, json={"released_on": str(date.today())}).json()
     assert rest["status"] == "RELEASED" and rest["released_amount"] == 120000   # the unpaid 70,000 released
+    assert [r["amount"] for r in rest["releases"]] == [50000, 70000]                # paid in parts
     # The filing manager (legacy Employee) attaches vouchers but can't approve.
     assert api.put(f"{path}/voucher", headers=employee, json={"document_id": 99999}).status_code == 422
     summary = api.get(f"{API}/commissions/summary", headers=employee).json()
@@ -83,7 +95,7 @@ def test_rental_commission_agreement(api, admin, agents, db):
     assert api.post(f"{API}/commissions", headers=admin, json={"kind": "RENTAL", "amount": "1"}).status_code == 422
 
 
-def test_sellers_see_their_commissions_only_when_allowed(api, admin, agents, db):
+def test_sellers_see_their_own_commissions(api, admin, agents, db):
     sale = _sale(api, admin, db)
     api.post(f"{API}/commissions", headers=admin, json={"transaction_id": sale["transaction_id"], "amount": "99000"})
     api.post(f"{API}/users", headers=admin, json={"username": "seller1", "full_name": "S", "role": "Seller",
@@ -92,8 +104,10 @@ def test_sellers_see_their_commissions_only_when_allowed(api, admin, agents, db)
     api.post(f"{API}/users", headers=admin, json={"username": "seller2", "full_name": "S2", "role": "Seller",
                                                   "password": "password123", "agent_id": other_agent})
     seller = login(api, "seller1")
-    assert api.get(f"{API}/seller/commissions", headers=seller).status_code == 403
+    # Shared by default (second interview); management can turn it off per seller.
     assert api.get(f"{API}/commissions", headers=seller).status_code == 403
+    api.put(f"{API}/agents/{sale['agent_id']}/assignment", headers=admin, json={"commission_visible": False})
+    assert api.get(f"{API}/seller/commissions", headers=seller).status_code == 403
     api.put(f"{API}/agents/{sale['agent_id']}/assignment", headers=admin, json={"commission_visible": True})
     mine = api.get(f"{API}/seller/commissions", headers=seller)
     assert mine.status_code == 200 and [r["amount"] for r in mine.json()] == [99000]

@@ -21,6 +21,8 @@ COMMISSION_KINDS = ("SALE", "RENTAL")
 COMMISSION_BASES = ("PERCENT_OF_PRICE", "FIXED_AMOUNT", "MONTHS_OF_RENT", "AS_AGREED")
 COMMISSION_STATUSES = ("UNRELEASED", "PARTIALLY_RELEASED", "RELEASED", "CANCELLED")
 APPROVAL_STATUSES = ("PENDING", "APPROVED", "REJECTED")
+# How a commission (or one instalment of it) was paid out, as on the voucher.
+RELEASE_METHODS = ("ATM", "BANK_TRANSFER", "CHECK", "CASH", "E_WALLET", "OTHER")
 
 
 class CommissionStructure(Base):
@@ -95,3 +97,22 @@ class CommissionRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow,
                                                  onupdate=datetime.utcnow)
+
+
+class CommissionRelease(Base):
+    """One payout of a commission: all at once ("isang bagsakan") or in parts
+    (paonti-onti), each with how and through which bank it was paid."""
+
+    __tablename__ = "commission_releases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    record_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("commission_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    released_on: Mapped[date] = mapped_column(Date, nullable=False)
+    method: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    bank_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    particulars: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    recorded_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)

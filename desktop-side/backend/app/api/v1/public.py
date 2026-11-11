@@ -21,8 +21,10 @@ from app.core.database import get_db
 from app.core.security import get_optional_client
 from app.models.agent import Agent
 from app.services.profile_photos import photo_bytes, photo_version
+from app.models.listing_assignment import ListingAssignment
 from app.models.partner import Partner
 from app.services.partner_logos import logo_bytes, logo_version
+from app.services.payment_plan import sample_computation
 from app.services import reviews as review_service
 from app.models.media import PropertyMedia
 from app.models.property_listing import PropertyListing
@@ -107,6 +109,11 @@ def _labelled_media(db: Session, listing_ids: list[int]) -> dict[int, dict[str, 
 
 def _public_listing(listing: PropertyListing, media: list[str], labelled: dict | None = None) -> dict:
     number = lambda value: float(value) if value is not None else None  # noqa: E731
+    from sqlalchemy.orm import object_session
+
+    session = object_session(listing)
+    partner = session.get(Partner, listing.partner_id) if session is not None and listing.partner_id else None
+    developer = partner.name if partner is not None else None
     return {
         "listing_id": listing.listing_id,
         "listing_code": listing.external_listing_id,
@@ -140,6 +147,13 @@ def _public_listing(listing: PropertyListing, media: list[str], labelled: dict |
         "project_name": listing.project_name,
         "floor_area_sqm": number(listing.floor_area_sqm),
         "status": listing.status,
+        # Second interview: RFO / pre-selling, financing accepted, sample computation.
+        "property_status": listing.property_status,
+        "financing_options": list(listing.financing_options or []),
+        "reservation_fee": number(listing.reservation_fee),
+        "equity_terms_months": listing.equity_terms_months,
+        "sample_computation": sample_computation(listing),
+        "developer": developer,
     }
 
 
@@ -303,8 +317,16 @@ def list_nearby_agents(listing_id: int, request: Request, limit: int = 5,
 
     stats = review_service.review_stats(db, [a.agent_id for a in agents])
 
+    # The sellers assigned to market this property come first (its contacts).
+    assigned = set(db.execute(select(ListingAssignment.agent_id).where(
+        ListingAssignment.listing_id == listing_id, ListingAssignment.removed_at.is_(None))).scalars())
+    emails = dict(db.execute(select(User.agent_id, User.email).where(
+        User.agent_id.in_([a.agent_id for a in agents]), User.is_active.is_(True), User.email.is_not(None))).all()) \
+        if viewer is not None and agents else {}
+
     def card(agent: Agent) -> dict:
         return {**_public_agent(agent, stats, viewer), "completed_sales": agent.completed_sales,
+                "assigned": agent.agent_id in assigned, "email": emails.get(agent.agent_id),
                 "straight_line_km": None, "road_distance_km": None, "travel_time_min": None}
 
     property_point = None
@@ -320,6 +342,7 @@ def list_nearby_agents(listing_id: int, request: Request, limit: int = 5,
         else:
             unlocated.append(entry)
     located.sort(key=lambda pair: pair[0]["straight_line_km"])
+    located_all = list(located)
     located = located[:limit]
 
     routing_status = {"available": False, "mode": "driving",
@@ -340,6 +363,11 @@ def list_nearby_agents(listing_id: int, request: Request, limit: int = 5,
         except routing.RoutingError as exc:
             routing_status = {"available": False, "mode": "driving", "message": exc.message}
     results = [entry for entry, _ in located] + unlocated[: max(0, limit - len(located))]
+    # Assigned sellers always appear, first, even when they're farther away.
+    shown = {entry["agent_id"] for entry in results}
+    extra = [entry for entry, _ in located_all if entry["assigned"] and entry["agent_id"] not in shown] + \
+            [entry for entry in unlocated if entry["assigned"] and entry["agent_id"] not in shown]
+    results = sorted(results + extra, key=lambda entry: not entry["assigned"])
     return {"property_id": listing.listing_id, "property_status": listing.status,
             "ranking": "Geographic (straight-line) proximity to the property",
             "routing": routing_status, "agents": results}

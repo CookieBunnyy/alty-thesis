@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_user, require_management, get_company_user
 from app.models.partner import Partner
+from app.models.deal import Deal
 from app.models.payment import TransactionPayment
 from app.models.transaction import PropertyTransaction
 from app.models.user import User
@@ -194,8 +195,12 @@ def _payments(db: Session, transaction: PropertyTransaction) -> list[Transaction
 
 def _plan_response(db: Session, transaction: PropertyTransaction) -> dict:
     payments = _payments(db, transaction)
+    deal = db.execute(select(Deal).where(Deal.reservation_transaction_id == transaction.transaction_id)
+                      .order_by(Deal.id.desc())).scalars().first()
     return {
-        "plan": build_plan(transaction, payments),
+        "deal_id": deal.id if deal else None,
+        "plan": build_plan(transaction, payments, financing_type=deal.financing_type if deal else None,
+                           equity_terms_months=deal.equity_terms_months if deal else None),
         "payments": [{"id": p.id, "amount": p.amount, "paid_at": p.paid_at, "note": p.note,
                       "recorded_by": p.recorded_by, "created_at": p.created_at} for p in payments],
     }

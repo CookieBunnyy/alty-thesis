@@ -4,6 +4,7 @@ correction, and the link to the commission record."""
 
 import pytest
 
+from app.services.document_review import DEFAULT_VOUCHER_FIELDS
 from tests import documents as build
 from tests.test_commissions import _sale
 from tests.test_document_pipeline import upload
@@ -22,8 +23,27 @@ VOUCHER = [
 
 @pytest.fixture
 def empty_schema(api, admin):
-    yield
     api.put(f"{API}/documents/schemas/COMMISSION_VOUCHER", headers=admin, json={"fields": []})
+    yield
+    api.put(f"{API}/documents/schemas/COMMISSION_VOUCHER", headers=admin,
+            json={"fields": DEFAULT_VOUCHER_FIELDS})
+
+
+def test_abellar_voucher_fields_are_read(api, admin, employee, agents, db):
+    """The details Abellar listed in the second interview are set up by default."""
+    schemas = {row["document_type"]: row["fields"] for row in api.get(f"{API}/documents/schemas", headers=admin).json()}
+    keys = [f["key"] for f in schemas["COMMISSION_VOUCHER"]]
+    assert keys == ["agent_name", "voucher_date", "tcp", "particulars", "amount", "payment_method",
+                    "commission_amount", "bank_name"]
+    doc = upload(api, employee, "abellar-voucher.docx", build.docx([
+        "COMMISSION VOUCHER", "Agent: Angela Cruz", "Date: November 5, 2026", "TCP: PHP 4,000,000.00",
+        "Particulars: Commission, Lot 5 Blk 2 Acacia Estates", "Amount: PHP 200,000.00", "Mode of payment: ATM",
+        "Commission: PHP 200,000.00", "Bank: BDO"]))
+    review = api.get(f"{API}/documents/{doc['document_id']}/extraction", headers=employee).json()
+    assert review["mapped_fields"] == {
+        "agent_name": "Angela Cruz", "voucher_date": "November 5, 2026", "tcp": "PHP 4,000,000.00",
+        "particulars": "Commission, Lot 5 Blk 2 Acacia Estates", "amount": "PHP 200,000.00", "payment_method": "ATM",
+        "commission_amount": "PHP 200,000.00", "bank_name": "BDO"}
 
 
 def test_voucher_is_read_for_review_and_linked_after_verification(api, admin, employee, agents, db, empty_schema):

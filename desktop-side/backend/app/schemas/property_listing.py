@@ -4,6 +4,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# Interview 2: listings show whether the unit is ready for occupancy or
+# pre-selling, and which financing the developer accepts.
+PROPERTY_STATUSES = ("RFO", "PRE_SELLING")
+FINANCING_OPTIONS = ("BANK", "PAGIBIG", "IN_HOUSE", "SSS", "CASH")
+
 PropertyStatus = Literal[
     "AVAILABLE",
     "RESERVED",
@@ -100,6 +105,10 @@ class PropertyListingResponse(BaseModel):
     branch_id: int | None = None
     project_name: str | None = None
     floor_area_sqm: float | None = None
+    property_status: str | None = None
+    financing_options: list[str] | None = None
+    reservation_fee: float | None = None
+    equity_terms_months: int | None = None
     marketing_status: str = "DRAFT"
     marketing_approved_by: str | None = None
     marketing_approved_at: datetime | None = None
@@ -150,6 +159,36 @@ class PropertyListingUpdate(BaseModel):
     floor_area_sqm: Decimal | None = Field(default=None, gt=0, le=10_000_000, max_digits=14, decimal_places=2)
     status: str | None = None
     partner_id: int | None = None
+    property_status: str | None = None
+    financing_options: list[str] | None = None
+    reservation_fee: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    equity_terms_months: int | None = Field(default=None, ge=1, le=120)
+
+    @field_validator("property_status")
+    @classmethod
+    def known_property_status(cls, value):
+        if value is None or not str(value).strip():
+            return None
+        value = str(value).strip().upper().replace("-", "_").replace(" ", "_")
+        value = {"PRESELLING": "PRE_SELLING", "READY_FOR_OCCUPANCY": "RFO"}.get(value, value)
+        if value not in PROPERTY_STATUSES:
+            raise ValueError(f"Property status must be one of: {', '.join(PROPERTY_STATUSES)}")
+        return value
+
+    @field_validator("financing_options")
+    @classmethod
+    def known_financing(cls, value):
+        if value is None:
+            return None
+        out = []
+        for item in value:
+            code = str(item).strip().upper().replace("-", "").replace(" ", "_")
+            code = {"PAG_IBIG": "PAGIBIG", "INHOUSE": "IN_HOUSE"}.get(code, code)
+            if code not in FINANCING_OPTIONS:
+                raise ValueError(f"Financing must be among: {', '.join(FINANCING_OPTIONS)}")
+            if code not in out:
+                out.append(code)
+        return out
 
     model_config = ConfigDict(extra="forbid")
 
@@ -182,6 +221,36 @@ class PropertyListingCreate(BaseModel):
     lot_area_sqm: Decimal | None = Field(default=None, gt=0, le=100_000_000, max_digits=14, decimal_places=2)
     floor_area_sqm: Decimal | None = Field(default=None, gt=0, le=10_000_000, max_digits=14, decimal_places=2)
     branch_id: int | None = None
+    property_status: str | None = None
+    financing_options: list[str] | None = None
+    reservation_fee: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    equity_terms_months: int | None = Field(default=None, ge=1, le=120)
+
+    @field_validator("property_status")
+    @classmethod
+    def known_property_status(cls, value):
+        if value is None or not str(value).strip():
+            return None
+        value = str(value).strip().upper().replace("-", "_").replace(" ", "_")
+        value = {"PRESELLING": "PRE_SELLING", "READY_FOR_OCCUPANCY": "RFO"}.get(value, value)
+        if value not in PROPERTY_STATUSES:
+            raise ValueError(f"Property status must be one of: {', '.join(PROPERTY_STATUSES)}")
+        return value
+
+    @field_validator("financing_options")
+    @classmethod
+    def known_financing(cls, value):
+        if value is None:
+            return None
+        out = []
+        for item in value:
+            code = str(item).strip().upper().replace("-", "").replace(" ", "_")
+            code = {"PAG_IBIG": "PAGIBIG", "INHOUSE": "IN_HOUSE"}.get(code, code)
+            if code not in FINANCING_OPTIONS:
+                raise ValueError(f"Financing must be among: {', '.join(FINANCING_OPTIONS)}")
+            if code not in out:
+                out.append(code)
+        return out
 
     model_config = ConfigDict(extra="forbid")
 

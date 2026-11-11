@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type FormEvent } from "react"
-import { Building2, ExternalLink, LoaderCircle, Mail, Pencil, Phone, Plus, Trash2, X } from "lucide-react"
+import { Building2, ExternalLink, LoaderCircle, Mail, Pencil, Phone, Plus, RefreshCw, Trash2, X } from "lucide-react"
 import { Link } from "@/components/Link"
 import { categoryLabel } from "@/lib/categories"
 import { contains, date, dateTime, isManagement, peso, pesoShort, text } from "./format"
@@ -22,7 +22,8 @@ export type Partner = {
   accreditation_status: string; accreditation_reference: string | null; accreditation_valid_from: string | null
   accreditation_valid_until: string | null; accreditation_notes: string | null
   accreditation_verified_by: string | null; accreditation_verified_at: string | null
-  accreditation: { valid: boolean; status: string; reason: string | null }
+  accreditation: { valid: boolean; status: string; reason: string | null; expiring_soon?: boolean }
+  accreditation_scope: string; accreditation_region: string | null; accreditation_projects: string[]
 }
 type PartnerDetail = Partner & { listing_rows: { listing_id: number; title: string | null; category: string | null; status: string; price_total: number | null; village_name: string | null }[] }
 
@@ -163,6 +164,18 @@ function PartnerDrawer({ partner, canManage, onClose, onEdit, onDeleted, onChang
   const [busy, setBusy] = useState(false)
   const loadDetail = useCallback(() => api<PartnerDetail>(`/partners/${partner.id}`), [api, partner.id])
   const detail = useApiData(loadDetail)
+  const renew = async () => {
+    setBusy(true)
+    try {
+      const saved = await api<Partner>(`/partners/${partner.id}/accreditation/renew`, { method: "POST" })
+      toast(t("Accreditation renewed until {date}.", { date: date(saved.accreditation_valid_until) }))
+      onChanged()
+    } catch (renewError) {
+      toast(t((renewError as Error).message), "error")
+    } finally {
+      setBusy(false)
+    }
+  }
   const remove = async () => {
     setBusy(true)
     try {
@@ -200,9 +213,11 @@ function PartnerDrawer({ partner, canManage, onClose, onEdit, onDeleted, onChang
       </div>
       {partner.partner_type === "DEVELOPER" && (
         <Section title="Accreditation of Abellar Realty">
-          <p className="mb-2 text-xs text-ab-muted">{t("The developer's accreditation lets Abellar Realty market its properties. Listings can only be approved for marketing while it is verified and not expired.")}</p>
+          <p className="mb-2 text-xs text-ab-muted">{t("The developer's accreditation lets Abellar Realty market its properties. Listings can only be approved for marketing while it is verified, not expired and covers the listing's project. It usually lasts a year and is renewed yearly.")}</p>
           <Facts items={[
             ["Status", <AccreditationBadge partner={partner} />],
+            ["Covers", partner.accreditation_scope === "SPECIFIC_PROJECTS" ? `${t("Only these projects / clusters")}: ${partner.accreditation_projects.join(", ") || "—"}`
+              : partner.accreditation_scope === "REGIONAL" ? `${t("Projects in a region")}: ${partner.accreditation_region ?? "—"}` : t("All of the developer's projects (nationwide)")],
             ["Reference", partner.accreditation_reference],
             ["Valid from", partner.accreditation_valid_from ? date(partner.accreditation_valid_from) : null],
             ["Valid until", partner.accreditation_valid_until ? date(partner.accreditation_valid_until) : null],
@@ -210,6 +225,10 @@ function PartnerDrawer({ partner, canManage, onClose, onEdit, onDeleted, onChang
             ["Notes", partner.accreditation_notes],
           ]} />
           {!partner.accreditation.valid && partner.accreditation.reason && <p className="mt-2 text-xs text-ab-warning">{partner.accreditation.reason}</p>}
+          {partner.accreditation.valid && partner.accreditation.expiring_soon && <p className="mt-2 text-xs text-ab-warning">{t("The accreditation ends within 30 days: renew it once the developer confirms.")}</p>}
+          {canManage && (partner.accreditation_status === "VERIFIED" || partner.accreditation_status === "EXPIRED") && (
+            <div className="mt-3"><Button disabled={busy} onClick={() => void renew()}><RefreshCw className="h-4 w-4" /> {t("Renew for another year")}</Button></div>
+          )}
         </Section>
       )}
       <Section title="Details">
@@ -262,6 +281,8 @@ function PartnerForm({ partner, onClose, onSaved }: { partner: Partner | null; o
     accreditation_status: partner?.accreditation_status ?? "NONE", accreditation_reference: partner?.accreditation_reference ?? "",
     accreditation_valid_from: partner?.accreditation_valid_from ?? "", accreditation_valid_until: partner?.accreditation_valid_until ?? "",
     accreditation_notes: partner?.accreditation_notes ?? "",
+    accreditation_scope: partner?.accreditation_scope ?? "ALL_PROJECTS", accreditation_region: partner?.accreditation_region ?? "",
+    accreditation_projects: (partner?.accreditation_projects ?? []).join("\n"),
   })
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
@@ -273,7 +294,9 @@ function PartnerForm({ partner, onClose, onSaved }: { partner: Partner | null; o
     setError("")
     try {
       const body = JSON.stringify({ ...form, partner_type: form.partner_type || null,
-        accreditation_valid_from: form.accreditation_valid_from || null, accreditation_valid_until: form.accreditation_valid_until || null })
+        accreditation_valid_from: form.accreditation_valid_from || null, accreditation_valid_until: form.accreditation_valid_until || null,
+        accreditation_projects: form.accreditation_scope === "SPECIFIC_PROJECTS" ? form.accreditation_projects.split(/[\n,]/).map((x) => x.trim()).filter(Boolean) : [],
+        accreditation_region: form.accreditation_scope === "REGIONAL" ? form.accreditation_region.trim() || null : null })
       const saved = partner
         ? await api<Partner>(`/partners/${partner.id}`, { method: "PUT", body })
         : await api<Partner>("/partners", { method: "POST", body })
@@ -319,7 +342,23 @@ function PartnerForm({ partner, onClose, onSaved }: { partner: Partner | null; o
               </label>
               <label className="text-sm font-medium">{t("Reference")}<input className={field} value={form.accreditation_reference} onChange={set("accreditation_reference")} placeholder={t("e.g. accreditation certificate no.")} /></label>
               <label className="text-sm font-medium">{t("Valid from")}<input type="date" className={field} value={form.accreditation_valid_from} onChange={set("accreditation_valid_from")} /></label>
-              <label className="text-sm font-medium">{t("Valid until")}<input type="date" className={field} value={form.accreditation_valid_until} onChange={set("accreditation_valid_until")} /></label>
+              <label className="text-sm font-medium">{t("Valid until")}<input type="date" className={field} value={form.accreditation_valid_until} onChange={set("accreditation_valid_until")} />
+                <span className="mt-1 block text-xs font-normal text-ab-faint">{t("Leave empty for one year from the start date.")}</span>
+              </label>
+              <label className="text-sm font-medium sm:col-span-2">{t("What it covers")}
+                <select className={field} value={form.accreditation_scope} onChange={set("accreditation_scope")}>
+                  <option value="ALL_PROJECTS">{t("All of the developer's projects (nationwide)")}</option>
+                  <option value="REGIONAL">{t("Projects in a region")}</option>
+                  <option value="SPECIFIC_PROJECTS">{t("Only specific projects / clusters")}</option>
+                </select>
+              </label>
+              {form.accreditation_scope === "REGIONAL" && <label className="text-sm font-medium sm:col-span-2">{t("Region")}<input className={field} value={form.accreditation_region} onChange={set("accreditation_region")} placeholder={t("e.g. CALABARZON")} /></label>}
+              {form.accreditation_scope === "SPECIFIC_PROJECTS" && (
+                <label className="text-sm font-medium sm:col-span-2">{t("Projects / clusters covered (one per line)")}
+                  <textarea className={`${field} min-h-20`} value={form.accreditation_projects} onChange={set("accreditation_projects")} placeholder={"Lumina Imus\nBella Vista"} />
+                  <span className="mt-1 block text-xs font-normal text-ab-faint">{t("A listing's project name must match one of these to be approved for marketing.")}</span>
+                </label>
+              )}
               <label className="text-sm font-medium sm:col-span-2">{t("Accreditation notes")}<textarea className={`${field} min-h-16`} value={form.accreditation_notes} onChange={set("accreditation_notes")} /></label>
             </fieldset>
           )}

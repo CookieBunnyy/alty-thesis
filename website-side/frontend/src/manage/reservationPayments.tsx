@@ -6,6 +6,8 @@ import { useStaffAuth } from "./staffContext"
 import { useApiData, clearApiCache } from "./useApiData"
 import { useToast } from "./toastContext"
 import { locale, t } from "./i18n"
+import { Link } from "@/components/Link"
+import { FINANCING_LABEL } from "./dealStepsData"
 
 type Item = { kind: string; label: string; due: string; amount: string; paid: string; status: "PAID" | "PARTIAL" | "OVERDUE" | "DUE" | "UPCOMING" }
 type Plan = {
@@ -16,9 +18,10 @@ type Plan = {
   total_paid: string; remaining: string; overpaid: string; fully_paid_by: string; is_fully_paid: boolean
   next_due: { label: string; due: string; amount: string; status: string } | null
   terms: string[]; items: Item[]
+  financing_type?: string | null; equity_terms_months?: number | null
 }
 type Payment = { id: number; amount: string; paid_at: string; note: string | null; recorded_by: string | null }
-type PlanResponse = { plan: Plan; payments: Payment[] }
+type PlanResponse = { plan: Plan; payments: Payment[]; deal_id?: number | null }
 
 const day = (iso: string) => {
   const [y, m, d] = iso.slice(0, 10).split("-").map(Number)
@@ -122,6 +125,11 @@ export function PaymentSchedule({ transactionId, canRecord, onChanged }: { trans
       <p className={`mt-3 rounded-xl px-3 py-2 text-sm font-semibold ${plan.down_payment_status === "PAID" ? "bg-ab-accent-soft text-ab-accent" : plan.down_payment_status === "NONE" ? "bg-ab-card-2 text-ab-muted" : "bg-ab-warning/15 text-ab-text"}`}>
         {t(DP[plan.down_payment_status])}
         {plan.down_payment_status !== "NONE" && ` · ${peso(plan.down_payment_paid)} ${t("of")} ${peso(plan.down_payment)}`}
+      </p>
+      <p className="mt-2 text-sm text-ab-muted">
+        {t("Financing")}: <span className="font-semibold text-ab-text">{plan.financing_type ? t(FINANCING_LABEL[plan.financing_type] ?? plan.financing_type) : t("Not set yet")}</span>
+        {plan.equity_terms_months ? ` · ${t("equity over {n} months", { n: plan.equity_terms_months })}` : ""}
+        {data?.deal_id != null && <> · <Link to={`/manage/transactions?tab=deals&id=${data.deal_id}`} className="font-semibold text-ab-accent hover:underline">{t("Set on the deal")}</Link></>}
       </p>
       {plan.next_due && (
         <p className="mt-2 text-sm text-ab-muted">

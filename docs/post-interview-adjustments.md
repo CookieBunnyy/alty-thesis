@@ -439,3 +439,23 @@ The desktop era copied records out to the old website tables in Supabase (`publi
   vouchers go to Vouchers; receipts, proof of payment, invoices and contracts are filed under
   Buyers / <client> with the rest of the client's purchase. The migration moves existing folders and documents
   (same-named client folders are merged) and then deletes the emptied folders.
+
+## Second interview (2026-11-11)
+
+Abellar Realty's answers to the outstanding questions above, and what changed (migration `20261111_0026`).
+
+| # | Answer | Change |
+|---|---|---|
+| 1 | Voucher details: agent who sold, voucher date, TCP, particulars, amount, where paid (ATM, etc.), commission amount, bank name. No sample yet. | The Commission Voucher field set-up starts with these 8 fields (with common printed labels as aliases), still editable once a real sample arrives. |
+| 2 | Rate depends on the agreement; usually 3–5% of the TCP, mostly 5%. Buyers mostly pay through a bank, SSS or Pag-IBIG loan. | New sale commissions start at **5% of the TCP** (`DEFAULT_COMMISSION_RATE_PERCENT`), editable; the agreed amount always wins. Rentals still need an amount. |
+| 3 | Released all at once ("isang bagsakan") or in parts ("paonti-onti"), as the lender pays. | Each payout is its own record (`commission_releases`) with method (ATM, bank transfer, check, cash, e-wallet), bank name, reference and particulars. |
+| 4 | Accreditation may cover all projects (nationwide/regional) or specific projects/clusters; usually 1 year, renewed yearly. | Partners record the **scope** (all projects / region / named projects). A listing under a project-specific accreditation must be one of the named projects to be approved or shown. A verification without an end date lasts a year; **Renew for another year**; warning 30 days before it ends. |
+| 5 | Sellers see their own buyers, each sale's status (pending, reserved, under evaluation, closed) and their commissions (received and upcoming). | Commissions are **shared with sellers by default** (management can still turn it off per seller); My commissions shows Received / Upcoming / Waiting for approval and each payout. Developer processing is labelled **Under evaluation**; deals show the next step. |
+| 6 | After the reservation: documents (Reservation Agreement, Buyer's Information Sheet, IDs, proof of income) → equity monthly (12–24 months) → loan application (bank, in-house, Pag-IBIG) → loan approval / LOG → inspection and turnover → fully paid, title transferred. | Each deal has these **steps** (ticked by company staff, visible to the seller), its **financing** (Bank, Pag-IBIG, SSS, In-house, Cash; loan steps only for loans) and **equity terms**. |
+| 7 | Abellar tracks the buyer's payments too, depending on the financing. | The **payment schedule is on** (`PAYMENT_SCHEDULE_ENABLED`): reservation fee, equity in monthly instalments over the terms, then the **loan takeout** in one lump sum (bank / Pag-IBIG / SSS), in-house monthly amortization, or the cash balance. The tax/fee estimate stays off (not confirmed). |
+| 8 | Top sellers by sales amount, monthly and quarterly. | Reports group by **quarter** too; the dashboard shows top sellers this month, this quarter and this year (by sales value). |
+| 9 | Listings show RFO / pre-selling, financing accepted (Bank, Pag-IBIG, In-house), a sample computation (TCP, reservation fee, net equity, est. monthly amortization) and who to contact. | Listings record **property status**, **financing accepted**, **reservation fee** and **equity terms**; the website shows a **sample computation** and the developer; "Contact an agent" lists the sellers assigned to the property first (with email for signed-in buyers). |
+
+Still open: rental commission basis, the voucher's exact printed labels (from a real sample), certificate format, and the buyer's taxes and fees.
+
+Tests: `tests/test_interview_two.py` (accreditation scope and renewal, steps after the reservation, loan and in-house schedules, listing computation and contacts, quarterly reports), plus updated commission, voucher and deal tests: **217 backend tests pass**. Browser-checked: partner scope and renewal, deal steps (company and seller), property form computation, commission form at 5%, website sample computation, seller commissions.

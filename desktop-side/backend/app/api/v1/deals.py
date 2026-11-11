@@ -4,6 +4,13 @@ Company staff see and manage every deal. A seller sees only the deals they
 handle and may record inquiries and viewings (physical or virtual) and mark a
 deal lost; reservation, developer processing and closing are recorded by
 management or come from the reservation and sale records.
+
+After the reservation is sent to the developer (second interview) the deal
+tracks: the buyer's documents (Reservation Agreement, Buyer's Information
+Sheet, IDs, proof of income), the equity paid monthly over the chosen terms,
+the loan application and approval (Letter of Guarantee) for bank / Pag-IBIG /
+SSS buyers, inspection and turnover, and finally full payment (title
+transferred). Company staff tick these steps; sellers see them.
 """
 
 from __future__ import annotations
@@ -19,7 +26,8 @@ from app.core.database import get_db
 from app.core.security import COMPANY_ROLES, MANAGEMENT_ROLES, SELLER, canonical_role, get_current_user
 from app.models.agent import Agent
 from app.models.client import Client
-from app.models.deal import DEAL_CLOSED, DEAL_STAGES, DEVELOPER_STATUSES, VIEWING_TYPES, Deal, DealEvent
+from app.models.deal import (DEAL_CLOSED, DEAL_STAGES, DEVELOPER_STATUSES, FINANCING_TYPES, LOAN_FINANCING,
+                             LOAN_MILESTONES, MILESTONE_KEYS, MILESTONES, VIEWING_TYPES, Deal, DealEvent)
 from app.models.property_listing import PropertyListing
 from app.models.user import User
 from app.services import deal_pipeline
@@ -65,6 +73,19 @@ class DealUpdate(BaseModel):
     agent_id: str | None = None
     developer_status: str | None = None
     reservation_date: date | None = None
+    financing_type: str | None = None
+    equity_terms_months: int | None = Field(default=None, ge=1, le=120)
+
+    @field_validator("financing_type")
+    @classmethod
+    def known_financing(cls, value):
+        if value is None or not value.strip():
+            return None
+        value = value.strip().upper().replace("-", "").replace(" ", "_")
+        value = {"PAG_IBIG": "PAGIBIG", "INHOUSE": "IN_HOUSE"}.get(value, value)
+        if value not in FINANCING_TYPES:
+            raise ValueError(f"Financing must be one of: {', '.join(FINANCING_TYPES)}")
+        return value
 
     @field_validator("viewing_type")
     @classmethod
@@ -79,6 +100,22 @@ class DealUpdate(BaseModel):
         if value is not None and value.upper() not in DEVELOPER_STATUSES:
             raise ValueError(f"Developer status must be one of: {', '.join(DEVELOPER_STATUSES)}")
         return value.upper() if value else value
+
+
+class MilestoneInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str
+    done: bool = True
+    done_on: date | None = None
+    note: str | None = Field(default=None, max_length=500)
+
+    @field_validator("key")
+    @classmethod
+    def known_key(cls, value):
+        value = value.strip().upper()
+        if value not in MILESTONE_KEYS:
+            raise ValueError(f"Step must be one of: {', '.join(MILESTONE_KEYS)}")
+        return value
 
 
 class StageInput(BaseModel):
@@ -134,6 +171,8 @@ def _serialize(db: Session, deal: Deal, events: bool = False) -> dict:
         "lost_reason": deal.lost_reason, "reservation_transaction_id": deal.reservation_transaction_id,
         "sale_transaction_id": deal.sale_transaction_id, "notes": deal.notes, "created_by": deal.created_by,
         "created_at": deal.created_at, "updated_at": deal.updated_at,
+        "financing_type": deal.financing_type, "equity_terms_months": deal.equity_terms_months,
+        "milestones": _milestones(deal),
     }
     if events:
         body["events"] = [{"id": e.id, "from_stage": e.from_stage, "to_stage": e.to_stage, "changes": e.changes,
@@ -141,6 +180,17 @@ def _serialize(db: Session, deal: Deal, events: bool = False) -> dict:
                           for e in db.execute(select(DealEvent).where(DealEvent.deal_id == deal.id)
                                               .order_by(DealEvent.id)).scalars()]
     return body
+
+
+def _milestones(deal: Deal) -> list[dict]:
+    """Each step after the reservation, in order, with when it was done.
+    Loan steps don't apply to buyers paying in cash or through in-house financing."""
+    done = deal.milestones or {}
+    loan = deal.financing_type in LOAN_FINANCING or deal.financing_type is None
+    return [{"key": key, "label": label, "applies": loan or key not in LOAN_MILESTONES,
+             "done_on": (done.get(key) or {}).get("done_on"), "by": (done.get(key) or {}).get("by"),
+             "note": (done.get(key) or {}).get("note")}
+            for key, label in MILESTONES]
 
 
 @router.get("")
@@ -166,7 +216,8 @@ def deal_summary(db: Session = Depends(get_db), user: User = Depends(get_current
         statement = statement.where(Deal.agent_id == user.agent_id)
     counts = dict(db.execute(statement).all())
     return {"by_stage": {stage: int(counts.get(stage, 0)) for stage in STAGES}, "stages": DEAL_STAGES,
-            "viewing_types": VIEWING_TYPES, "developer_statuses": DEVELOPER_STATUSES}
+            "viewing_types": VIEWING_TYPES, "developer_statuses": DEVELOPER_STATUSES,
+            "financing_types": FINANCING_TYPES, "milestones": [{"key": k, "label": v} for k, v in MILESTONES]}
 
 
 @router.get("/{deal_id}")
@@ -222,7 +273,7 @@ def update_deal(deal_id: int, payload: DealUpdate, db: Session = Depends(get_db)
         raise HTTPException(status_code=403, detail="Only management can change deals")
     if values.get("agent_id") and db.get(Agent, values["agent_id"]) is None:
         raise HTTPException(status_code=422, detail="Unknown seller")
-    if deal.stage in DEAL_CLOSED and set(values) - {"notes"}:
+    if deal.stage in DEAL_CLOSED and set(values) - {"notes", "financing_type", "equity_terms_months"}:
         raise HTTPException(status_code=409, detail="This deal is closed")
     changes = {}
     for field, value in values.items():
@@ -238,6 +289,43 @@ def update_deal(deal_id: int, payload: DealUpdate, db: Session = Depends(get_db)
             to_stage = "DEVELOPER_PROCESSING"
         deal_pipeline.log(db, deal, _actor(user), to_stage=to_stage, changes=changes)
         record_audit(db, "DEAL_UPDATED", actor=user, entity_type="deals", entity_id=deal.id, details=changes)
+    db.commit()
+    return _serialize(db, deal, events=True)
+
+
+@router.put("/{deal_id}/milestones")
+def set_milestone(deal_id: int, payload: MilestoneInput, db: Session = Depends(get_db),
+                  user: User = Depends(get_current_user)):
+    """Tick (or untick) a step after the reservation. Company staff only; steps
+    stay open after closing because full payment and the title come later."""
+    deal = _deal_or_404(db, deal_id, user)
+    if _access(user) != "company":
+        raise HTTPException(status_code=403, detail="Abellar Realty records these steps")
+    if deal.stage == "LOST":
+        raise HTTPException(status_code=409, detail="This deal was lost")
+    if deal_pipeline.ORDER.get(deal.stage, 0) < deal_pipeline.ORDER["RESERVED"]:
+        raise HTTPException(status_code=409, detail="These steps start after the reservation")
+    if payload.done and payload.done_on and payload.done_on > date.today():
+        raise HTTPException(status_code=422, detail="The date can't be in the future")
+    if payload.done and payload.key in LOAN_MILESTONES and deal.financing_type not in (None, *LOAN_FINANCING):
+        raise HTTPException(status_code=409, detail="Loan steps apply to bank, Pag-IBIG and SSS buyers")
+    steps = dict(deal.milestones or {})
+    before = steps.get(payload.key)
+    if payload.done:
+        steps[payload.key] = {"done_on": (payload.done_on or date.today()).isoformat(), "by": _actor(user),
+                              "note": (payload.note or "").strip() or None}
+    else:
+        steps.pop(payload.key, None)
+    deal.milestones = steps
+    label = dict(MILESTONES)[payload.key]
+    to_stage = "DEVELOPER_PROCESSING" if payload.done and deal.stage == "RESERVED" else None
+    deal_pipeline.log(db, deal, _actor(user), to_stage=to_stage,
+                      changes={payload.key.lower(): {"old": (before or {}).get("done_on"),
+                                                     "new": (steps.get(payload.key) or {}).get("done_on")}},
+                      note=f"{label}: {'done' if payload.done else 'not done'}"
+                           + (f" ({payload.note.strip()})" if payload.note and payload.note.strip() else ""))
+    record_audit(db, "DEAL_STEP_UPDATED", actor=user, entity_type="deals", entity_id=deal.id,
+                 details={"step": payload.key, "done": payload.done})
     db.commit()
     return _serialize(db, deal, events=True)
 

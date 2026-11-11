@@ -56,7 +56,7 @@ export function ReportsPage() {
       <div className="flex flex-wrap items-end gap-2 print:hidden" aria-label={t("Report filters")}>
         <label className="text-xs font-semibold text-ab-muted">{t("From")}<input type="date" className={`${field} mt-1 block`} value={start} onChange={(e) => setStart(e.target.value)} /></label>
         <label className="text-xs font-semibold text-ab-muted">{t("To")}<input type="date" className={`${field} mt-1 block`} value={end} onChange={(e) => setEnd(e.target.value)} /></label>
-        <Select label="Group by" value={period} onChange={setPeriod} options={[{ value: "day", label: "Day" }, { value: "month", label: "Month" }, { value: "year", label: "Year" }]} />
+        <Select label="Group by" value={period} onChange={setPeriod} options={[{ value: "day", label: "Day" }, { value: "month", label: "Month" }, { value: "quarter", label: "Quarter" }, { value: "year", label: "Year" }]} />
         <Select label="Team / Cluster" value={team} onChange={setTeam} options={[{ value: "", label: "All teams" }, ...teams.map((b) => ({ value: String(b.id), label: b.name })), { value: "0", label: "No team" }]} />
       </div>
       <p className="hidden text-sm print:block">{t("Period: {from} to {to}", { from: date(start), to: date(end) })}</p>

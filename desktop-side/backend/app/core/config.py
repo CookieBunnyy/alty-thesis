@@ -41,11 +41,14 @@ class Settings(BaseSettings):
     # Forecasting requires at least this many monthly observations.
     FORECAST_MIN_MONTHS: int = 6
 
-    # Financial features not yet confirmed by Abellar Realty (interview): the
-    # reservation payment schedule and the buying-cost estimate stay off until
-    # the actual arrangements are validated.
-    PAYMENT_SCHEDULE_ENABLED: bool = False
+    # Abellar tracks the buyer's payments too (second interview): reservation
+    # fee, equity in monthly terms, then the loan takeout or in-house
+    # amortization. The buying-cost (tax and fee) estimate is still unconfirmed.
+    PAYMENT_SCHEDULE_ENABLED: bool = True
     COST_ESTIMATE_ENABLED: bool = False
+    # Commission: depends on the agreement, usually 3-5% of the TCP, mostly 5%
+    # (second interview). Only pre-fills new records; the agreed amount wins.
+    DEFAULT_COMMISSION_RATE_PERCENT: float = 5.0
     # Closing-cost estimate on the transaction page (services/closing_costs.py).
     TRANSFER_TAX_METRO: float = 0.0075
     TRANSFER_TAX_PROVINCE: float = 0.005
