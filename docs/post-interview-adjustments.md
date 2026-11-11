@@ -459,3 +459,20 @@ Abellar Realty's answers to the outstanding questions above, and what changed (m
 Still open: rental commission basis, the voucher's exact printed labels (from a real sample), certificate format, and the buyer's taxes and fees.
 
 Tests: `tests/test_interview_two.py` (accreditation scope and renewal, steps after the reservation, loan and in-house schedules, listing computation and contacts, quarterly reports), plus updated commission, voucher and deal tests: **217 backend tests pass**. Browser-checked: partner scope and renewal, deal steps (company and seller), property form computation, commission form at 5%, website sample computation, seller commissions.
+
+## Demonstration data and sample documents (2026-11-11)
+
+* `scripts/seed_demo_flow.py` fills a fresh system (after `reset_demo_data.py` and `seed_developers.py`) with a year
+  of records that follow the real flow: 3 teams (Pinyas, Batangas, San Pablo), 8 sellers with logins, a Filing
+  Manager login, 34 listings from the board's developers (approved, assigned, with RFO/pre-selling, financing and
+  sample computation), 30 buyers, 18 closed deals (reservation, equity and loan takeout payments, all
+  after-reservation steps, sale), 4 reservations under evaluation (one with a missed equity payment), 2 cancelled,
+  open inquiries and viewings, commissions at 3–5% with lump-sum and partial payouts, recruitment applicants at
+  every stage, announcements and memos (quarter target and incentive tiers) and upcoming site trips. One property
+  (`ABR-26-0101`) is left AVAILABLE for the live walkthrough. It refuses to run twice.
+* `scripts/make_demo_documents.py` writes `docs/demo-documents/`: Buyer's Information Sheet, valid ID (specimen),
+  proof of income, Reservation Agreement, two official receipts, Letter of Guarantee, Deed of Absolute Sale,
+  Commission Voucher and a filled-in recruitment form (JPG). `docs/demo-documents/README.md` is the step-by-step
+  walkthrough. Checked end to end through the API: every document processes, files under
+  Buyers / Carlo M. Mendoza (voucher under Commission Documents), the seller's inquiry becomes the reserved, then
+  closed, deal, and all 8 voucher fields are read.
