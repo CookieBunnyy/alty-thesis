@@ -493,3 +493,14 @@ Tests: `tests/test_interview_two.py` (accreditation scope and renewal, steps aft
   how the figure was worked out (with the full calculation behind a toggle), why it fell short or was lower than the
   month before (main causes first), and what to try. It is computed from the recorded data (no AI service, no
   invented figures).
+
+## Reading photos without running out of memory (2026-11-18)
+
+* **Problem:** uploading a small phone photo (~200 KB) restarted the API on Render (free plan: 512 MB for the
+  whole app); the browser then showed CORS errors because Render's error page has no CORS header. File size was
+  not the issue: with RapidOCR's defaults, reading one ~280 KB photo peaked at ~550 MB.
+* **Fix (`services/ocr_service.py`):** images are shrunk to at most `OCR_MAX_SIDE` = 1280 px before reading
+  (measured: ~270 MB for the reading itself, same text, and A4 scans read better than at larger sizes); the text
+  detector works at up to 960 px; the text-rotation classifier is off; one CPU thread (`OCR_THREADS`); only one
+  document is read at a time; freed memory is returned to the system after each read. Whole-process peak measured
+  at ~310–340 MB, back to ~130 MB afterwards. Test: `tests/test_ocr_memory.py`.

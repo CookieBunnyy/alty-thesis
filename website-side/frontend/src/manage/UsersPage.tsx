@@ -35,6 +35,7 @@ export function UsersPage() {
   const isAdmin = me?.role === "Administrator"
   const [search, setSearch] = useState("")
   const [role, setRole] = useState("")
+  const [active, setActive] = useState("")
   const [editing, setEditing] = useState<StaffUser | "new" | null>(null)
   const [resetting, setResetting] = useState<StaffUser | null>(null)
   const [now] = useState(() => Date.now()) // "signed in within 30 days" is measured from page load
@@ -42,7 +43,7 @@ export function UsersPage() {
   const { data, error, loading, reload } = useApiData(load, "users")
   const [users, rawRoles, agents] = data ?? [[], [], []]
   const roles = useMemo(() => rawRoles.map((r) => (typeof r === "string" ? r : r.name)).filter((r) => r !== "Client"), [rawRoles])
-  const shown = users.filter((u) => (!role || u.role === role) && contains([u.full_name, u.username, u.role], search))
+  const shown = users.filter((u) => (!role || u.role === role) && (!active || String(u.is_active) === active) && contains([u.full_name, u.username, u.role], search))
 
   const columns: Column<StaffUser>[] = [
     {
@@ -94,9 +95,10 @@ export function UsersPage() {
           { label: "Signed in (30 days)", value: users.filter((u) => u.last_login_at && now - new Date(u.last_login_at).getTime() < 30 * 86400000).length },
         ]} />
       )}
-      <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+      <div className="flex flex-wrap gap-2">
         <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, username or role" /></div>
         <Select label="Role" value={role} onChange={setRole} options={[{ value: "", label: "All roles" }, ...roles.map((r) => ({ value: r, label: r }))]} />
+        <Select label="Account status" value={active} onChange={setActive} options={[{ value: "", label: "Active and inactive" }, { value: "true", label: "Active" }, { value: "false", label: "Inactive" }]} />
       </div>
       {!isAdmin && <p className="text-xs text-ab-faint">{t("Only the Administrator can add users, change roles or reset passwords.")}</p>}
       {isAdmin && <PasswordRequestsPanel />}

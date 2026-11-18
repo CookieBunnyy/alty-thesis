@@ -3,12 +3,24 @@
 Engines are tried in order (``OCR_ENGINE=auto``): RapidOCR (ONNX, pip-only)
 then Tesseract (requires the system binary). Add another engine by
 implementing :class:`OcrEngine` and registering it in ``_ENGINES``.
+
+Memory: reading a photo is the most memory-hungry thing the API does. With
+RapidOCR's defaults one ~280 KB phone photo peaked at ~550 MB, more than
+Render's free plan gives the whole app, so the server was killed mid-upload.
+Images are therefore shrunk to ``OCR_MAX_SIDE`` (1280 px: ~270 MB peak, same
+text read), the detector works at up to 960 px, the text-rotation classifier
+is off, one thread is used, only one document is read at a time, and freed
+memory is handed back to the system after each read.
 """
 
 from __future__ import annotations
 
+import ctypes
+import gc
 import logging
 import shutil
+import sys
+import threading
 from functools import lru_cache
 from typing import Protocol
 
@@ -19,6 +31,8 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 PDF_RENDER_SCALE = 2.0  # ~144 DPI; enough for printed text
+DETECTION_SIDE = 960  # the text detector works on at most this many pixels
+_ONE_AT_A_TIME = threading.Lock()
 
 
 class OcrUnavailableError(RuntimeError):
@@ -37,7 +51,10 @@ class RapidOcrEngine:
     def __init__(self) -> None:
         from rapidocr_onnxruntime import RapidOCR
 
-        self._ocr = RapidOCR()
+        threads = max(1, settings.OCR_THREADS)
+        self._ocr = RapidOCR(intra_op_num_threads=threads, inter_op_num_threads=threads,
+                             max_side_len=settings.OCR_MAX_SIDE, det_limit_side_len=DETECTION_SIDE,
+                             det_limit_type="max", use_cls=False)
 
     def image_to_text(self, image: np.ndarray) -> str:
         result, _ = self._ocr(image)
@@ -113,8 +130,42 @@ def decode_image(content: bytes) -> np.ndarray:
     return image
 
 
+def shrink(image: np.ndarray, max_side: int | None = None) -> np.ndarray:
+    """At most ``max_side`` pixels on the longest side (never enlarged)."""
+    import cv2
+
+    max_side = max_side or settings.OCR_MAX_SIDE
+    height, width = image.shape[:2]
+    scale = max_side / max(height, width)
+    if scale >= 1:
+        return image
+    return cv2.resize(image, (max(1, round(width * scale)), max(1, round(height * scale))),
+                      interpolation=cv2.INTER_AREA)
+
+
+def _release_memory() -> None:
+    """Hand freed memory back to the system (glibc keeps it otherwise)."""
+    gc.collect()
+    if sys.platform.startswith("linux"):
+        try:
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
+        except (OSError, AttributeError):
+            pass
+
+
+def read_image(image: np.ndarray) -> str:
+    """Text of one image: shrunk first, one document at a time."""
+    engine = get_engine()
+    with _ONE_AT_A_TIME:
+        try:
+            return engine.image_to_text(shrink(image))
+        finally:
+            del image
+            _release_memory()
+
+
 def image_bytes_to_text(content: bytes) -> str:
-    return get_engine().image_to_text(decode_image(content))
+    return read_image(decode_image(content))
 
 
 def render_pdf_page(pdf_bytes: bytes, page_index: int) -> np.ndarray:
@@ -132,4 +183,4 @@ def render_pdf_page(pdf_bytes: bytes, page_index: int) -> np.ndarray:
 
 
 def pdf_page_to_text(pdf_bytes: bytes, page_index: int) -> str:
-    return get_engine().image_to_text(render_pdf_page(pdf_bytes, page_index))
+    return read_image(render_pdf_page(pdf_bytes, page_index))

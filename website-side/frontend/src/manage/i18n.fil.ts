@@ -2554,6 +2554,25 @@ export const FILIPINO: Record<string, string> = {
   "Click to open the seller's profile": "I-click para buksan ang profile ng seller",
   "{place}: {name}, {value} from {n} sale(s). Open profile": "{place}: {name}, {value} mula sa {n} benta. Buksan ang profile",
   "Ranked by total sales value. Point at a seller to see why; click to open their profile.": "Niranggo ayon sa kabuuang halaga ng benta. Itapat sa seller para makita kung bakit; i-click para buksan ang profile.",
+  // ---- List filters and table pages ----
+  "All years": "Lahat ng taon",
+  "Whole year": "Buong taon",
+  "All months": "Lahat ng buwan",
+  "All months in the quarter": "Lahat ng buwan sa quarter",
+  "Excluding cancelled": "Hindi kasama ang nakansela",
+  "{n} of {total} transactions · {period}": "{n} sa {total} na transaksyon · {period}",
+  "{n} of {total} clients · latest activity {period}": "{n} sa {total} na kliyente · huling aktibidad {period}",
+  "{n} of {total} documents · uploaded {period}": "{n} sa {total} na dokumento · na-upload {period}",
+  "{n} of {total} commission records · {period}": "{n} sa {total} na tala ng komisyon · {period}",
+  "{n} of {total} applicants · applied {period}": "{n} sa {total} na aplikante · nag-apply {period}",
+  "Account status": "Katayuan ng account",
+  "Active and inactive": "Aktibo at hindi aktibo",
+  "Table pages": "Mga pahina ng talahanayan",
+  "Showing {from}–{to} of {total}": "Ipinapakita ang {from}–{to} sa {total}",
+  "Rows per page": "Row bawat pahina",
+  "Previous page": "Nakaraang pahina",
+  "Next page": "Susunod na pahina",
+  "Page {n} of {total}": "Pahina {n} sa {total}",
 }
 
 // Server messages that carry numbers or names: matched by pattern.

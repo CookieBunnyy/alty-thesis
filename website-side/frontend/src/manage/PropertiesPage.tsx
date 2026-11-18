@@ -15,6 +15,8 @@ import { lotAreaLong, lotAreaShort } from "@/lib/area"
 import { useBlobUrl } from "./useBlobUrl"
 import { LotBoundarySection } from "./LotBoundarySection"
 import { useBranchOptions } from "./branches"
+import { TeamFilter } from "./filters"
+import { inTeam } from "./period"
 import { ListingMarketing, MarketingBadge } from "./listingMarketing"
 import { AddPropertyForm } from "./AddPropertyForm"
 import { ListingImages } from "./listingImages"
@@ -52,6 +54,8 @@ export function PropertiesPage() {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
   const [category, setCategory] = useState("")
+  const [team, setTeam] = useState("")
+  const teams = useBranchOptions()
 
   const load = useCallback(
     () => Promise.all([
@@ -68,9 +72,9 @@ export function PropertiesPage() {
   const shown = useMemo(
     () => listings.filter((l) =>
       (!status || l.status === status) &&
-      (!category || categoryOf(l.category)?.key === category) &&
+      (!category || categoryOf(l.category)?.key === category) && inTeam(l.branch_id, team) &&
       contains([l.title, l.village_name, l.category, l.layout_type, l.listing_id, l.external_listing_id], search)),
-    [listings, status, category, search],
+    [listings, status, category, team, search],
   )
   const selected = id ? listings.find((l) => String(l.listing_id) === id) ?? null : null
 
@@ -125,6 +129,7 @@ export function PropertiesPage() {
         <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search title, village, category or ID" /></div>
         <Select label="Status" value={status} onChange={setStatus} options={[{ value: "", label: "All statuses" }, ...STATUSES.map((s) => ({ value: s, label: statusLabel(s) }))]} />
         <Select label="Category" value={category} onChange={setCategory} options={[{ value: "", label: "All categories" }, ...CATEGORIES.map((c) => ({ value: c.key, label: c.label }))]} />
+        <TeamFilter value={team} onChange={setTeam} teams={teams} />
       </div>
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (

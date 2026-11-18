@@ -5,6 +5,8 @@ import { BadgeCheck, FileCheck2, LoaderCircle, Plus, X } from "lucide-react"
 import { Link } from "@/components/Link"
 import { contains, date, dateTime, isManagement, peso, pesoShort, statusLabel, text } from "./format"
 import { Badge, Button, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
+import { PeriodFilter } from "./filters"
+import { inPeriod, periodLabel, thisYear, type Period } from "./period"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
@@ -49,12 +51,13 @@ export function CommissionsPage() {
   const [search, setSearch] = useState("")
   const [kind, setKind] = useState("")
   const [state, setState] = useState("")
+  const [period, setPeriod] = useState<Period>(thisYear)
   const [creating, setCreating] = useState(false)
   const load = useCallback(() => Promise.all([api<Record_[]>("/commissions"), api<Summary>("/commissions/summary"), api<Structure[]>("/commissions/structures")]), [api])
   const { data, error, loading, reload } = useApiData(load, "commissions")
   const [records, summary, structures] = data ?? [null, null, null]
   const rows = useMemo(() => records ?? [], [records])
-  const shown = rows.filter((r) => (!kind || r.kind === kind) &&
+  const shown = rows.filter((r) => (!kind || r.kind === kind) && inPeriod(r.transaction_date ?? r.record_date, period) &&
     (!state || (state === "NO_VOUCHER" ? !r.voucher_document_id && r.status !== "CANCELLED" : state === "PENDING" ? r.approval_status === "PENDING" && r.status !== "CANCELLED" : r.status === state)) &&
     contains([r.seller_name, r.property_title, r.project_name, r.property_description, r.buyer_name, r.lessor_name, r.agreement_reference], search))
   const selected = id ? rows.find((r) => String(r.id) === id) ?? null : null
@@ -92,10 +95,12 @@ export function CommissionsPage() {
             { label: "Released", value: summary.released.count, detail: pesoShort(summary.released.amount), onClick: () => setState(state === "RELEASED" ? "" : "RELEASED"), active: state === "RELEASED" },
             { label: "Without a voucher", value: summary.without_voucher, onClick: () => setState(state === "NO_VOUCHER" ? "" : "NO_VOUCHER"), active: state === "NO_VOUCHER" },
           ]} />
-          <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-            <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search seller, property, buyer, lessor or reference" /></div>
+          <div className="flex flex-wrap gap-2">
+            <div className="w-full lg:w-auto lg:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search seller, property, buyer, lessor or reference" /></div>
             <Select label="Kind" value={kind} onChange={setKind} options={[{ value: "", label: "Sales and rentals" }, { value: "SALE", label: "Sales" }, { value: "RENTAL", label: "Rentals" }]} />
+            <PeriodFilter value={period} onChange={setPeriod} dates={rows.map((r) => r.transaction_date ?? r.record_date)} />
           </div>
+          <p className="text-xs text-ab-faint">{t("{n} of {total} commission records · {period}", { n: shown.length, total: rows.length, period: periodLabel(period) })}</p>
           <DataTable exportTitle="Commission records" rows={shown} columns={columns} rowKey={(r) => String(r.id)} onOpen={(r) => open(String(r.id))}
             empty={rows.length ? "No commissions match these filters." : "No commissions recorded yet."} initialSort={{ key: "date", dir: "desc" }} />
         </>

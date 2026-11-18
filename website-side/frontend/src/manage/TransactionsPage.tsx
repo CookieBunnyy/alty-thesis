@@ -12,14 +12,8 @@ import { GrossSalesRecap } from "./GrossSalesRecap"
 import { PaymentSchedule, ProceedToSaleDialog } from "./reservationPayments"
 import { CostBreakdown } from "./costBreakdown"
 import { DealsPipeline } from "./DealsPipeline"
-import { locale } from "./i18n"
-
-// Philippine-time month of a transaction ("2026-09").
-const monthOf = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }).slice(0, 7)
-const monthLabel = (key: string) => {
-  const [year, month] = key.split("-").map(Number)
-  return new Date(year, month - 1, 1).toLocaleDateString(locale(), { month: "long", year: "numeric" })
-}
+import { PeriodFilter, TeamFilter } from "./filters"
+import { inPeriod, inTeam, periodLabel as labelOf, thisMonth, type Period } from "./period"
 
 type Transaction = {
   transaction_id: string; external_transaction_id: string | null; client_id: string; client_name: string | null
@@ -29,7 +23,6 @@ type Transaction = {
   sync_status: string; created_at: string; updated_at: string
   cancellation_reason: string | null; cancelled_at: string | null; cancelled_by: string | null
 }
-type Summary = { total: number; reserved: number; completed: number; cancelled: number; amount_total: string }
 
 export function TransactionsPage() {
   const { api, user } = useStaffAuth()
@@ -37,21 +30,30 @@ export function TransactionsPage() {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
   const [type, setType] = useState("")
-  const [period, setPeriod] = useState("")
+  // Starts on this month, so the board shows this month's sales, not every record ever.
+  const [period, setPeriod] = useState<Period>(thisMonth)
+  const [team, setTeam] = useState("")
   const location = useLocation()
   const [view, setView] = useState<"board" | "records" | "pipeline">(location.search.get("tab") === "deals" ? "pipeline" : "board")
-  const load = useCallback(() => Promise.all([api<Transaction[]>("/transactions?limit=2000"), api<Summary>("/transactions/summary")]), [api])
+  const load = useCallback(() => api<Transaction[]>("/transactions?limit=2000"), [api])
   const { data, error, loading, reload } = useApiData(load, "transactions")
-  const [rows, summary] = data ?? [[], null]
-  const shown = useMemo(
-    () => rows.filter((t) => (!status || t.status === status) && (!type || t.transaction_type === type) &&
-      (!period || (period.length === 4 ? monthOf(t.transaction_date).startsWith(period) : monthOf(t.transaction_date) === period)) &&
+  const rows = useMemo(() => data ?? [], [data])
+  // Everything but the status: the tiles count these, the list then narrows by status.
+  const inScope = useMemo(
+    () => rows.filter((t) => inPeriod(t.transaction_date, period) && inTeam(t.branch_id, team) && (!type || t.transaction_type === type) &&
       contains([t.client_name, t.property_title, t.project_name, t.branch_name, t.agent_name, t.transaction_id, t.external_transaction_id, t.agent_id, t.cancellation_reason], search)),
-    [rows, status, type, period, search],
+    [rows, period, team, type, search],
   )
-  const months = useMemo(() => [...new Set(rows.map((t) => monthOf(t.transaction_date)))].sort().reverse(), [rows])
-  const years = [...new Set(months.map((m) => m.slice(0, 4)))]
-  const periodLabel = !period ? t("all time") : period.length === 4 ? period : monthLabel(period)
+  const shown = useMemo(() => inScope.filter((t) => !status || t.status === status), [inScope, status])
+  const count = (s: string) => inScope.filter((t) => t.status === s).length
+  const amountTotal = inScope.filter((t) => t.status !== "CANCELLED").reduce((sum, t) => sum + Number(t.amount), 0)
+  const teams = useMemo(() => {
+    const byId = new Map<number, string>()
+    for (const r of rows) if (r.branch_id && r.branch_name) byId.set(r.branch_id, r.branch_name)
+    return [...byId].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+  }, [rows])
+  const dates = useMemo(() => rows.map((r) => r.transaction_date), [rows])
+  const periodLabel = labelOf(period)
   const selected = id ? rows.find((t) => t.transaction_id === id || t.external_transaction_id === id) ?? null : null
   const types = [...new Set(rows.map((t) => t.transaction_type))]
 
@@ -89,30 +91,27 @@ export function TransactionsPage() {
         ))}
       </div>
       {view === "pipeline" ? <DealsPipeline mode="company" /> : (<>
-      {summary && (
+      {data && (
         <Tiles items={[
-          { label: "All transactions", value: summary.total, onClick: () => setStatus(""), active: !status },
-          { label: "Reserved", value: summary.reserved, onClick: () => setStatus(status === "RESERVED" ? "" : "RESERVED"), active: status === "RESERVED" },
-          { label: "Completed", value: summary.completed, onClick: () => setStatus(status === "COMPLETED" ? "" : "COMPLETED"), active: status === "COMPLETED" },
-          { label: "Cancelled", value: summary.cancelled, onClick: () => setStatus(status === "CANCELLED" ? "" : "CANCELLED"), active: status === "CANCELLED" },
-          { label: "Total amount", value: pesoShort(summary.amount_total), detail: "All recorded transactions" },
+          { label: "All transactions", value: inScope.length, detail: periodLabel, onClick: () => setStatus(""), active: !status },
+          { label: "Reserved", value: count("RESERVED"), onClick: () => setStatus(status === "RESERVED" ? "" : "RESERVED"), active: status === "RESERVED" },
+          { label: "Completed", value: count("COMPLETED"), onClick: () => setStatus(status === "COMPLETED" ? "" : "COMPLETED"), active: status === "COMPLETED" },
+          { label: "Cancelled", value: count("CANCELLED"), onClick: () => setStatus(status === "CANCELLED" ? "" : "CANCELLED"), active: status === "CANCELLED" },
+          { label: "Total amount", value: pesoShort(amountTotal), detail: "Excluding cancelled" },
         ]} />
       )}
-      <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-        <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search client, property, agent or reference" /></div>
+      <div className="flex flex-wrap gap-2">
+        <div className="w-full lg:w-auto lg:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search client, property, agent or reference" /></div>
+        <TeamFilter value={team} onChange={setTeam} teams={teams} />
+        <PeriodFilter value={period} onChange={setPeriod} dates={dates} />
         <Select label="Type" value={type} onChange={setType} options={[{ value: "", label: "All types" }, ...types.map((t) => ({ value: t, label: statusLabel(t) }))]} />
         <Select label="Status" value={status} onChange={setStatus} options={[{ value: "", label: "All statuses" }, ...["RESERVED", "COMPLETED", "CANCELLED"].map((s) => ({ value: s, label: statusLabel(s) }))]} />
-        <Select label="Period" value={period} onChange={setPeriod} options={[
-          { value: "", label: "All time" },
-          ...years.map((y) => ({ value: y, label: t("Year {y}", { y }) })),
-          ...months.map((m) => ({ value: m, label: monthLabel(m) })),
-        ]} />
       </div>
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
           <GrossSalesRecap rows={shown} period={periodLabel} />
-          <p className="text-xs text-ab-faint">{t("{n} of {total} transactions", { n: shown.length, total: rows.length })}</p>
+          <p className="text-xs text-ab-faint">{t("{n} of {total} transactions · {period}", { n: shown.length, total: rows.length, period: periodLabel })}</p>
           {view === "board"
             ? <SalesBoard rows={shown} onOpen={(t) => open(t.transaction_id)} />
             : <DataTable exportTitle="Transactions" rows={shown} columns={columns} rowKey={(t) => t.transaction_id} onOpen={(t) => open(t.transaction_id)} empty="No transactions match these filters." initialSort={{ key: "date", dir: "desc" }} />}

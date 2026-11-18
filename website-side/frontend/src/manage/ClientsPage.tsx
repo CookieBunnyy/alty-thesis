@@ -3,6 +3,8 @@ import { Mail, MapPin, Phone, Trash2 } from "lucide-react"
 import { Link } from "@/components/Link"
 import { contains, date, dateTime, isManagement, peso, statusLabel, text, transactionDate } from "./format"
 import { Badge, Button, Confirm, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
+import { PeriodFilter } from "./filters"
+import { ALL_TIME, inPeriod, periodLabel, type Period } from "./period"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
@@ -31,13 +33,14 @@ export function ClientsPage() {
   const { id, open, close } = useOpenRecord()
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
+  const [period, setPeriod] = useState<Period>(ALL_TIME)
   const load = useCallback(() => Promise.all([api<Client[]>("/clients?limit=2000"), api<Summary>("/clients/summary")]), [api])
   const { data, error, loading, reload } = useApiData(load, "clients")
   const [clients, summary] = data ?? [[], null]
   const shown = useMemo(
-    () => clients.filter((c) => (!status || c.status === status) &&
+    () => clients.filter((c) => (!status || c.status === status) && inPeriod(c.transaction_date ?? c.created_at, period) &&
       contains([c.full_name, c.email, c.phone_number, c.location, c.property_title, c.agent_name, c.client_id, c.external_client_id], search)),
-    [clients, status, search],
+    [clients, status, period, search],
   )
   const selected = id ? clients.find((c) => c.client_id === id || c.external_client_id === id) ?? null : null
 
@@ -72,10 +75,12 @@ export function ClientsPage() {
           })),
         ]} />
       )}
-      <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-        <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, phone, email, property or agent" /></div>
+      <div className="flex flex-wrap gap-2">
+        <div className="w-full lg:w-auto lg:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, phone, email, property or agent" /></div>
         <Select label="Status" value={status} onChange={setStatus} options={[{ value: "", label: "All statuses" }, ...["PROSPECT", "RESERVED", "SOLD", "CANCELLED"].map((s) => ({ value: s, label: statusLabel(s) }))]} />
+        <PeriodFilter value={period} onChange={setPeriod} dates={clients.map((c) => c.transaction_date ?? c.created_at)} />
       </div>
+      {data && <p className="text-xs text-ab-faint">{t("{n} of {total} clients · latest activity {period}", { n: shown.length, total: clients.length, period: periodLabel(period) })}</p>}
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>

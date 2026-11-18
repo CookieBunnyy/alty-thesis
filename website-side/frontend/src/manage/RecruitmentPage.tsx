@@ -3,6 +3,8 @@ import { ArrowRight, BadgeCheck, LoaderCircle, Mail, Pencil, Phone, Plus, Trash2
 import { Link } from "@/components/Link"
 import { contains, date, dateTime, isManagement, statusLabel, text } from "./format"
 import { Badge, Button, Confirm, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
+import { PeriodFilter, TeamFilter } from "./filters"
+import { inPeriod, inTeam, periodLabel, thisYear, type Period } from "./period"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
@@ -43,12 +45,15 @@ export function RecruitmentPage() {
   const { id, open, close } = useOpenRecord()
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
+  const [period, setPeriod] = useState<Period>(thisYear)
+  const [team, setTeam] = useState("")
+  const teams = useBranchOptions()
   const [editing, setEditing] = useState<Applicant | "new" | null>(null)
   const load = useCallback(() => Promise.all([api<Applicant[]>("/recruitment/applicants"), api<Summary>("/recruitment/summary")]), [api])
   const { data, error, loading, reload } = useApiData(load, "recruitment")
   const [applicants, summary] = data ?? [null, null]
   const rows = useMemo(() => applicants ?? [], [applicants])
-  const shown = rows.filter((a) => (!status || (status === "OPEN" ? NEXT[a.status] || a.status === "APPROVED" : a.status === status)) &&
+  const shown = rows.filter((a) => inPeriod(a.created_at, period) && inTeam(a.branch_id, team) && (!status || (status === "OPEN" ? NEXT[a.status] || a.status === "APPROVED" : a.status === status)) &&
     contains([a.full_name, a.email, a.phone_number, a.branch_name, a.recruiter_name], search))
   const selected = id ? rows.find((a) => String(a.id) === id) ?? null : null
 
@@ -88,11 +93,14 @@ export function RecruitmentPage() {
             { label: "Acceptance rate", value: summary.acceptance_rate != null ? `${summary.acceptance_rate}%` : "—", detail: "Approved ÷ decided" },
           ]} />
           <Pipeline summary={summary} />
-          <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-            <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, contact, team or recruiter" /></div>
+          <div className="flex flex-wrap gap-2">
+            <div className="w-full lg:w-auto lg:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, contact, team or recruiter" /></div>
+            <TeamFilter value={team} onChange={setTeam} teams={teams} />
+            <PeriodFilter value={period} onChange={setPeriod} dates={rows.map((a) => a.created_at)} />
             <Select label="Stage" value={status} onChange={setStatus} options={[{ value: "", label: "All stages" }, { value: "OPEN", label: "Open applications" },
               ...[...summary.stages, ...summary.closed].map((s) => ({ value: s, label: statusLabel(s) }))]} />
           </div>
+          <p className="text-xs text-ab-faint">{t("{n} of {total} applicants · applied {period}", { n: shown.length, total: rows.length, period: periodLabel(period) })}</p>
           <DataTable exportTitle="Agent applicants" rows={shown} columns={columns} rowKey={(a) => String(a.id)} onOpen={(a) => open(String(a.id))}
             empty={rows.length ? "No applicants match these filters." : "No applicants yet. Add one with New applicant."} initialSort={{ key: "applied", dir: "desc" }} />
         </>

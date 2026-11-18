@@ -6,6 +6,8 @@ import { UploadDocument, type DocType, type DocumentRecord, type Folder } from "
 import { FolderTree } from "./FolderTree"
 import { indexFolders, isStandardFolder } from "./folders"
 import { Badge, Button, Confirm, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Select, Tiles, type Column } from "./ui"
+import { PeriodFilter } from "./filters"
+import { inPeriod, periodLabel, thisYear, type Period } from "./period"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
@@ -44,6 +46,7 @@ export function DocumentsPage() {
   const [status, setStatus] = useState("")
   const [type, setType] = useState("")
   const [folder, setFolder] = useState<number | null>(null)
+  const [period, setPeriod] = useState<Period>(thisYear)
   const [uploading, setUploading] = useState(false)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [voucherFields, setVoucherFields] = useState(false)
@@ -65,10 +68,10 @@ export function DocumentsPage() {
 
   const index = useMemo(() => indexFolders(folders), [folders])
   const inFolder = useMemo(() => (folder === null ? null : index.within(folder)), [index, folder])
-  const shown = useMemo(() => docs.filter((d) =>
+  const shown = useMemo(() => docs.filter((d) => inPeriod(d.created_at, period) &&
     (inFolder === null || (d.folder_id != null && inFolder.has(d.folder_id))) && (!status || d.status === status) && (!type || d.document_type === type) &&
     contains([d.document_name, d.document_type, d.document_id, d.related_party_name, d.property_listing_title, d.transaction_reference, d.folder_path, d.processing_error], search)),
-  [docs, inFolder, status, type, search])
+  [docs, inFolder, status, type, period, search])
   const selected = id ? docs.find((d) => d.document_id === id) ?? null : null
   // Per folder, including everything filed in its sub-folders.
   const counts = useMemo(() => {
@@ -167,16 +170,17 @@ export function DocumentsPage() {
             <FolderTree index={index} counts={counts} total={docs.length} selected={folder} onSelect={setFolder} />
           </nav>
           <div className="min-w-0 space-y-3">
-            <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-              <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, client, property, reference or error" /></div>
+            <div className="flex flex-wrap gap-2">
+              <div className="w-full xl:w-auto xl:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, client, property, reference or error" /></div>
               <div className="lg:hidden">
                 <Select label="Folder" value={folder === null ? "" : String(folder)} onChange={(v) => setFolder(v ? Number(v) : null)}
                   options={[{ value: "", label: "All folders" }, ...index.options]} />
               </div>
               <Select label="Type" value={type} onChange={setType} options={[{ value: "", label: "All types" }, ...types.filter((dt) => dt.code !== "AUTO").map((dt) => ({ value: dt.code, label: dt.label }))]} />
               <Select label="Status" value={status} onChange={setStatus} options={[{ value: "", label: "All statuses" }, ...STATUSES.map((s) => ({ value: s, label: statusLabel(s) }))]} />
+              <PeriodFilter value={period} onChange={setPeriod} dates={docs.map((d) => d.created_at)} />
             </div>
-            <p className="text-xs text-ab-faint">{t("{n} of {total} documents", { n: shown.length, total: docs.length })}</p>
+            <p className="text-xs text-ab-faint">{t("{n} of {total} documents · uploaded {period}", { n: shown.length, total: docs.length, period: periodLabel(period) })}</p>
             <DataTable rows={shown} columns={columns} rowKey={(d) => d.document_id} onOpen={(d) => open(d.document_id)}
               empty={docs.length ? "No documents match these filters." : "No documents yet. Upload one to get started."} initialSort={{ key: "uploaded", dir: "desc" }} />
           </div>

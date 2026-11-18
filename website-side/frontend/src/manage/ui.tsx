@@ -3,7 +3,8 @@
 // detail drawer, confirm dialog and status badges. Labels passed to these
 // components (titles, column names, filter options…) are translated here.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, FileDown, Inbox, LoaderCircle, Search, X } from "lucide-react"
+import { flushSync } from "react-dom"
+import { AlertTriangle, ArrowDown, ArrowUp, ChevronLeft, ChevronRight, FileDown, Inbox, LoaderCircle, Search, X } from "lucide-react"
 import { exportPdf, readTable } from "./pdfExport"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
@@ -174,14 +175,31 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
   const [sort, setSort] = useState(initialSort ?? null)
   const tableRef = useRef<HTMLTableElement | null>(null)
   const [exporting, setExporting] = useState(false)
+  // A page of rows at a time, so a long list never fills the screen.
+  const [pageSize, setPageSize] = useState(25)
+  const [page, setPage] = useState(0)
+  const [allRows, setAllRows] = useState(false) // while exporting: every row, not just this page
+  // New filters or search: back to the first page. Compared by the rows' keys,
+  // since many pages build a fresh array on every render.
+  const signature = rows.map(rowKey).join("|")
+  const [seenRows, setSeenRows] = useState(signature)
+  if (seenRows !== signature) {
+    setSeenRows(signature)
+    setPage(0)
+  }
   const { user } = useStaffAuth()
   const toast = useToast()
   const exportTable = async () => {
     if (!tableRef.current || !exportTitle) return
     setExporting(true)
     try {
-      await exportPdf({ title: exportTitle, note: exportNote, author: user?.full_name, ...readTable(tableRef.current) })
+      // The PDF holds every row that matches the filters, not just the page on screen.
+      flushSync(() => setAllRows(true))
+      const table = readTable(tableRef.current)
+      setAllRows(false)
+      await exportPdf({ title: exportTitle, note: exportNote, author: user?.full_name, ...table })
     } catch {
+      setAllRows(false)
       toast(t("The PDF couldn't be created. Please try again."), "error")
     } finally {
       setExporting(false)
@@ -209,6 +227,9 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
     )
   }
   const [first, ...rest] = columns
+  const pages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const current = Math.min(page, pages - 1)
+  const visible = allRows ? sorted : sorted.slice(current * pageSize, current * pageSize + pageSize)
   return (
     <>
       {exportTitle && (
@@ -220,7 +241,7 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
         </div>
       )}
       <ul className="space-y-2 md:hidden" data-tour="table">
-        {sorted.map((row) => (
+        {visible.map((row) => (
           <li key={rowKey(row)}>
             {/* A card is a button only when it opens something (it may hold its own buttons otherwise). */}
             <PhoneCard onOpen={onOpen ? () => onOpen(row) : undefined}>
@@ -267,7 +288,7 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
             </tr>
           </thead>
           <tbody>
-            {sorted.map((row) => (
+            {visible.map((row) => (
               <tr
                 key={rowKey(row)}
                 onClick={() => onOpen?.(row)}
@@ -283,7 +304,43 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
           </tbody>
         </table>
       </div>
+      {sorted.length > 10 && (
+        <Pager page={current} pages={pages} pageSize={pageSize} total={sorted.length}
+          onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(0) }} />
+      )}
     </>
+  )
+}
+
+const PAGE_SIZES = [10, 25, 50, 100]
+
+/** "Showing 26–50 of 340" · rows per page · previous / next. */
+function Pager({ page, pages, pageSize, total, onPage, onPageSize }: {
+  page: number; pages: number; pageSize: number; total: number; onPage: (page: number) => void; onPageSize: (size: number) => void
+}) {
+  const from = page * pageSize + 1
+  const to = Math.min(total, from + pageSize - 1)
+  const arrow = "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ab-border-strong text-ab-text hover:bg-ab-hover disabled:cursor-not-allowed disabled:opacity-40"
+  return (
+    <nav aria-label={t("Table pages")} className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-ab-muted">
+      <p aria-live="polite">{t("Showing {from}–{to} of {total}", { from, to, total })}</p>
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-1.5">
+          {t("Rows per page")}
+          <select value={pageSize} onChange={(e) => onPageSize(Number(e.target.value))}
+            className="min-h-9 rounded-lg border border-ab-border bg-ab-input px-2 text-xs text-ab-text focus:border-ab-accent focus:outline-none">
+            {PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+          </select>
+        </label>
+        <button type="button" className={arrow} onClick={() => onPage(page - 1)} disabled={page === 0} aria-label={t("Previous page")}>
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <span className="tabular-nums">{t("Page {n} of {total}", { n: page + 1, total: pages })}</span>
+        <button type="button" className={arrow} onClick={() => onPage(page + 1)} disabled={page >= pages - 1} aria-label={t("Next page")}>
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </nav>
   )
 }
 

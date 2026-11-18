@@ -6,6 +6,8 @@ import { Link } from "@/components/Link"
 import { contains, date, dateTime, isManagement, statusLabel, text } from "./format"
 import { Badge, Button, DataTable, Drawer, Facts, LoadState, PageHeader, SearchBox, Section, Tiles, type Column } from "./ui"
 import { useStaffAuth } from "./staffContext"
+import { PeriodFilter } from "./filters"
+import { ALL_TIME, inPeriod, type Period } from "./period"
 import { useToast } from "./toastContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { t } from "./i18n"
@@ -46,13 +48,14 @@ export function DealsPipeline({ mode }: { mode: "company" | "seller" }) {
   const { id, open, close } = useOpenRecord()
   const [search, setSearch] = useState("")
   const [stage, setStage] = useState("")
+  const [period, setPeriod] = useState<Period>(ALL_TIME)
   const [creating, setCreating] = useState(false)
   const canManage = mode === "company" && isManagement(user?.role)
   const load = useCallback(() => Promise.all([api<Deal[]>("/deals"), api<Summary>("/deals/summary")]), [api])
   const { data, error, loading, reload } = useApiData(load, `deals:${mode}`)
   const [deals, summary] = data ?? [null, null]
   const rows = useMemo(() => deals ?? [], [deals])
-  const shown = rows.filter((d) => (!stage || d.stage === stage) && contains([d.buyer_name, d.property_title, d.project_name, d.seller_name], search))
+  const shown = rows.filter((d) => (!stage || d.stage === stage) && inPeriod(d.created_at, period) && contains([d.buyer_name, d.property_title, d.project_name, d.seller_name], search))
   const selected = id ? rows.find((d) => String(d.id) === id) ?? null : null
 
   const columns: Column<Deal>[] = [
@@ -74,6 +77,7 @@ export function DealsPipeline({ mode }: { mode: "company" | "seller" }) {
           <Tiles items={[...summary.stages, "LOST"].map((s) => ({ label: stageLabel(s), value: summary.by_stage[s] ?? 0, onClick: () => setStage(stage === s ? "" : s), active: stage === s }))} />
           <div className="flex flex-wrap items-center gap-2">
             <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search buyer, property, project or seller" /></div>
+            <PeriodFilter value={period} onChange={setPeriod} dates={rows.map((d) => d.created_at)} />
             {(mode === "seller" || canManage) && <Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> {t("New inquiry")}</Button>}
           </div>
           <DataTable exportTitle="Deals from inquiry to closing" rows={shown} columns={columns} rowKey={(d) => String(d.id)} onOpen={(d) => open(String(d.id))}

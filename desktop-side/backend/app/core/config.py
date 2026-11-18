@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     OCR_ENGINE: str = "auto"
     # A PDF page with fewer extractable characters than this is treated as scanned.
     OCR_MIN_TEXT_CHARS: int = 40
+    # Memory: photos are shrunk so their longest side is at most this many
+    # pixels before text is read (1280 reads A4 scans and phone photos as well
+    # as larger sizes, at about half the memory), using this many CPU threads.
+    # Render's free plan has 512 MB for the whole app.
+    OCR_MAX_SIDE: int = 1280
+    OCR_THREADS: int = 1
 
     # Forecasting requires at least this many monthly observations.
     FORECAST_MIN_MONTHS: int = 6
