@@ -23,9 +23,9 @@ const PERIODS: { key: Period; label: string; empty: string }[] = [
 ]
 // Podium order on screen: 2nd, 1st, 3rd.
 const PLACES = [
-  { rank: 2, label: "2nd", height: "h-32", bar: "from-sky-200/80 to-sky-50 dark:from-sky-500/30 dark:to-sky-500/5", ring: "ring-sky-300" },
-  { rank: 1, label: "1st", height: "h-44", bar: "from-violet-300/80 to-violet-50 dark:from-violet-500/40 dark:to-violet-500/5", ring: "ring-violet-400" },
-  { rank: 3, label: "3rd", height: "h-24", bar: "from-pink-200/80 to-pink-50 dark:from-pink-500/30 dark:to-pink-500/5", ring: "ring-pink-300" },
+  { rank: 2, label: "2nd", height: "h-14", bar: "from-sky-200/80 to-sky-50 dark:from-sky-500/30 dark:to-sky-500/5", ring: "ring-sky-300" },
+  { rank: 1, label: "1st", height: "h-20", bar: "from-violet-300/80 to-violet-50 dark:from-violet-500/40 dark:to-violet-500/5", ring: "ring-violet-400" },
+  { rank: 3, label: "3rd", height: "h-10", bar: "from-pink-200/80 to-pink-50 dark:from-pink-500/30 dark:to-pink-500/5", ring: "ring-pink-300" },
 ] as const
 
 /** The figures behind a place, shown on hover / keyboard focus. */
@@ -41,7 +41,7 @@ function Kpis({ seller, rank, periodLabel }: { seller: Seller; rank: number; per
   ]
   return (
     <span role="tooltip"
-      className={`pointer-events-none absolute bottom-full ${align} z-20 mb-2 hidden w-60 rounded-xl border border-ab-border bg-ab-card p-3 text-left text-xs shadow-xl group-hover:block group-focus-visible:block`}>
+      className={`pointer-events-none absolute top-full ${align} z-20 mt-1 hidden w-60 rounded-xl border border-ab-border bg-ab-card p-3 text-left text-xs shadow-xl group-hover:block group-focus-visible:block`}>
       <span className="block font-bold text-ab-text">{t("Why {name} is #{rank}", { name: seller.name, rank })}</span>
       <span className="mb-2 block text-ab-faint">{t("Ranked by total sales value, {period}", { period: t(periodLabel).toLowerCase() })}</span>
       {rows.map(([label, value]) => (
@@ -55,24 +55,24 @@ function Kpis({ seller, rank, periodLabel }: { seller: Seller; rank: number; per
 }
 
 function Podium({ sellers, photos, periodLabel, empty }: { sellers: Seller[]; photos: Record<string, number | null | undefined>; periodLabel: string; empty: string }) {
-  if (!sellers.length) return <p className="py-10 text-center text-sm italic text-ab-faint">{t(empty)}</p>
+  if (!sellers.length) return <p className="py-6 text-center text-sm italic text-ab-faint">{t(empty)}</p>
   return (
-    <ol className="grid grid-cols-3 items-end gap-2 sm:gap-4" aria-label={t("Top 3 sellers")}>
+    <ol className="grid grid-cols-3 items-end gap-2" aria-label={t("Top 3 sellers")}>
       {PLACES.map((place) => {
         const seller = sellers[place.rank - 1]
         if (!seller) return <li key={place.rank} aria-hidden className="min-w-0" />
         const body = (
           <>
-            <span className="relative mb-2 flex flex-col items-center">
-              {place.rank === 1 && <Crown className="mb-1 h-5 w-5 text-amber-500" aria-hidden />}
-              <span className={`rounded-full ring-4 ${place.ring}`}>
-                <AgentAvatar agentId={seller.agent_id ?? seller.name} name={seller.name} version={seller.agent_id ? photos[seller.agent_id] : null} size="md" />
+            <span className="relative mb-1.5 flex flex-col items-center">
+              {place.rank === 1 && <Crown className="mb-0.5 h-4 w-4 text-amber-500" aria-hidden />}
+              <span className={`rounded-full ring-2 ${place.ring}`}>
+                <AgentAvatar agentId={seller.agent_id ?? seller.name} name={seller.name} version={seller.agent_id ? photos[seller.agent_id] : null} size="sm" />
               </span>
-              <span className="mt-2 max-w-full truncate px-1 text-sm font-bold text-ab-text">{seller.name}</span>
+              <span className="mt-1 max-w-full truncate px-1 text-xs font-semibold text-ab-text">{seller.name}</span>
             </span>
-            <span className={`flex w-full flex-col items-center justify-center gap-2 rounded-t-2xl bg-gradient-to-b ${place.bar} ${place.height} transition group-hover:brightness-105`}>
-              <span className="text-2xl font-extrabold text-ab-text sm:text-3xl">{t(place.label)}</span>
-              <span className="rounded-full bg-ab-card px-2.5 py-0.5 text-xs font-bold tabular-nums text-ab-text shadow-sm">{pesoShort(seller.revenue)}</span>
+            <span className={`flex w-full flex-col items-center justify-center gap-0.5 rounded-t-xl bg-gradient-to-b ${place.bar} ${place.height} transition group-hover:brightness-105`}>
+              <span className="text-sm font-extrabold text-ab-text">{t(place.label)}</span>
+              <span className="text-[11px] font-semibold tabular-nums text-ab-muted">{pesoShort(seller.revenue)}</span>
             </span>
           </>
         )
@@ -105,17 +105,19 @@ export function TopSellers({ photos = {} }: { photos?: Record<string, number | n
   return (
     <div className="grid gap-5 lg:grid-cols-3" data-tour="top-sellers">
       <Section title={t("Top 3 performing sellers")} className="lg:col-span-2"
-        action={<Link to="/manage/reports" className="text-xs font-semibold text-ab-accent hover:underline">{t("Full sales report")}</Link>}>
-        <div role="tablist" aria-label={t("Period")} className="mb-5 flex w-fit rounded-xl border border-ab-border bg-ab-card-2 p-1">
-          {PERIODS.map((p) => (
-            <button key={p.key} type="button" role="tab" aria-selected={period === p.key} onClick={() => setPeriod(p.key)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${period === p.key ? "bg-ab-accent text-ab-ink" : "text-ab-muted hover:text-ab-text"}`}>{t(p.label)}</button>
-          ))}
-        </div>
-        <div className="mx-auto max-w-xl pt-28 sm:pt-24">
+        action={(
+          <div role="tablist" aria-label={t("Period")} className="flex rounded-lg border border-ab-border bg-ab-card-2 p-0.5">
+            {PERIODS.map((p) => (
+              <button key={p.key} type="button" role="tab" aria-selected={period === p.key} onClick={() => setPeriod(p.key)}
+                className={`rounded-md px-2 py-0.5 text-xs font-semibold ${period === p.key ? "bg-ab-accent text-ab-ink" : "text-ab-muted hover:text-ab-text"}`}>{t(p.label)}</button>
+            ))}
+          </div>
+        )}>
+        <div className="mx-auto max-w-sm">
           <Podium sellers={sellers.slice(0, 3)} photos={photos} periodLabel={current.label} empty={current.empty} />
         </div>
-        <p className="mt-3 text-center text-xs text-ab-faint">{t("Ranked by total sales value. Point at a seller to see why; click to open their profile.")}</p>
+        <p className="mt-2 text-center text-[11px] text-ab-faint">{t("Ranked by total sales value. Point at a seller to see why; click to open their profile.")}{" "}
+          <Link to="/manage/reports" className="font-semibold text-ab-accent hover:underline">{t("Full sales report")}</Link></p>
       </Section>
       <Section title={t("Teams / clusters in {year}", { year: data.year })}>
         {data.sales.by_team.length === 0 ? <p className="py-6 text-center text-sm italic text-ab-faint">{t("No completed sales yet this year.")}</p> : (

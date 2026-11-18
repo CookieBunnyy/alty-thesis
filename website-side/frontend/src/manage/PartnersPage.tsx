@@ -100,8 +100,7 @@ export function PartnersPage() {
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
-          <p className="text-xs text-ab-faint">{t("{n} of {total} partners", { n: shown.length, total: partners.length })}</p>
-          <DataTable exportTitle="Partners / Developers" rows={shown} columns={columns} rowKey={(p) => String(p.id)} onOpen={(p) => open(String(p.id))} empty="No partners match these filters." initialSort={{ key: "name", dir: "asc" }} />
+          <DataTable count={t("{n} of {total} partners", { n: shown.length, total: partners.length })} exportTitle="Partners / Developers" rows={shown} columns={columns} rowKey={(p) => String(p.id)} onOpen={(p) => open(String(p.id))} empty="No partners match these filters." initialSort={{ key: "name", dir: "asc" }} />
         </>
       )}
       {selected && <PartnerDrawer partner={selected} canManage={canManage} onClose={close} onEdit={() => setEditing(selected)} onDeleted={() => { close(); void reload() }} onChanged={() => void reload()} />}

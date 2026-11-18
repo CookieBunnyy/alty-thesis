@@ -6,13 +6,12 @@ import "./index.css"
 import { AppRoutes } from "./AppRoutes"
 import { ThemeProvider } from "./hooks/useTheme"
 import { AuthProvider } from "./components/AuthProvider"
-import { TopProgressBar } from "./components/TopProgressBar"
 import { installFetchTracking } from "./lib/loading"
 import { setupPwa } from "./lib/pwa"
 import { dismissSplashWhenReady } from "./lib/splash"
 import { moveToOwnHost } from "./lib/hosts"
 
-// Count API requests for the loading bar before anything fetches.
+// Count API requests before anything fetches (the welcome screen waits for the first data).
 installFetchTracking()
 // Installable app: service worker + the browser's install prompt.
 setupPwa()
@@ -24,7 +23,6 @@ if (!moveToOwnHost()) {
     <StrictMode>
       <ThemeProvider>
         <AuthProvider>
-          <TopProgressBar />
           <AppRoutes />
         </AuthProvider>
       </ThemeProvider>

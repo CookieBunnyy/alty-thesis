@@ -180,8 +180,7 @@ export function DocumentsPage() {
               <Select label="Status" value={status} onChange={setStatus} options={[{ value: "", label: "All statuses" }, ...STATUSES.map((s) => ({ value: s, label: statusLabel(s) }))]} />
               <PeriodFilter value={period} onChange={setPeriod} dates={docs.map((d) => d.created_at)} />
             </div>
-            <p className="text-xs text-ab-faint">{t("{n} of {total} documents · uploaded {period}", { n: shown.length, total: docs.length, period: periodLabel(period) })}</p>
-            <DataTable rows={shown} columns={columns} rowKey={(d) => d.document_id} onOpen={(d) => open(d.document_id)}
+            <DataTable count={t("{n} of {total} documents · uploaded {period}", { n: shown.length, total: docs.length, period: periodLabel(period) })} rows={shown} columns={columns} rowKey={(d) => d.document_id} onOpen={(d) => open(d.document_id)}
               empty={docs.length ? "No documents match these filters." : "No documents yet. Upload one to get started."} initialSort={{ key: "uploaded", dir: "desc" }} />
           </div>
         </div>

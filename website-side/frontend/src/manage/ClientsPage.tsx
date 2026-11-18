@@ -80,12 +80,10 @@ export function ClientsPage() {
         <Select label="Status" value={status} onChange={setStatus} options={[{ value: "", label: "All statuses" }, ...["PROSPECT", "RESERVED", "SOLD", "CANCELLED"].map((s) => ({ value: s, label: statusLabel(s) }))]} />
         <PeriodFilter value={period} onChange={setPeriod} dates={clients.map((c) => c.transaction_date ?? c.created_at)} />
       </div>
-      {data && <p className="text-xs text-ab-faint">{t("{n} of {total} clients · latest activity {period}", { n: shown.length, total: clients.length, period: periodLabel(period) })}</p>}
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
-          <p className="text-xs text-ab-faint">{t("{n} of {total} clients", { n: shown.length, total: clients.length })}</p>
-          <DataTable exportTitle="Buyers & Sellers" rows={shown} columns={columns} rowKey={(c) => c.client_id} onOpen={(c) => open(c.client_id)} empty="No clients match these filters." initialSort={{ key: "date", dir: "desc" }} />
+          <DataTable count={t("{n} of {total} clients · latest activity {period}", { n: shown.length, total: clients.length, period: periodLabel(period) })} exportTitle="Buyers & Sellers" rows={shown} columns={columns} rowKey={(c) => c.client_id} onOpen={(c) => open(c.client_id)} empty="No clients match these filters." initialSort={{ key: "date", dir: "desc" }} />
         </>
       )}
       {selected && <ClientDrawer client={selected} onClose={close} onDeleted={() => { close(); void reload() }} />}

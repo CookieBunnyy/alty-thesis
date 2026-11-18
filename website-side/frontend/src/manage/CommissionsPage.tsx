@@ -100,8 +100,7 @@ export function CommissionsPage() {
             <Select label="Kind" value={kind} onChange={setKind} options={[{ value: "", label: "Sales and rentals" }, { value: "SALE", label: "Sales" }, { value: "RENTAL", label: "Rentals" }]} />
             <PeriodFilter value={period} onChange={setPeriod} dates={rows.map((r) => r.transaction_date ?? r.record_date)} />
           </div>
-          <p className="text-xs text-ab-faint">{t("{n} of {total} commission records · {period}", { n: shown.length, total: rows.length, period: periodLabel(period) })}</p>
-          <DataTable exportTitle="Commission records" rows={shown} columns={columns} rowKey={(r) => String(r.id)} onOpen={(r) => open(String(r.id))}
+          <DataTable count={t("{n} of {total} commission records · {period}", { n: shown.length, total: rows.length, period: periodLabel(period) })} exportTitle="Commission records" rows={shown} columns={columns} rowKey={(r) => String(r.id)} onOpen={(r) => open(String(r.id))}
             empty={rows.length ? "No commissions match these filters." : "No commissions recorded yet."} initialSort={{ key: "date", dir: "desc" }} />
         </>
       )}

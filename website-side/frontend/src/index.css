@@ -506,10 +506,6 @@
 }
 
 /* ---- Loading indicators -------------------------------------------------- */
-/* Top progress bar (TopProgressBar.tsx): creeps while waiting, then completes. */
-.ab-progress { width: 0; opacity: 0; }
-.ab-progress-running { width: 85%; opacity: 1; transition: width 8s cubic-bezier(0.1, 0.6, 0.2, 1), opacity 0.15s ease; }
-.ab-progress-finishing { width: 100%; opacity: 0; transition: width 0.25s ease, opacity 0.3s ease 0.2s; }
 
 /* Skeleton placeholders with a soft shimmer. */
 @keyframes ab-shimmer {
@@ -539,7 +535,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ab-skeleton { animation: none; }
-  .ab-progress-running, .ab-progress-finishing { transition: opacity 0.15s ease; }
   .ab-page-in { animation: none; }
   .ab-spinner { animation-duration: 2.4s; }
 }

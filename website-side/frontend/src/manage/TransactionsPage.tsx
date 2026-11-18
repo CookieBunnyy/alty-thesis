@@ -111,10 +111,10 @@ export function TransactionsPage() {
       {data && (
         <>
           <GrossSalesRecap rows={shown} period={periodLabel} />
-          <p className="text-xs text-ab-faint">{t("{n} of {total} transactions · {period}", { n: shown.length, total: rows.length, period: periodLabel })}</p>
+          {view === "board" && <p className="text-xs text-ab-faint">{t("{n} of {total} transactions · {period}", { n: shown.length, total: rows.length, period: periodLabel })}</p>}
           {view === "board"
             ? <SalesBoard rows={shown} onOpen={(t) => open(t.transaction_id)} />
-            : <DataTable exportTitle="Transactions" rows={shown} columns={columns} rowKey={(t) => t.transaction_id} onOpen={(t) => open(t.transaction_id)} empty="No transactions match these filters." initialSort={{ key: "date", dir: "desc" }} />}
+            : <DataTable count={t("{n} of {total} transactions · {period}", { n: shown.length, total: rows.length, period: periodLabel })} exportTitle="Transactions" rows={shown} columns={columns} rowKey={(t) => t.transaction_id} onOpen={(t) => open(t.transaction_id)} empty="No transactions match these filters." initialSort={{ key: "date", dir: "desc" }} />}
         </>
       )}
       {selected && <TransactionDrawer transaction={selected} related={rows} onClose={close} canCancel={isManagement(user?.role)} onChanged={reload} />}

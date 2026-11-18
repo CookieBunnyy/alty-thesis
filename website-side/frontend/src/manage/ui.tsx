@@ -164,11 +164,13 @@ export type Column<T> = {
 }
 
 /** Sortable table; on phones each row becomes a card (title + label/value pairs). */
-export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort, exportTitle, exportNote }: {
+export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort, exportTitle, exportNote, count }: {
   rows: T[]; columns: Column<T>[]; rowKey: (row: T) => string; onOpen?: (row: T) => void; empty: string
   initialSort?: { key: string; dir: "asc" | "desc" }
   /** Adds "Export PDF": the table as shown (search, filters, sort), titled this. */
   exportTitle?: string
+  /** "12 of 40 sellers": shown on the same slim row as Export PDF. */
+  count?: ReactNode
   /** A line under the PDF title, e.g. the filters in use. */
   exportNote?: string
 }) {
@@ -232,12 +234,16 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, empty, initialSort
   const visible = allRows ? sorted : sorted.slice(current * pageSize, current * pageSize + pageSize)
   return (
     <>
-      {exportTitle && (
-        <div className="mb-2 flex justify-end">
-          <Button onClick={() => void exportTable()} disabled={exporting}>
-            {exporting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-            {exporting ? t("Exporting…") : t("Export PDF")}
-          </Button>
+      {(exportTitle || count) && (
+        <div className="mb-1.5 flex min-h-8 items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-xs text-ab-faint" aria-live="polite">{count}</p>
+          {exportTitle && (
+            <button type="button" onClick={() => void exportTable()} disabled={exporting}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-ab-border-strong px-2.5 text-xs font-semibold text-ab-text transition hover:bg-ab-hover disabled:opacity-50">
+              {exporting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+              {exporting ? t("Exporting…") : t("Export PDF")}
+            </button>
+          )}
         </div>
       )}
       <ul className="space-y-2 md:hidden" data-tour="table">

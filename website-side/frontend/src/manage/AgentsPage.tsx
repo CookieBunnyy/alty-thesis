@@ -122,8 +122,7 @@ export function AgentsPage() {
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
-          <p className="text-xs text-ab-faint">{t("{n} of {total} agents", { n: shown.length, total: agents.length })}</p>
-          <DataTable exportTitle="Sellers" rows={shown} columns={columns} rowKey={(a) => a.agent_id} onOpen={(a) => open(a.agent_id)} empty="No sellers match these filters." initialSort={{ key: "value", dir: "desc" }} />
+          <DataTable count={t("{n} of {total} agents", { n: shown.length, total: agents.length })} exportTitle="Sellers" rows={shown} columns={columns} rowKey={(a) => a.agent_id} onOpen={(a) => open(a.agent_id)} empty="No sellers match these filters." initialSort={{ key: "value", dir: "desc" }} />
         </>
       )}
       {selected && <AgentDrawer agent={selected} onClose={close} onChanged={reload} />}

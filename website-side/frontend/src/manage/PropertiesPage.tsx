@@ -134,8 +134,7 @@ export function PropertiesPage() {
       <LoadState loading={loading && !data} error={error} onRetry={reload} />
       {data && (
         <>
-          <p className="text-xs text-ab-faint">{t("{n} of {total} listings", { n: shown.length, total: listings.length })}</p>
-          <DataTable exportTitle="Properties" rows={shown} columns={columns} rowKey={(l) => String(l.listing_id)} onOpen={(l) => open(String(l.listing_id))}
+          <DataTable count={t("{n} of {total} listings", { n: shown.length, total: listings.length })} exportTitle="Properties" rows={shown} columns={columns} rowKey={(l) => String(l.listing_id)} onOpen={(l) => open(String(l.listing_id))}
             empty="No listings match these filters." initialSort={{ key: "title", dir: "asc" }} />
         </>
       )}

@@ -100,8 +100,7 @@ export function RecruitmentPage() {
             <Select label="Stage" value={status} onChange={setStatus} options={[{ value: "", label: "All stages" }, { value: "OPEN", label: "Open applications" },
               ...[...summary.stages, ...summary.closed].map((s) => ({ value: s, label: statusLabel(s) }))]} />
           </div>
-          <p className="text-xs text-ab-faint">{t("{n} of {total} applicants · applied {period}", { n: shown.length, total: rows.length, period: periodLabel(period) })}</p>
-          <DataTable exportTitle="Agent applicants" rows={shown} columns={columns} rowKey={(a) => String(a.id)} onOpen={(a) => open(String(a.id))}
+          <DataTable count={t("{n} of {total} applicants · applied {period}", { n: shown.length, total: rows.length, period: periodLabel(period) })} exportTitle="Agent applicants" rows={shown} columns={columns} rowKey={(a) => String(a.id)} onOpen={(a) => open(String(a.id))}
             empty={rows.length ? "No applicants match these filters." : "No applicants yet. Add one with New applicant."} initialSort={{ key: "applied", dir: "desc" }} />
         </>
       )}
