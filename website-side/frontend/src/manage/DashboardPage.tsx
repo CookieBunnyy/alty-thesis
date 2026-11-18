@@ -1,45 +1,36 @@
 import { useCallback, useState, type ReactNode } from "react"
-import { AlertTriangle, ArrowLeftRight, Building2, FileWarning, RefreshCw, TrendingUp, UserRound, Users, type LucideIcon } from "lucide-react"
+import { AlertTriangle, ArrowLeftRight, Building2, FileWarning, TrendingUp, type LucideIcon } from "lucide-react"
+import { Link } from "@/components/Link"
 import { Legend, ShareBar, StackedBarChart, TableToggle } from "./charts"
 import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
 import { statusLabel, transactionDate } from "./format"
 import { locale, t } from "./i18n"
-import { SalesRecruitmentPanel } from "./dashboardSalesRecruitment"
 import { CancelReason } from "./cancellation"
 
-// Every number below comes from the same API the desktop dashboard uses.
+// What the Admin / Marketing staff watch: sales revenue, transactions and the
+// status of the properties. Sellers' rankings live on the Sellers page.
 type Summary = {
   total_properties: number; available_properties: number; reserved_properties: number; sold_properties: number
-  total_clients: number; total_transactions: number; completed_revenue: number
-  active_agents: number; total_agents: number
-  processing_documents: number; failed_documents: number; successful_documents: number; pending_documents: number
+  completed_revenue: number
+  processing_documents: number; failed_documents: number; pending_documents: number
 }
 type PropertyStatus = { available: number; reserved: number; sold: number; on_hold: number; unavailable: number; total: number }
 type TxTrend = { months: string[]; counts: number[]; reservations: number[]; sales: number[]; has_data: boolean }
 type RevenueTrend = { months: string[]; revenue: number[]; has_data: boolean }
-type TxSummary = { total: number; reserved: number; completed: number; cancelled: number; amount_total: string }
+type TxSummary = { total: number; reserved: number; completed: number; cancelled: number }
 type Recent = { transaction_id: string; client_name: string | null; property_title: string | null; agent_name: string | null; transaction_type: string; transaction_date: string; amount: number; status: string; cancellation_reason?: string | null }
-type Overview = {
-  absorption_rate: number | null
-  transactions: { average_sale_value: number | null }
-  agents: { agent_id: string; full_name: string; status: string; transactions: number; completed_sales: number; sales_value: number; recorded_total_commission: number | null }[]
-}
-type Forecast = {
-  status: "estimated" | "insufficient_data" | string; message?: string; method?: string
-  observations: number; nonzero_months: number; minimum_required: number
-  forecast: { month: string; value: number; lower: number; upper: number }[]
-}
-
-type Data = {
-  summary: Summary; status: PropertyStatus; tx: TxTrend; revenue: RevenueTrend; txSummary: TxSummary
-  recent: Recent[]; overview: Overview; forecast: Forecast
-}
+type Forecast = { status: "estimated" | "insufficient_data" | string; forecast: { month: string; value: number; lower: number; upper: number }[] }
+type Data = { summary: Summary; status: PropertyStatus; tx: TxTrend; revenue: RevenueTrend; txSummary: TxSummary; recent: Recent[]; forecast: Forecast }
 
 const peso = (value: number) => `₱${Math.round(value).toLocaleString(locale())}`
 const pesoShort = (value: number) =>
   value >= 1e9 ? `₱${+(value / 1e9).toFixed(1)}B` : value >= 1e6 ? `₱${+(value / 1e6).toFixed(1)}M` : value >= 1e3 ? `₱${Math.round(value / 1e3)}K` : `₱${value}`
 const count = (value: number) => String(Math.round(value))
+const monthName = (month: string) => {
+  const [y, m] = month.split("-").map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString(locale(), { month: "long", year: "numeric" })
+}
 
 const STATUS_STYLE: Record<string, string> = {
   RESERVED: "bg-ab-info/15 text-ab-info",
@@ -53,9 +44,9 @@ function greeting(): string {
   return t(hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening")
 }
 
-function Card({ title, action, children, className = "" }: { title: string; action?: ReactNode; children: ReactNode; className?: string }) {
+function Card({ title, action, children, className = "", tour }: { title: string; action?: ReactNode; children: ReactNode; className?: string; tour?: string }) {
   return (
-    <section className={`rounded-2xl border border-ab-border bg-ab-card p-5 ${className}`}>
+    <section className={`rounded-2xl border border-ab-border bg-ab-card p-5 ${className}`} data-tour={tour}>
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="font-bold text-ab-text">{t(title)}</h2>
         {action}
@@ -88,19 +79,19 @@ export function DashboardPage() {
   const [revenueTable, setRevenueTable] = useState(false)
 
   const load = useCallback(async (): Promise<Data> => {
-    const [summary, status, tx, revenue, txSummary, recent, overview, forecast] = await Promise.all([
+    const [summary, status, tx, revenue, txSummary, recent, forecast] = await Promise.all([
       api<Summary>("/dashboard/summary"),
       api<PropertyStatus>("/dashboard/property-status"),
       api<TxTrend>("/dashboard/transaction-trend?months=12"),
       api<RevenueTrend>("/dashboard/revenue-trend"),
       api<TxSummary>("/transactions/summary"),
-      api<Recent[]>("/dashboard/recent-transactions"),
-      api<Overview>("/analytics/overview"),
+      api<Recent[]>("/dashboard/recent-transactions?limit=8"),
       api<Forecast>("/dashboard/forecast"),
     ])
-    return { summary, status, tx, revenue, txSummary, recent, overview, forecast }
+    return { summary, status, tx, revenue, txSummary, recent, forecast }
   }, [api])
-  // Shows the last dashboard straight away on a return visit, then refreshes.
+  // Shows the last dashboard straight away on a return visit; it then keeps
+  // itself up to date (useApiData refreshes it in the background).
   const { data, error, reload } = useApiData(load, "dashboard")
 
   const today = new Date().toLocaleDateString(locale(), { weekday: "long", month: "long", day: "numeric", year: "numeric" })
@@ -112,17 +103,16 @@ export function DashboardPage() {
           <p className="text-sm text-ab-muted">{today}</p>
           <p className="text-2xl font-extrabold">{greeting()}, {user?.full_name}</p>
         </div>
-        <button
-          type="button"
-          data-tour="dash-refresh"
-          onClick={() => void reload()}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-ab-border-strong px-3 py-2 text-sm font-semibold hover:bg-ab-hover"
-        >
-          <RefreshCw className="h-4 w-4" /> {t("Refresh")}
-        </button>
+        <p className="inline-flex items-center gap-1.5 text-xs text-ab-muted" title={t("The numbers update by themselves.")}>
+          <span className="relative flex h-2 w-2" aria-hidden>
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ab-success opacity-60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-ab-success" />
+          </span>
+          {t("Live")}
+        </p>
       </div>
 
-      {error && (
+      {error && !data && (
         <p role="alert" className="flex items-center gap-2 rounded-xl border border-ab-danger/40 bg-ab-danger/10 px-4 py-3 text-sm text-ab-danger">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {t("Couldn't load the dashboard: {error}", { error })}
           <button type="button" onClick={() => void reload()} className="ml-auto font-semibold underline">{t("Try again")}</button>
@@ -131,12 +121,11 @@ export function DashboardPage() {
 
       {!data && !error && (
         <div className="space-y-5" aria-busy="true" aria-label={t("Loading dashboard")}>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-28" />)}</div>
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-28" />)}</div>
           <div className="grid gap-5 lg:grid-cols-3"><Skeleton className="h-72 lg:col-span-2" /><Skeleton className="h-72" /></div>
         </div>
       )}
 
-      <SalesRecruitmentPanel />
       {data && <DashboardBody data={data} txTable={txTable} setTxTable={setTxTable} revenueTable={revenueTable} setRevenueTable={setRevenueTable} />}
     </div>
   )
@@ -145,69 +134,27 @@ export function DashboardPage() {
 function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTable }: {
   data: Data; txTable: boolean; setTxTable: (v: boolean) => void; revenueTable: boolean; setRevenueTable: (v: boolean) => void
 }) {
-  const { summary, status, tx, revenue, txSummary, recent, overview, forecast } = data
+  const { summary, status, tx, revenue, txSummary, recent, forecast } = data
   const attention = summary.failed_documents + summary.processing_documents + summary.pending_documents
+  const soldShare = status.total ? Math.round((status.sold / status.total) * 100) : null
+  const next = forecast.status === "estimated" ? forecast.forecast[0] : undefined
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6" data-tour="dash-kpis">
-        <Kpi icon={Building2} label="Total properties" value={count(summary.total_properties)}
-          detail={t("{a} available · {r} reserved · {s} sold", { a: summary.available_properties, r: summary.reserved_properties, s: summary.sold_properties })} />
-        <Kpi icon={Users} label="Buyers & owners" value={count(summary.total_clients)} detail={t("From client records")} />
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4" data-tour="dash-kpis">
+        <Kpi icon={TrendingUp} label="Sales revenue" value={pesoShort(summary.completed_revenue)}
+          detail={t("From {n} completed sales", { n: txSummary.completed })} />
         <Kpi icon={ArrowLeftRight} label="Transactions" value={count(txSummary.total)}
           detail={t("{r} reserved · {c} completed · {x} cancelled", { r: txSummary.reserved, c: txSummary.completed, x: txSummary.cancelled })} />
-        <Kpi icon={TrendingUp} label="Sales revenue" value={pesoShort(summary.completed_revenue)}
-          detail={overview.transactions.average_sale_value ? t("Avg sale {v}", { v: pesoShort(overview.transactions.average_sale_value) }) : t("Completed sales")} />
-        <Kpi icon={UserRound} label="Active sellers" value={count(summary.active_agents)} detail={t("of {n} agent records", { n: summary.total_agents })} />
-        <Kpi icon={FileWarning} label="Documents needing attention" value={count(attention)}
-          detail={t("{f} failed · {p} processing · {d} done", { f: summary.failed_documents, p: summary.processing_documents, d: summary.successful_documents })}
+        <Kpi icon={Building2} label="Properties" value={count(summary.total_properties)}
+          detail={t("{a} available · {r} reserved · {s} sold", { a: summary.available_properties, r: summary.reserved_properties, s: summary.sold_properties })} />
+        <Kpi icon={FileWarning} label="Documents to check" value={count(attention)}
+          detail={summary.failed_documents ? t("{n} could not be read", { n: summary.failed_documents })
+            : attention ? t("Being read now") : t("All documents read")}
           tone={summary.failed_documents ? "text-ab-danger" : "text-ab-muted"} />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3" data-tour="dash-charts">
-        <Card
-          title="Transactions per month"
-          className="lg:col-span-2"
-          action={<TableToggle shown={txTable} onToggle={() => setTxTable(!txTable)} />}
-        >
-          <div className="mb-3"><Legend items={[{ label: t("Reservations"), color: "var(--color-ab-chart-2)" }, { label: t("Completed sales"), color: "var(--color-ab-chart-1)" }]} /></div>
-          {tx.has_data ? (
-            <StackedBarChart
-              caption={t("Reservations and completed sales recorded per month, last 12 months")}
-              months={tx.months}
-              series={[
-                { key: "reservations", label: t("Reservations"), color: "var(--color-ab-chart-2)", values: tx.reservations },
-                { key: "sales", label: t("Completed sales"), color: "var(--color-ab-chart-1)", values: tx.sales },
-              ]}
-              format={count}
-              integer
-              showTable={txTable}
-            />
-          ) : (
-            <p className="py-10 text-center text-sm text-ab-muted">{t("No transactions recorded in the last 12 months.")}</p>
-          )}
-        </Card>
-
-        <Card title="Property status">
-          <p className="mb-3 text-3xl font-extrabold tabular-nums">{status.total}<span className="ml-1.5 text-sm font-semibold text-ab-muted">{t("listings")}</span></p>
-          <ShareBar
-            parts={[
-              { label: t("Available"), value: status.available, color: "var(--color-ab-chart-1)" },
-              { label: t("Reserved"), value: status.reserved, color: "var(--color-ab-chart-2)" },
-              { label: t("Sold"), value: status.sold, color: "var(--color-ab-muted)" },
-              { label: t("On hold"), value: status.on_hold, color: "var(--color-ab-warning)" },
-              { label: t("Unavailable"), value: status.unavailable, color: "var(--color-ab-danger)" },
-            ]}
-          />
-          {overview.absorption_rate != null && (
-            <p className="mt-4 border-t border-ab-border pt-3 text-xs text-ab-muted">
-              {t("Absorption rate")} <span className="font-semibold text-ab-text">{Math.round(overview.absorption_rate * 100)}%</span> — {t("share of listings already sold.")}
-            </p>
-          )}
-        </Card>
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Sales revenue per month" className="lg:col-span-2" action={<TableToggle shown={revenueTable} onToggle={() => setRevenueTable(!revenueTable)} />}>
           {revenue.has_data ? (
             <StackedBarChart
@@ -221,54 +168,116 @@ function DashboardBody({ data, txTable, setTxTable, revenueTable, setRevenueTabl
           ) : (
             <p className="py-10 text-center text-sm text-ab-muted">{t("No completed sales in the last 12 months.")}</p>
           )}
+          {next && (
+            <p className="mt-3 rounded-xl bg-ab-card-2 px-3 py-2 text-sm text-ab-muted">
+              {t("Expected in {month}", { month: monthName(next.month) })}: <span className="font-bold text-ab-text">{pesoShort(next.value)}</span>
+              <span className="text-xs"> · {t("an estimate from past months, likely between {low} and {high}", { low: pesoShort(next.lower), high: pesoShort(next.upper) })}</span>
+            </p>
+          )}
         </Card>
 
-        <Card title="Revenue forecast (estimate)">
-          {forecast.status === "estimated" && forecast.forecast.length ? (
-            <>
-              <p className="text-xs text-ab-muted">{t("Next month ({month})", { month: forecast.forecast[0].month })}</p>
-              <p className="text-3xl font-extrabold tabular-nums">{pesoShort(forecast.forecast[0].value)}</p>
-              <p className="mt-1 text-sm text-ab-muted">
-                {t("Likely range {low} – {high}", { low: pesoShort(forecast.forecast[0].lower), high: pesoShort(forecast.forecast[0].upper) })}
-              </p>
-              <p className="mt-3 text-xs text-ab-faint">{t(forecast.method ?? "")} · {t("{n} months of history.", { n: forecast.observations })}</p>
-            </>
-          ) : (
-            <div className="rounded-xl border border-dashed border-ab-border p-4">
-              <p className="font-semibold text-ab-text">{t(forecast.message || "Forecast unavailable.")}</p>
-              <p className="mt-1 text-sm text-ab-muted">
-                {t("Needs at least {min} complete months, with sales in 3 or more of them. Recorded so far: {n} month(s), {s} with sales. No forecast is shown until there's enough real data.", { min: forecast.minimum_required, n: forecast.observations, s: forecast.nonzero_months })}
-              </p>
-            </div>
+        <Card title="Property status">
+          <p className="mb-3 text-3xl font-extrabold tabular-nums">{status.total}<span className="ml-1.5 text-sm font-semibold text-ab-muted">{t("properties")}</span></p>
+          <ShareBar
+            parts={[
+              { label: t("Available"), value: status.available, color: "var(--color-ab-chart-1)", always: true },
+              { label: t("Reserved"), value: status.reserved, color: "var(--color-ab-chart-2)", always: true },
+              { label: t("Sold"), value: status.sold, color: "var(--color-ab-muted)", always: true },
+              { label: t("On hold"), value: status.on_hold, color: "var(--color-ab-warning)", always: false },
+              { label: t("Unavailable"), value: status.unavailable, color: "var(--color-ab-danger)", always: false },
+            ].filter((part) => part.always || part.value > 0).map(({ label, value, color }) => ({ label, value, color }))}
+          />
+          {soldShare != null && (
+            <p className="mt-4 border-t border-ab-border pt-3 text-xs text-ab-muted">
+              {t("{p}% of the properties are already sold.", { p: soldShare })}
+            </p>
           )}
         </Card>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <Card title="Reservations and sales per month" action={<TableToggle shown={txTable} onToggle={() => setTxTable(!txTable)} />}>
+        <div className="mb-3"><Legend items={[{ label: t("Reservations"), color: "var(--color-ab-chart-2)" }, { label: t("Completed sales"), color: "var(--color-ab-chart-1)" }]} /></div>
+        {tx.has_data ? (
+          <StackedBarChart
+            caption={t("Reservations and completed sales recorded per month, last 12 months")}
+            months={tx.months}
+            series={[
+              { key: "reservations", label: t("Reservations"), color: "var(--color-ab-chart-2)", values: tx.reservations },
+              { key: "sales", label: t("Completed sales"), color: "var(--color-ab-chart-1)", values: tx.sales },
+            ]}
+            format={count}
+            integer
+            showTable={txTable}
+            height={200}
+          />
+        ) : (
+          <p className="py-10 text-center text-sm text-ab-muted">{t("No transactions recorded in the last 12 months.")}</p>
+        )}
+      </Card>
 
-        <Card title="Recent transactions">
-          {recent.length === 0 ? (
-            <p className="text-sm text-ab-muted">{t("No transactions recorded yet.")}</p>
-          ) : (
-            <ul className="space-y-3">
-              {recent.slice(0, 6).map((tx) => (
-                <li key={tx.transaction_id} className="text-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="min-w-0 truncate font-semibold">{tx.client_name ?? t("Unknown client")}</p>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLE[tx.status] ?? "bg-ab-hover text-ab-muted"}`}>{statusLabel(tx.status)}</span>
-                  </div>
-                  <p className="truncate text-xs text-ab-muted">{tx.property_title ?? "—"}</p>
-                  <p className="text-xs text-ab-faint">
-                    {transactionDate(tx.transaction_date)} · {peso(tx.amount)}
-                    {tx.agent_name && ` · ${tx.agent_name}`}
-                  </p>
-                  <CancelReason status={tx.status} reason={tx.cancellation_reason} compact />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
+      <Card title="Latest transactions" tour="dash-recent"
+        action={<Link to="/manage/transactions" className="text-xs font-semibold text-ab-accent hover:underline">{t("See all")}</Link>}>
+        {recent.length === 0 ? (
+          <p className="text-sm text-ab-muted">{t("No transactions recorded yet.")}</p>
+        ) : <RecentTable rows={recent} />}
+      </Card>
+    </>
+  )
+}
+
+/** Property first (with its price and seller underneath), then the buyer, the
+ *  date and the status. "Seller" and "Buyer" are always written out so the
+ *  two names are never mixed up. */
+function RecentTable({ rows }: { rows: Recent[] }) {
+  const priceLabel = (tx: Recent) => t(tx.transaction_type === "RESERVED" ? "Reservation fee" : "Sale price")
+  return (
+    <>
+      <table className="hidden w-full text-left text-sm md:table">
+        <thead className="text-[11px] uppercase tracking-wide text-ab-faint">
+          <tr className="border-b border-ab-border">
+            <th className="py-2 pr-4 font-semibold">{t("Property")}</th>
+            <th className="py-2 pr-4 font-semibold">{t("Buyer")}</th>
+            <th className="py-2 pr-4 font-semibold">{t("Date")}</th>
+            <th className="py-2 font-semibold">{t("Status")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((tx) => (
+            <tr key={tx.transaction_id} className="border-b border-ab-border last:border-0 align-top">
+              <td className="py-3 pr-4">
+                <Link to={`/manage/transactions?id=${tx.transaction_id}`} className="font-bold text-ab-text hover:text-ab-accent hover:underline">{tx.property_title ?? "—"}</Link>
+                <p className="mt-0.5 text-xs text-ab-muted">
+                  <span className="text-ab-faint">{priceLabel(tx)}</span> <span className="font-semibold tabular-nums text-ab-text">{peso(tx.amount)}</span>
+                  {tx.agent_name && <> · <span className="text-ab-faint">{t("Seller")}</span> {tx.agent_name}</>}
+                </p>
+                <CancelReason status={tx.status} reason={tx.cancellation_reason} compact />
+              </td>
+              <td className="py-3 pr-4">{tx.client_name ?? t("Unknown buyer")}</td>
+              <td className="whitespace-nowrap py-3 pr-4 text-ab-muted">{transactionDate(tx.transaction_date)}</td>
+              <td className="py-3">
+                <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${STATUS_STYLE[tx.status] ?? "bg-ab-hover text-ab-muted"}`}>{statusLabel(tx.status)}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <ul className="space-y-3 md:hidden">
+        {rows.map((tx) => (
+          <li key={tx.transaction_id} className="rounded-xl border border-ab-border p-3 text-sm">
+            <Link to={`/manage/transactions?id=${tx.transaction_id}`} className="font-bold text-ab-text hover:underline">{tx.property_title ?? "—"}</Link>
+            <p className="mt-0.5 text-xs"><span className="text-ab-faint">{priceLabel(tx)}</span> <span className="font-semibold tabular-nums">{peso(tx.amount)}</span></p>
+            <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 text-xs">
+              {tx.agent_name && <><dt className="text-ab-faint">{t("Seller")}</dt><dd>{tx.agent_name}</dd></>}
+              <dt className="text-ab-faint">{t("Buyer")}</dt><dd>{tx.client_name ?? t("Unknown buyer")}</dd>
+            </dl>
+            <p className="mt-2 flex items-center justify-between gap-2 text-xs text-ab-muted">
+              {transactionDate(tx.transaction_date)}
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLE[tx.status] ?? "bg-ab-hover text-ab-muted"}`}>{statusLabel(tx.status)}</span>
+            </p>
+            <CancelReason status={tx.status} reason={tx.cancellation_reason} compact />
+          </li>
+        ))}
+      </ul>
     </>
   )
 }

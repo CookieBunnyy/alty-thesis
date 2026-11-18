@@ -40,6 +40,19 @@ def test_expected_annotations_and_unknown_labels_are_ignored():
     assert labeled.values == {} and labeled.unknown_labels == ["Favourite Colour"]
 
 
+def test_a_list_of_field_names_is_not_a_label_and_value():
+    """A form's note to developers ("buyer_name, company_name, email, ...")
+    must not read as a second buyer name and fail the document."""
+    labeled = extract_labeled_fields(
+        "Buyer Full Name\tMaria Angela Santos\nEmail Address\tmaria.santos@example.com\n"
+        "10. Suggested NLP Extraction Targets\n"
+        "buyer_name, company_name, buyer_type, email, mobile_phone, grand_total, payment_method")
+    assert labeled.conflicts == {}
+    assert labeled.values["full_name"] == "Maria Angela Santos"
+    # A real row whose border was lost still splits.
+    assert fields("Buyer Name Maria Clara Reyes")["full_name"] == "Maria Clara Reyes"
+
+
 def test_value_on_following_line():
     assert fields("Full Name:\nMaria Clara")["full_name"] == "Maria Clara"
 

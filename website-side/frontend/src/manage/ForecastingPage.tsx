@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react"
 import { ForecastChart, Legend, type BacktestPoint } from "./charts"
 import { peso, pesoShort, statusLabel, transactionDate } from "./format"
 import { InsightPanel, type Insight } from "./Insights"
-import { OutlookDiagnosis } from "./OutlookDiagnosis"
+import { MonthReport } from "./monthReport"
 import { LoadState, PageHeader, Section, Select } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
@@ -59,7 +59,7 @@ type AgentRow = {
 function AgentOutlook() {
   const { api } = useStaffAuth()
   const load = useCallback(() => api<{ horizon: number; agents: AgentRow[] }>("/intelligence/agent-forecasts?horizon=3"), [api])
-  const { data, error, loading, reload } = useApiData(load, "agent-forecasts")
+  const { data, error, loading, reload } = useApiData(load, "agent-forecasts", { live: false })
   const rows = [...(data?.agents ?? [])].sort((a, b) => (b.expected_sales ?? -1) - (a.expected_sales ?? -1))
   return (
     <Section title="Agent performance outlook">
@@ -132,7 +132,7 @@ function MonthWorking({ month, metric, outlook }: { month: string; metric: Metri
     () => (hasRecord ? api<MonthDetail>(`/intelligence/outlook/month?month=${month}&metric=${metric}`) : Promise.resolve(null)),
     [api, month, metric, hasRecord],
   )
-  const { data, error, loading, reload } = useApiData(load, `outlook-month:${metric}:${month}`)
+  const { data, error, loading, reload } = useApiData(load, `outlook-month:${metric}:${month}`, { live: false })
   const [showMonths, setShowMonths] = useState(false)
   const used = model ? outlook.history.filter((h) => h.month >= model.first_month && h.month <= model.last_month) : []
   const monthOnly = (key: string) => new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, 1).toLocaleDateString(locale(), { month: "long" })
@@ -298,7 +298,7 @@ export function ForecastingPage() {
   const [horizon, setHorizon] = useState("3")
   const [picked, setMonth] = useState<string | null>(null)
   const load = useCallback(() => api<{ forecast: Outlook; insights: Insight[] }>(`/intelligence/forecast?metric=${metric}&horizon=${horizon}`), [api, metric, horizon])
-  const { data, error, loading, reload } = useApiData(load, `outlook:${metric}:${horizon}`)
+  const { data, error, loading, reload } = useApiData(load, `outlook:${metric}:${horizon}`, { live: false })
   const look = METRICS[metric]
   const f = data?.forecast
   const months = useMemo(() => (f ? [...f.history.map((h) => h.month), ...f.forecast.map((p) => p.month)] : []), [f])
@@ -310,7 +310,7 @@ export function ForecastingPage() {
     <div className="mx-auto max-w-7xl space-y-5">
       <PageHeader
         title="How the business is doing, and what may come next"
-        subtitle="Recorded months next to what the forecast expected for them, and the forecast for the coming months. Forecasts are statistical estimates from the recorded history, not figures Abellar has confirmed. Pick a month to see how its figure was added up, the formula behind its forecast, and whether it met the likely range."
+        subtitle="Recorded months next to what was expected for them, and the estimate for the coming months. Pick a month and generate its report: what happened, how it compares, and what to try next."
         actions={
           <>
             <div role="tablist" aria-label={t("Measure")} className="flex rounded-xl border border-ab-border bg-ab-card p-1">
@@ -384,10 +384,16 @@ export function ForecastingPage() {
             </p>
           </Section>
 
-          {month && <MonthWorking key={`${metric}:${month}`} month={month} metric={metric} outlook={f} />}
-          {month && f.history.some((h) => h.month === month) && (
-            <OutlookDiagnosis key={`diagnosis:${metric}:${month}`} month={month} metric={metric} monthName={monthName} format={look.format} />
-          )}
+          {month && (() => {
+            const point = backtest.get(month) ?? f.forecast.find((p) => p.month === month)
+            return (
+              <MonthReport key={`report:${metric}:${month}`} month={month} metric={metric} label={look.label} monthName={monthName}
+                format={look.format} recorded={f.history.find((h) => h.month === month)?.value ?? null}
+                expected={point ? { value: point.value, lower: point.lower, upper: point.upper } : null}
+                verdict={backtest.get(month)?.verdict ?? null}
+                working={<MonthWorking month={month} metric={metric} outlook={f} />} />
+            )
+          })()}
 
           <div className="ab-table-scroll rounded-2xl border border-ab-border bg-ab-card">
             <table className="w-full text-left text-sm">

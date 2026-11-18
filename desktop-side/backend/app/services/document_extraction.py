@@ -393,8 +393,16 @@ def _split_unseparated(line: str) -> tuple[str, str] | None:
             value = " ".join(words[size:])
             if re.match(r"[a-z]+\s", value):
                 return None
+            # "buyer_name, company_name, email, ..." is a list of field names
+            # (a schema or a note to developers), not a label and its value.
+            if "_" in label or _IDENTIFIER_LIST.match(value):
+                return None
             return label, value
     return None
+
+
+# Field names as software writes them: snake_case words, comma separated.
+_IDENTIFIER_LIST = re.compile(r"^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+,?(?:\s*[A-Za-z0-9_]+,?)*\s*$")
 
 
 def extract_labeled_fields(text: str) -> LabeledFields:

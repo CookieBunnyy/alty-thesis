@@ -8,6 +8,7 @@ import { useStaffAuth } from "./staffContext"
 import { useApiData, useOpenRecord } from "./useApiData"
 import { locale, t } from "./i18n"
 import { AgentLocation } from "./agentLocation"
+import { TopSellers } from "./topSellers"
 import { CancelReason } from "./cancellation"
 import { callLabels } from "./callLabels"
 import { CallButton } from "@/components/CallButton"
@@ -110,6 +111,7 @@ export function AgentsPage() {
           { label: "Client-reviewed agents", value: reviewed.length, detail: reviewed.length ? t("of {n}", { n: agents.length }) : t("No client reviews yet") },
         ]} />
       )}
+      <TopSellers photos={Object.fromEntries(agents.map((a) => [a.agent_id, a.photo_version]))} />
       <div className="flex flex-wrap gap-2 sm:flex-nowrap">
         <div className="w-full sm:w-auto sm:flex-1"><SearchBox value={search} onChange={setSearch} placeholder="Search name, seller ID, location or phone" /></div>
         <Select label="Status" value={status} onChange={setStatus} options={[{ value: "", label: "All statuses" }, ...[...new Set(agents.map((a) => a.status))].map((s) => ({ value: s, label: statusLabel(s) }))]} />

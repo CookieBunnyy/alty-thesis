@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react"
 import { dateTime } from "./format"
 import { InsightList, type Insight } from "./Insights"
-import { Button, LoadState, PageHeader, Select, Tiles } from "./ui"
+import { LoadState, PageHeader, Select, Tiles } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useApiData } from "./useApiData"
 import { t } from "./i18n"
@@ -32,7 +32,6 @@ export function InsightsPage() {
       <PageHeader
         title="What needs attention, and what to do next"
         subtitle="Everything ALTY's analysis currently flags, highest priority first. Each item shows the finding, a suggested action, the supporting data and the rule behind it — management makes the decision."
-        actions={<Button onClick={reload}>{t("Refresh")}</Button>}
       />
       {data && (
         <Tiles items={[

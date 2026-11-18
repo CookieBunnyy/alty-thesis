@@ -476,3 +476,20 @@ Tests: `tests/test_interview_two.py` (accreditation scope and renewal, steps aft
   walkthrough. Checked end to end through the API: every document processes, files under
   Buyers / Carlo M. Mendoza (voucher under Commission Documents), the seller's inquiry becomes the reserved, then
   closed, deal, and all 8 voucher fields are read.
+
+## Dashboard focus, live data and the month report (2026-11-18)
+
+* **Dashboard** shows what the Admin / Marketing staff watch: four numbers (sales revenue, transactions,
+  properties, documents to check), sales revenue per month with next month's estimate, property status,
+  reservations and sales per month, and the latest transactions as a table (property in bold with its price and
+  **Seller** underneath, then the **Buyer**, the date and the status). Top sellers, recruitment and technical
+  wording (absorption rate, forecast method) were removed from it.
+* **Top sellers** (by sales value: this month, this quarter, this year, plus teams) moved to the Sellers page
+  (`topSellers.tsx`).
+* **Live data:** every page refreshes itself quietly every 20 seconds while the tab is visible and when the user
+  returns to it (`useApiData`); no Refresh buttons. Heavy Business Outlook analyses load once per month picked.
+* **Business Outlook:** the always-open "How the month was worked out" and "Why the month fell short" were
+  replaced by a **month report** generated on request (`monthReport.tsx`): summary, timeline of the month's deals,
+  how the figure was worked out (with the full calculation behind a toggle), why it fell short or was lower than the
+  month before (main causes first), and what to try. It is computed from the recorded data (no AI service, no
+  invented figures).

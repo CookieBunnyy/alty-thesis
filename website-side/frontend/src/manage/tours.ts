@@ -35,10 +35,10 @@ export const TOURS: Record<string, (user: StaffUser | null) => TourStep[]> = {
   ],
 
   "/manage": () => [
-    { target: "dash-greeting", title: "Your dashboard", body: "A live summary of the whole business: properties, buyers and sellers, transactions, revenue, agents and documents." },
-    { target: "dash-kpis", title: "Key numbers", body: "Each card shows one total with its breakdown underneath. “Documents needing attention” turns red when a document failed to process — open Document Repository to fix it." },
-    { target: "dash-charts", title: "Trends over time", body: "Monthly transactions and revenue. The table button on a chart shows the same numbers as a table, which is easier to read with a screen reader." },
-    { target: "dash-refresh", title: "Refresh", body: "Loads the latest numbers. The dashboard also refreshes each time you open it." },
+    { target: "dash-greeting", title: "Your dashboard", body: "A live summary of the business: sales revenue, transactions and the status of your properties. It updates by itself, so there's nothing to refresh." },
+    { target: "dash-kpis", title: "Key numbers", body: "Each card shows one total with its breakdown underneath. “Documents to check” turns red when a document failed to read — open Document Repository to fix it." },
+    { target: "dash-charts", title: "Trends over time", body: "Monthly transactions and revenue. The table button on a chart shows the same numbers as a table." },
+    { target: "dash-recent", title: "Latest transactions", body: "The newest reservations and sales: the property, its price and seller, the buyer, the date and the status." },
   ],
 
   "/manage/properties": (user) => listPage("Properties", "Every property listing and where it stands: Available, Reserved or Sold. Reserved and Sold come from reservation and sale documents, so you never change them by hand.", { actions: isManagement(user?.role) ? SYNC : undefined }),
@@ -64,8 +64,7 @@ export const TOURS: Record<string, (user: StaffUser | null) => TourStep[]> = {
 
   "/manage/insights": () => [
     { target: "page-header", title: "Recommendations", body: "Everything ALTY's analysis currently flags, highest priority first. Each item gives the finding, a suggested action, the data behind it and the rule used — the decision always stays with management." },
-    { target: "tiles", title: "By priority", body: "Select a priority to show only those items; select it again to show everything." },
-    { target: "page-actions", title: "Refresh", body: "Runs the analysis again on the latest records." },
+    { target: "tiles", title: "By priority", body: "Select a priority to show only those items; select it again to show everything. The list updates by itself as records change." },
   ],
 
   "/manage/bulletin": () => [

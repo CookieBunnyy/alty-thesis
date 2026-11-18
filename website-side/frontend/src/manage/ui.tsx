@@ -345,9 +345,9 @@ export function Drawer({ title, subtitle, onClose, children, footer }: { title: 
   )
 }
 
-export function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+export function Section({ title, children, action, className = "" }: { title: string; children: ReactNode; action?: ReactNode; className?: string }) {
   return (
-    <section className="rounded-2xl border border-ab-border bg-ab-card p-4">
+    <section className={`rounded-2xl border border-ab-border bg-ab-card p-4 ${className}`}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-ab-faint"><Term label={title} /></h3>
         {action}
