@@ -15,6 +15,7 @@ AUTO = "AUTO"
 # type -> (label, what processing does)
 DOCUMENT_TYPES: dict[str, tuple[str, str]] = {
     "PROPERTY_INFORMATION": ("Property Information", "Creates or updates a property listing"),
+    "LISTING_AGREEMENT": ("Listing Agreement", "Records the owner's authority to sell and lists (or updates) the property"),
     "BUYER_DOCUMENT": ("Buyer Document", "Creates or updates a client; records a reservation/sale when the document contains one"),
     "RESERVATION_AGREEMENT": ("Reservation Agreement", "Records a reservation and marks the property RESERVED"),
     "SALE_AGREEMENT": ("Sale Agreement", "Records a sale and marks the property SOLD"),
@@ -71,6 +72,8 @@ def type_catalog() -> list[dict]:
 # Title phrases, checked against the document's opening lines. Order matters:
 # more specific phrases first ("deed of sale" before "sale", etc.).
 _TITLE_RULES: list[tuple[str, str]] = [
+    # Before "property listing" below: "Property Listing Agreement" is the agreement.
+    (r"\b(real estate |property |exclusive )?listing agreement\b|\bauthority to sell\b", "LISTING_AGREEMENT"),
     (r"\bdeed of (absolute )?sale\b", "DEED"),
     (r"\breservation (agreement|form|contract|slip)\b", "RESERVATION_AGREEMENT"),
     (r"\b(sale|sales|purchase) agreement\b|\bcontract to sell\b|\bagreement of sale\b", "SALE_AGREEMENT"),
@@ -87,6 +90,8 @@ _TITLE_RULES: list[tuple[str, str]] = [
     (r"\bcontract\b|\bagreement\b", "CONTRACT"),
 ]
 TITLE_LINES = 6
+# "Commission", "comm." or "comm" (as handwritten on Abellar's vouchers).
+_COMMISSION_WORDS = re.compile(r"\bcomm(?:ission\b|\.|\b)", re.IGNORECASE)
 
 _PROPERTY_ONLY = {
     "category", "price_total", "initial_dp", "monthly_rate", "num_bedrooms",
@@ -114,6 +119,11 @@ def classify(text: str, fields: dict) -> Classification:
         lowered = line.casefold()
         for pattern, document_type in _TITLE_RULES:
             if re.search(pattern, lowered):
+                # Abellar's commission vouchers are printed "CASH / CHECK VOUCHER";
+                # the particulars say what it pays ("release of comm.").
+                if document_type == "VOUCHER" and _COMMISSION_WORDS.search(text):
+                    return Classification("COMMISSION_VOUCHER", "HIGH",
+                                          f"title line: '{line[:80]}' and the particulars name a commission")
                 return Classification(document_type, "HIGH", f"title line: '{line[:80]}'")
 
     names = set(fields)

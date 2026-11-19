@@ -30,7 +30,7 @@ export const TOURS: Record<string, (user: StaffUser | null) => TourStep[]> = {
     { target: "search", title: "Search everything", body: "Type at least 2 letters to find properties, clients, transactions, agents, documents and partners in one place." },
     { target: "bell", title: "Notifications", body: "Alerts about things that need you, such as a document that failed to process. The number shows how many you haven't read." },
     { target: "help", title: "Help is always here", body: "Open this to replay the tour of any page. You can also press the ? key. Look for the ? icons next to terms too: they explain what the term means." },
-    { target: "profile", title: "Your account", body: "Your profile, photo and password. Sign out with the button beside it when you're done, especially on a shared computer." },
+    { target: "profile", title: "Your account", body: "Your profile, photo and password. To sign out, open Settings, especially on a shared computer." },
     { title: "You're all set", body: "Each page shows its own short tour the first time you open it. You can turn these off in the Help menu or in Settings." },
   ],
 

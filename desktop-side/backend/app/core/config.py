@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     ACCREDITATION_REQUIRED: bool = True
     # Listing fields a seller may update on listings assigned to them
     # (comma-separated; to be confirmed with Abellar Realty).
-    SELLER_EDITABLE_LISTING_FIELDS: str = "details,amenity_list"
+    SELLER_EDITABLE_LISTING_FIELDS: str = "details,amenity_list,other_amenities"
 
     # Comma-separated origins allowed to call the API from a browser.
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"

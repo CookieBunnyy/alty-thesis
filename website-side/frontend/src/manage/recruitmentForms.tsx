@@ -1,7 +1,7 @@
 // The recruitment form an applicant filled in, as photos or scans (one per
 // page). The Filing Manager uploads them; everyone with Recruitment sees them.
 import { useRef, useState } from "react"
-import { Camera, ExternalLink, FileText, LoaderCircle, Trash2, Upload, X } from "lucide-react"
+import { Camera, ExternalLink, FileText, LoaderCircle, Sparkles, Trash2, Upload, X } from "lucide-react"
 import { Button, Confirm, Section } from "./ui"
 import { dateTime } from "./format"
 import { useStaffAuth } from "./staffContext"
@@ -61,6 +61,20 @@ export function RecruitmentForms({ applicantId, forms, onChanged }: { applicantI
   const [busy, setBusy] = useState(false)
   const [viewing, setViewing] = useState<ApplicantFormFile | null>(null)
   const [removing, setRemoving] = useState<ApplicantFormFile | null>(null)
+  const [filling, setFilling] = useState(false)
+  const fill = async () => {
+    setFilling(true)
+    try {
+      const result = await api<{ filled: string[]; notes: string[] }>(`/recruitment/applicants/${applicantId}/fill-from-forms`, { method: "POST" })
+      toast(result.filled.length ? t("Filled {n} detail(s) from the form. Check them against the form.", { n: result.filled.length })
+        : t("Nothing new to fill: the details are already there, or the form couldn't be read."))
+      onChanged()
+    } catch (fillError) {
+      toast(t((fillError as Error).message), "error")
+    } finally {
+      setFilling(false)
+    }
+  }
 
   const upload = async (files: FileList | null) => {
     if (!files?.length) return
@@ -96,6 +110,11 @@ export function RecruitmentForms({ applicantId, forms, onChanged }: { applicantI
       )}
       {forms.length === 0 && <p className="mb-3 rounded-xl border border-dashed border-ab-warning/60 bg-ab-warning/5 p-3 text-sm">{t("No recruitment form uploaded yet.")}</p>}
       <div className="flex flex-wrap gap-2">
+        {forms.length > 0 && (
+          <Button variant="primary" onClick={() => void fill()} disabled={filling || busy}>
+            {filling ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {t(filling ? "Reading the form…" : "Fill details from the form")}
+          </Button>
+        )}
         <Button onClick={() => picker.current?.click()} disabled={busy}>
           {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} {t(forms.length ? "Add pages" : "Upload recruitment form")}
         </Button>

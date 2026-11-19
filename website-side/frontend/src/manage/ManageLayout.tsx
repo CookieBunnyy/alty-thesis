@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react"
-import { ArrowLeftRight, BarChart3, Briefcase, Building, ClipboardList, FileBarChart, FolderOpen, Gauge, Handshake, Home, ListChecks, LineChart, LogOut, Menu, Network, Settings, ShieldUser, UserPlus, UserRound, Users, Wallet, X, type LucideIcon, Megaphone, CalendarClock } from "lucide-react"
+import { ArrowLeftRight, BarChart3, Briefcase, Building, ClipboardList, FileBarChart, FolderOpen, Gauge, Handshake, Home, ListChecks, LineChart, Menu, Network, Settings, ShieldUser, UserPlus, UserRound, Users, Wallet, X, type LucideIcon, Megaphone, CalendarClock } from "lucide-react"
 import { Link } from "@/components/Link"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/hooks/useTheme"
@@ -107,7 +107,7 @@ function BottomNav({ pathname, can, me }: { pathname: string; can: (key: string)
 const SHORT: Record<string, string> = { documents: "Documents", clients: "Clients", transactions: "Transactions", trips: "Trips" }
 
 export function ManageLayout({ title, children }: { title: string; children: ReactNode }) {
-  const { user, can, signOut } = useStaffAuth()
+  const { user, can } = useStaffAuth()
   const { theme, toggleTheme } = useTheme()
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -189,10 +189,6 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
                 </span>
                 <ThemeToggle theme={theme} onToggle={toggleTheme} />
               </div>
-              <button type="button" onClick={signOut}
-                className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-ab-border-strong text-sm font-semibold text-ab-muted hover:bg-ab-hover hover:text-ab-danger">
-                <LogOut className="h-4 w-4" /> {t("Sign out")}
-              </button>
             </div>
           </aside>
         </div>
@@ -217,13 +213,6 @@ export function ManageLayout({ title, children }: { title: string; children: Rea
               <span className="block text-[11px] text-ab-faint">{t(user?.role ?? "")}</span>
             </span>
           </Link>
-          <span className="hidden lg:block">
-            <Tooltip content={t("Sign out")} side="bottom">
-              <button type="button" onClick={signOut} aria-label={t("Sign out")} className="rounded-lg border border-ab-border-strong p-2 text-ab-muted hover:bg-ab-hover hover:text-ab-danger">
-                <LogOut className="h-4 w-4" />
-              </button>
-            </Tooltip>
-          </span>
         </header>
         <main className="min-w-0 flex-1 p-3 pb-24 sm:p-6 sm:pb-24 lg:pb-6">
           <ErrorBoundary key={pathname}>{children}</ErrorBoundary>

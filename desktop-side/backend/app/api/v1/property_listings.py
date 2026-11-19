@@ -20,6 +20,7 @@ from app.core.supabase import supabase
 from app.models.document import Document
 from app.models.branch import Branch
 from app.models.agent import Agent
+from app.models.listing_agreement import ListingAgreement
 from app.models.listing_assignment import ListingAssignment
 from app.models.partner import Partner
 from app.models.property_listing import PropertyListing
@@ -114,7 +115,7 @@ def create_property_listing(payload: PropertyListingCreate, db: Session = Depend
         raise HTTPException(status_code=422, detail=f"{partner.name} isn't recorded as a developer")
     if values.get("branch_id") is not None and db.get(Branch, values["branch_id"]) is None:
         raise HTTPException(status_code=422, detail="Unknown branch")
-    for field in ("title", "category", "project_name", "layout_type", "village_name", "details"):
+    for field in ("title", "category", "project_name", "layout_type", "village_name", "details", "other_amenities"):
         if isinstance(values.get(field), str):
             values[field] = values[field].strip() or None
     if not values["title"] or not values["category"]:
@@ -149,6 +150,16 @@ def get_property_listing(listing_id: int, db: Session = Depends(get_db),
     return _listing_or_404(db, listing_id)
 
 
+def _agreement_out(agreement: ListingAgreement | None) -> dict | None:
+    if agreement is None:
+        return None
+    out = {column.name: getattr(agreement, column.name) for column in ListingAgreement.__table__.columns}
+    for key in ("listing_price", "commission_rate", "commission_amount", "leasing_commission_rate",
+                "cooperating_commission_rate"):
+        out[key] = float(out[key]) if out[key] is not None else None
+    return out
+
+
 @router.get("/{listing_id}/history")
 def get_property_history(listing_id: int, db: Session = Depends(get_db),
                          _user: User = Depends(get_company_user)):
@@ -162,7 +173,9 @@ def get_property_history(listing_id: int, db: Session = Depends(get_db),
         select(Document).where(Document.property_listing_id == listing_id)
         .order_by(Document.created_at.desc())
     ).scalars().all()
+    agreement = db.scalar(select(ListingAgreement).where(ListingAgreement.listing_id == listing_id))
     return {
+        "listing_agreement": _agreement_out(agreement),
         "listing_id": listing.listing_id,
         "external_listing_id": listing.external_listing_id,
         "status": listing.status,
@@ -202,7 +215,7 @@ def update_property_listing(listing_id: int, payload: PropertyListingUpdate,
         raise HTTPException(status_code=422, detail="Unknown partner / developer")
     if values.get("branch_id") is not None and db.get(Branch, values["branch_id"]) is None:
         raise HTTPException(status_code=422, detail="Unknown branch")
-    for field in ("layout_type", "village_name", "details"):
+    for field in ("layout_type", "village_name", "details", "other_amenities"):
         if isinstance(values.get(field), str):
             values[field] = values[field].strip() or None
     if values.get("has_garage") is False:

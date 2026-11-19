@@ -52,6 +52,8 @@ export interface Property {
   lng: number | null;
   photos?: string[];
   amenity_list?: any;
+  /** Amenities outside the common list, as typed. */
+  other_amenities?: string | null;
   nearby_establishments?: any;
   details?: string;
   commute_info?: CommuteInfo; // set by the chat service (OSRM driving route) for recommendations

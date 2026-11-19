@@ -213,6 +213,22 @@ FIELD_ALIASES: dict[str, dict[str, int]] = {
     },
     "details": {"details": _G, "property details": _S, "description": _G},
     "photos": {"photos": _S, "photo urls": _S, "images": _G, "media": _G},
+    # listing details kept in ALTY (developer, sizes, sales terms, team)
+    "developer": {"developer": _S, "developer name": _S, "property developer": _S, "project developer": _S},
+    "project_name": {"development": _S, "project development": _S},
+    "lot_area_sqm": {"lot area": _S, "lot size": _S, "lot area sqm": _S, "lot area in sqm": _S},
+    "floor_area_sqm": {"floor area": _S, "floor size": _S, "floor area sqm": _S, "floor area in sqm": _S},
+    "property_status": {
+        "turnover status": _S, "development status": _S, "rfo or pre selling": _S, "rfo pre selling": _S,
+        "readiness": _S,
+    },
+    "financing_options": {"financing options": _S, "financing accepted": _S, "accepted financing": _S},
+    "equity_terms_months": {
+        "equity terms": _S, "equity terms months": _S, "equity term": _S, "down payment terms": _S,
+    },
+    "other_amenities": {"other amenities": _S, "additional amenities": _S},
+    # Only these exact labels: a value such as "Team Pinyas" must not read as a label.
+    "team_name": {"team cluster": _S, "handling team": _S, "team or cluster": _S},
     # client / buyer
     "client_id": {
         "client id": _S, "buyer id": _S, "customer id": _S, "client no": _S,
@@ -322,6 +338,41 @@ FIELD_ALIASES: dict[str, dict[str, int]] = {
     },
     "seller_contact": {"seller contact number": _S, "seller contact": _S, "seller phone": _S},
     "seller_address": {"seller address": _S, "owner address": _S},
+    # listing agreement (the owner's authority to sell)
+    "agreement_date": {"agreement date": _S, "date of agreement": _S, "date signed": _S},
+    "agency_name": {"agency": _S, "agency name": _S, "brokerage": _S, "real estate agency": _S},
+    "agency_address": {"agency address": _S, "brokerage address": _S},
+    "tct_number": {
+        "tct no": _S, "tct number": _S, "title no": _S, "cct no": _S, "transfer certificate of title": _S,
+    },
+    "tax_declaration_number": {
+        "tax declaration no": _S, "tax declaration number": _S, "tax dec no": _S, "tax map lot": _S,
+    },
+    "fixtures_excluded": {"fixtures excluded": _S, "excluded fixtures": _S, "fixtures not included": _S},
+    "personal_property": {
+        "personal property included": _S, "included personal property": _S, "personal property": _G,
+    },
+    "rights_to_sell": {"rights to sell": _S, "right to sell": _S, "listing type": _S, "type of listing": _S},
+    "listing_start": {
+        "listing start": _S, "listing start date": _S, "listing period start": _S, "effective date": _S,
+    },
+    "listing_end": {
+        "listing end": _S, "listing end date": _S, "listing period end": _S, "expiration date": _S,
+        "expiry date": _S,
+    },
+    "extension_days": {"extension period": _S, "extension period days": _S, "extension days": _S},
+    "commission_type": {"commission type": _S, "type of commission": _S},
+    "commission_rate": {"commission rate": _S, "commission percentage": _S, "commission percent": _S},
+    "commission_amount": {"commission amount": _S, "fixed commission": _S},
+    "leasing_commission_rate": {"leasing commission": _S, "leasing commission rate": _S},
+    "deed_type": {"deed type": _S, "type of deed": _S},
+    "cooperating_commission_rate": {
+        "cooperating commission": _S, "commission offered": _S, "cooperating broker commission": _S,
+    },
+    "dual_agency": {"disclosed dual agency": _S, "dual agency": _S},
+    "marketing_permissions": {"marketing permissions": _S, "marketing permission": _S},
+    "governing_law": {"governing law": _S, "governing laws": _S},
+    "additional_terms": {"additional terms": _S, "additional terms and conditions": _S, "special conditions": _S},
 }
 
 
@@ -396,6 +447,9 @@ def _split_unseparated(line: str) -> tuple[str, str] | None:
             # "buyer_name, company_name, email, ..." is a list of field names
             # (a schema or a note to developers), not a label and its value.
             if "_" in label or _IDENTIFIER_LIST.match(value):
+                return None
+            # "Reservation fee, Lumina Tanza Blk 7 Lot 5": a phrase, not "label value".
+            if value[:1] in ",;.)/" or label[-1:] in ",;":
                 return None
             return label, value
     return None
@@ -476,19 +530,55 @@ def extract_labeled_fields(text: str) -> LabeledFields:
 DECIMAL_FIELDS = {
     "price_total", "initial_dp", "monthly_rate", "latitude", "longitude",
     "star_rating", "total_sales", "total_commission", "performance_score", "amount",
+    "lot_area_sqm", "floor_area_sqm", "commission_rate", "commission_amount",
+    "leasing_commission_rate", "cooperating_commission_rate",
 }
 INTEGER_FIELDS = {
     "num_bedrooms", "num_bathrooms", "garage_spaces", "assignments_count",
-    "transactions_count", "completed_sales",
+    "transactions_count", "completed_sales", "equity_terms_months", "extension_days",
 }
-BOOLEAN_FIELDS = {"has_balcony", "has_kitchen", "has_backyard", "has_garage"}
-LIST_FIELDS = {"amenities", "nearby_places", "nearby_establishments", "photos"}
-DATE_FIELDS = {"transaction_date"}
+BOOLEAN_FIELDS = {"has_balcony", "has_kitchen", "has_backyard", "has_garage", "dual_agency"}
+LIST_FIELDS = {"amenities", "nearby_places", "nearby_establishments", "photos", "marketing_permissions"}
+DATE_FIELDS = {"transaction_date", "agreement_date", "listing_start", "listing_end"}
+
+# Words written on forms -> the codes ALTY stores.
+PROPERTY_STATUS_WORDS = {
+    "RFO": ("rfo", "ready for occupancy", "ready", "move in ready", "turned over"),
+    "PRE_SELLING": ("pre selling", "preselling", "pre-selling", "under construction"),
+}
+FINANCING_WORDS = {
+    "BANK": ("bank", "bank financing", "bank loan"),
+    "PAGIBIG": ("pag ibig", "pagibig", "pag-ibig", "hdmf"),
+    "IN_HOUSE": ("in house", "in-house", "inhouse", "developer financing"),
+    "SSS": ("sss",),
+    "CASH": ("cash", "spot cash", "straight cash"),
+}
+RIGHTS_TO_SELL_WORDS = {
+    "EXCLUSIVE_RIGHT_TO_SELL": ("exclusive right to sell", "exclusive right-to-sell", "exclusive authority to sell"),
+    "EXCLUSIVE_AGENCY": ("exclusive agency",),
+    "OPEN_LISTING": ("open listing", "open", "non exclusive", "non-exclusive"),
+}
+COMMISSION_TYPE_WORDS = {
+    "PERCENTAGE": ("percentage", "percent", "percentage commission", "%"),
+    "FIXED": ("fixed", "fixed payment", "fixed amount", "fixed payment commission"),
+}
+
+
+def _code_for(text: str, table: dict[str, tuple[str, ...]]) -> str | None:
+    """'Pre-selling' -> 'PRE_SELLING' (whole phrase first, then a leading match)."""
+    phrase = " ".join(re.sub(r"[^a-z0-9%]+", " ", text.casefold()).split())
+    for code, words in table.items():
+        if phrase in {" ".join(re.sub(r"[^a-z0-9%]+", " ", w).split()) for w in words}:
+            return code
+    for code, words in table.items():
+        if any(phrase.startswith(" ".join(re.sub(r"[^a-z0-9%]+", " ", w).split())) for w in words):
+            return code
+    return None
 PERSON_FIELDS = {"full_name", "agent_name", "co_buyer", "seller_name"}
 STATUS_FIELDS = {"status", "client_status", "transaction_status", "agent_status"}
 
-_TRUE = {"yes", "y", "true", "1", "included", "with", "available", "present"}
-_FALSE = {"no", "n", "false", "0", "not included", "none", "without", "n/a", "na"}
+_TRUE = {"yes", "y", "true", "1", "included", "with", "available", "present", "allow", "allowed"}
+_FALSE = {"no", "n", "false", "0", "not included", "none", "without", "n/a", "na", "not allow", "not allowed"}
 
 TRANSACTION_TYPE_WORDS = {
     "RESERVED": {"RESERVED", "RESERVATION", "RESERVE"},
@@ -683,6 +773,23 @@ def normalize_fields(raw_fields: dict[str, str]) -> NormalizedFields:
                 value = [item.strip() for item in re.split(r"[;,\n|]", text) if item.strip()]
             elif name in DATE_FIELDS:
                 value = parse_date(text)
+            elif name == "property_status":
+                value = _code_for(text, PROPERTY_STATUS_WORDS)
+                if value is None:
+                    raise ValueError(text)
+            elif name == "financing_options":
+                codes = [_code_for(item, FINANCING_WORDS) for item in re.split(r"[;,/\n|]|\band\b", text) if item.strip()]
+                if not codes or None in codes:
+                    raise ValueError(text)
+                value = list(dict.fromkeys(codes))
+            elif name == "rights_to_sell":
+                value = _code_for(text, RIGHTS_TO_SELL_WORDS)
+                if value is None:
+                    raise ValueError(text)
+            elif name == "commission_type":
+                value = _code_for(text, COMMISSION_TYPE_WORDS)
+                if value is None:
+                    raise ValueError(text)
             elif name == "transaction_type":
                 value = normalize_transaction_type(text)
                 if value is None:

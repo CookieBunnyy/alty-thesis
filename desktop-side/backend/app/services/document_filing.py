@@ -38,6 +38,8 @@ CATEGORY_BY_TYPE: dict[str, tuple[str, ...]] = {
     "SELLER_DOCUMENT": ("Sellers",),
     "AGENT_INFORMATION": ("Agents",),
     "PROPERTY_INFORMATION": ("Properties",),
+    # Kept with the property's information sheet: Properties / <property>.
+    "LISTING_AGREEMENT": ("Properties",),
     "RECEIPT": ("Buyers",),
     "PROOF_OF_PAYMENT": ("Buyers",),
     "INVOICE": ("Buyers",),
@@ -82,7 +84,7 @@ def is_category_folder(db: Session, folder_id: int | None) -> bool:
 
 def subject_name(db: Session, document: Document, processing: dict) -> str | None:
     """Who or what the document is about, from the processed record."""
-    if document.document_type == "PROPERTY_INFORMATION":
+    if document.document_type in ("PROPERTY_INFORMATION", "LISTING_AGREEMENT"):
         return _clean(document.property_listing_title)
     if document.document_type == "AGENT_INFORMATION":
         agent = (processing.get("matched_entities") or {}).get("agent")

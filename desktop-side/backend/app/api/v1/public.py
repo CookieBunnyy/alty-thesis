@@ -133,6 +133,7 @@ def _public_listing(listing: PropertyListing, media: list[str], labelled: dict |
         "floor_plans": (labelled or {}).get("floor_plans", []),
         "amenity_media": (labelled or {}).get("amenity_media", []),
         "amenity_list": listing.amenity_list,
+        "other_amenities": listing.other_amenities,
         "nearby_places": listing.nearby_places,
         "nearby_establishments": listing.nearby_establishments,
         "details": listing.details,

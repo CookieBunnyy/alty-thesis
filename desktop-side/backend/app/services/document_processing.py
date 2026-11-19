@@ -15,10 +15,14 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.agent import Agent
+from app.models.branch import Branch
+from app.models.listing_agreement import ListingAgreement
+from app.models.partner import Partner
 from app.models.client import Client
 from app.models.document import Document
 from app.models.property_listing import PropertyListing
@@ -75,6 +79,22 @@ PROPERTY_FIELD_MAP = {
     "has_balcony": "has_balcony", "has_kitchen": "has_kitchen",
     "has_backyard": "has_backyard", "has_garage": "has_garage",
     "garage_spaces": "garage_spaces", "details": "details",
+    "lot_area_sqm": "lot_area_sqm", "floor_area_sqm": "floor_area_sqm", "project_name": "project_name",
+    "property_status": "property_status", "financing_options": "financing_options",
+    "equity_terms_months": "equity_terms_months", "other_amenities": "other_amenities",
+}
+# Listing agreement field -> column (dates and the broker are handled apart).
+AGREEMENT_FIELD_MAP = {
+    "seller_name": "seller_name", "seller_address": "seller_address", "seller_contact": "seller_contact",
+    "agency_name": "agency_name", "agency_address": "agency_address", "property_location": "property_address",
+    "tct_number": "tct_number", "tax_declaration_number": "tax_declaration_number",
+    "fixtures_excluded": "fixtures_excluded", "personal_property": "personal_property_included",
+    "rights_to_sell": "rights_to_sell", "price_total": "listing_price", "extension_days": "extension_days",
+    "commission_type": "commission_type", "commission_rate": "commission_rate",
+    "commission_amount": "commission_amount", "leasing_commission_rate": "leasing_commission_rate",
+    "deed_type": "deed_type", "cooperating_commission_rate": "cooperating_commission_rate",
+    "dual_agency": "dual_agency_allowed", "marketing_permissions": "marketing_permissions",
+    "governing_law": "governing_law", "additional_terms": "additional_terms",
 }
 CLIENT_FIELD_MAP = {
     "address": "location", "contact_number": "phone_number", "email": "email",
@@ -185,8 +205,35 @@ def new_result(document: Document | None, filename: str | None, declared_type: s
 # Entity writers
 # ---------------------------------------------------------------------------
 
+def _listing_extras(ctx: Context) -> dict[str, Any]:
+    """Columns stated by name on the document: the developer (a partner), the
+    team (a branch) and, on a property information sheet, the reservation fee
+    of the sample computation (read under the general "amount" labels)."""
+    db, fields, extras = ctx.db, ctx.fields, {}
+    developer = fields.get("developer")
+    if developer:
+        partner = db.scalar(select(Partner).where(func.lower(Partner.name) == developer.casefold()))
+        if partner is None:
+            ctx.warn(f"Developer '{developer}' isn't in Partners / Developers yet, so it wasn't linked. "
+                     "Add it there, then choose it on the property.")
+        else:
+            extras["partner_id"] = partner.id
+    team = fields.get("team_name")
+    if team:
+        branch = db.scalar(select(Branch).where(or_(func.lower(Branch.name) == team.casefold(),
+                                                     func.lower(Branch.code) == team.casefold())))
+        if branch is None:
+            ctx.warn(f"Team / cluster '{team}' wasn't found, so it wasn't set.")
+        else:
+            extras["branch_id"] = branch.id
+    if ctx.document_type == "PROPERTY_INFORMATION" and fields.get("amount") is not None:
+        extras["reservation_fee"] = fields["amount"]
+    return extras
+
+
 def _apply_property(ctx: Context) -> PropertyListing:
     db, fields = ctx.db, ctx.fields
+    extras = _listing_extras(ctx)
     reference = str(fields["listing_id"]).strip()
     listing = matching.find_property_by_reference(db, reference)
     stated_status = fields.get("status")
@@ -209,6 +256,7 @@ def _apply_property(ctx: Context) -> PropertyListing:
         values = {
             column: fields[key] for key, column in PROPERTY_FIELD_MAP.items() if key in fields
         }
+        values.update(extras)
         listing = PropertyListing(
             external_listing_id=reference,
             status=stated_status or "AVAILABLE",
@@ -233,10 +281,9 @@ def _apply_property(ctx: Context) -> PropertyListing:
             ["property_title"],
         )
     changes: dict[str, dict] = {}
-    for key, column in PROPERTY_FIELD_MAP.items():
-        if key not in fields:
-            continue
-        old, new = getattr(listing, column), fields[key]
+    stated = {column: fields[key] for key, column in PROPERTY_FIELD_MAP.items() if key in fields}
+    for column, new in {**stated, **extras}.items():
+        old = getattr(listing, column)
         if old is None or not _same(old, new):
             changes[column] = {"old": _jsonable(old), "new": _jsonable(new)}
             setattr(listing, column, new)
@@ -632,11 +679,51 @@ def _apply_reviewed(ctx: Context) -> None:
     ctx.result["idempotent"] = True
 
 
+def _apply_listing_agreement(ctx: Context, listing: PropertyListing) -> None:
+    """The owner's authority to sell: one current agreement per listing; a
+    newer agreement document replaces the recorded terms."""
+    fields = ctx.fields
+    values = {column: fields[key] for key, column in AGREEMENT_FIELD_MAP.items() if key in fields}
+    for key in ("agreement_date", "listing_start", "listing_end"):
+        if isinstance(fields.get(key), datetime):
+            values[key] = ph_day(fields[key])
+    if fields.get("agent_name"):
+        values["broker_name"] = fields["agent_name"]
+    start, end = values.get("listing_start"), values.get("listing_end")
+    if start and end and end < start:
+        raise ProcessingError(VALIDATION, "The listing period ends before it starts", ["listing_end"])
+    agreement = ctx.db.scalar(select(ListingAgreement).where(ListingAgreement.listing_id == listing.listing_id))
+    if agreement is None:
+        agreement = ListingAgreement(listing_id=listing.listing_id, source_document_id=ctx.source_document_id,
+                                     **values)
+        ctx.db.add(agreement)
+        ctx.db.flush()
+        ctx.created("listing_agreements", agreement.id, "LISTING_AGREEMENT_RECORDED",
+                    {"listing_id": listing.listing_id, "seller_name": agreement.seller_name})
+        return
+    changes = {}
+    for column, new in values.items():
+        old = getattr(agreement, column)
+        if old is None or not _same(old, new):
+            changes[column] = {"old": _jsonable(old), "new": _jsonable(new)}
+            setattr(agreement, column, new)
+    if changes:
+        agreement.source_document_id = ctx.source_document_id
+        ctx.updated("listing_agreements", agreement.id, "LISTING_AGREEMENT_UPDATED", changes)
+
+
 def _dispatch(ctx: Context) -> None:
     document_type = ctx.document_type
     if document_type == "PROPERTY_INFORMATION":
         listing = _apply_property(ctx)
         _link(ctx, listing=listing)
+    elif document_type == "LISTING_AGREEMENT":
+        listing = _apply_property(ctx)
+        ctx.result["idempotent"] = False
+        _apply_listing_agreement(ctx, listing)
+        if not ctx.result["created_records"] and not ctx.result["updated_records"]:
+            ctx.result["idempotent"] = True
+        _link(ctx, listing=listing, party=ctx.fields.get("seller_name"))
     elif document_type == "BUYER_DOCUMENT":
         _apply_buyer(ctx)
     elif document_type == "RESERVATION_AGREEMENT":

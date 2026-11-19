@@ -12,6 +12,7 @@ import { t } from "./i18n"
 import { AddPropertyForm, type DraftListing } from "./AddPropertyForm"
 import { ListingImages } from "./listingImages"
 import { MarketingBadge } from "./listingMarketing"
+import { AmenitiesPicker } from "./AmenitiesPicker"
 
 type SellerListing = {
   listing_id: number; listing_code: string | null; title: string | null; category: string | null; project_name: string | null
@@ -112,6 +113,7 @@ function SellerListingDrawer({ listing, onClose, onSaved }: { listing: SellerLis
       <Section title="Description & amenities">
         {listing.details ? <p className="whitespace-pre-line text-sm text-ab-muted">{listing.details}</p> : <p className="text-sm italic text-ab-faint">{t("No description yet.")}</p>}
         {amenities.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{amenities.map((a) => <span key={a} className="rounded-full border border-ab-border bg-ab-card-2 px-2.5 py-1 text-xs">{a}</span>)}</div>}
+        {listing.other_amenities && <p className="mt-2 text-sm"><span className="text-xs text-ab-faint">{t("Other amenities")}:</span> {listing.other_amenities}</p>}
       </Section>
       {listing.assigned && (
         <Section title="Photos, floor plans & amenities">
@@ -131,7 +133,8 @@ function SellerListingForm({ listing, onClose, onSaved }: { listing: SellerListi
   const { api } = useStaffAuth()
   const toast = useToast()
   const [details, setDetails] = useState(listing.details ?? "")
-  const [amenities, setAmenities] = useState(amenityNames(listing.amenity_list).join(", "))
+  const [amenities, setAmenities] = useState(amenityNames(listing.amenity_list))
+  const [other, setOther] = useState(listing.other_amenities ?? "")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const can = (name: string) => listing.editable_fields.includes(name)
@@ -141,7 +144,8 @@ function SellerListingForm({ listing, onClose, onSaved }: { listing: SellerListi
     setError("")
     const body: Record<string, unknown> = {}
     if (can("details")) body.details = details.trim() || null
-    if (can("amenity_list")) body.amenity_list = amenities.split(",").map((a) => a.trim()).filter(Boolean)
+    if (can("amenity_list")) body.amenity_list = amenities
+    if (can("other_amenities")) body.other_amenities = other.trim() || null
     try {
       await api(`/seller/listings/${listing.listing_id}`, { method: "PUT", body: JSON.stringify(body) })
       toast(t("Saved {name}.", { name: listing.title ?? "" }))
@@ -161,7 +165,7 @@ function SellerListingForm({ listing, onClose, onSaved }: { listing: SellerListi
         </header>
         <div className="space-y-3 overflow-y-auto p-5">
           {can("details") && <label className="block text-sm font-medium">{t("Description")}<textarea className={`${field} min-h-32`} value={details} onChange={(e) => setDetails(e.target.value)} /></label>}
-          {can("amenity_list") && <label className="block text-sm font-medium">{t("Amenities (comma-separated)")}<input className={field} value={amenities} onChange={(e) => setAmenities(e.target.value)} /></label>}
+          {can("amenity_list") && <AmenitiesPicker value={amenities} onChange={setAmenities} other={other} onOtherChange={setOther} category={listing.category ?? ""} />}
           <p className="text-xs text-ab-faint">{t("Prices, status and other details are managed by Abellar Realty.")}</p>
           {error && <p role="alert" className="text-sm text-ab-danger">{error}</p>}
         </div>

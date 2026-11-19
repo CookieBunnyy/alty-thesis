@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react"
-import { LoaderCircle, LogOut, Settings } from "lucide-react"
+import { LoaderCircle, Settings } from "lucide-react"
 import { Link } from "@/components/Link"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { useTheme } from "@/hooks/useTheme"
@@ -25,7 +25,7 @@ const field = "mt-1 block w-full rounded-xl border border-ab-border bg-ab-input 
 
 /** The signed-in staff member's own account: photo, details, password. */
 export function ProfilePage() {
-  const { user, api, reloadUser, signOut } = useStaffAuth()
+  const { user, api, reloadUser } = useStaffAuth()
   const { theme, toggleTheme } = useTheme()
   const toast = useToast()
   if (!user) return null
@@ -83,15 +83,10 @@ export function ProfilePage() {
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <span className="text-sm text-ab-muted">{t(theme === "dark" ? "Dark mode" : "Light mode")}</span>
           <Link to="/manage/settings" className="ml-auto inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-ab-border-strong px-3.5 text-sm font-semibold hover:bg-ab-hover">
-            <Settings className="h-4 w-4" /> {t("Language and other settings")}
+            <Settings className="h-4 w-4" /> {t("Language, sign out and other settings")}
           </Link>
         </div>
       </Section>
-
-      <button type="button" onClick={signOut}
-        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-ab-danger/50 text-sm font-semibold text-ab-danger hover:bg-ab-danger/10">
-        <LogOut className="h-4 w-4" /> {t("Sign out")}
-      </button>
     </div>
   )
 }

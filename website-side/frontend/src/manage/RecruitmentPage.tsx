@@ -375,6 +375,38 @@ function ApplicantForm({ applicant, summary, onClose, onSaved }: { applicant: Ap
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const [pages, setPages] = useState<File[]>([])
+  const [reading, setReading] = useState<{ state: "reading" | "done" | "failed"; found?: number; notes?: string[]; error?: string } | null>(null)
+  // The details on the form fill the empty fields; the Filing Manager checks them.
+  const readForm = async (file: File) => {
+    setReading({ state: "reading" })
+    try {
+      const data = new FormData()
+      data.append("file", file)
+      const read = await api<{ fields: Record<string, string | number | boolean>; found: string[]; notes: string[] }>("/recruitment/forms/read", { method: "POST", body: data })
+      const f = read.fields
+      setForm((current) => {
+        const next = { ...current }
+        const fill = (key: keyof typeof current, value: unknown) => {
+          if (value === undefined || value === null || value === "") return
+          if (typeof next[key] === "boolean") { if (value === true || !next[key]) (next[key] as boolean) = Boolean(value); return }
+          if (!next[key]) (next[key] as string) = String(value)
+        }
+        fill("full_name", f.full_name); fill("birthday", f.birthday); fill("address", f.address)
+        fill("phone_number", f.phone_number); fill("email", f.email); fill("recruiter_agent_id", f.recruiter_agent_id)
+        if (!f.recruiter_agent_id) fill("recruiter_name", f.recruiter_name)
+        fill("branch_id", f.branch_id); fill("source", f.source); fill("experience_years", f.experience_years)
+        if (f.has_license === true) { next.has_license = true; fill("license_number", f.license_number) }
+        return next
+      })
+      setReading({ state: "done", found: read.found.length, notes: read.notes })
+    } catch (readError) {
+      setReading({ state: "failed", error: t((readError as Error).message) })
+    }
+  }
+  const choosePages = (files: File[]) => {
+    if (!pages.length && files.length) void readForm(files[0])
+    setPages(files)
+  }
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }))
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -410,7 +442,17 @@ function ApplicantForm({ applicant, summary, onClose, onSaved }: { applicant: Ap
     <Dialog title={applicant ? t("Edit {name}", { name: applicant.full_name }) : t("New applicant")} onClose={onClose} onSubmit={submit}
       footer={<><Button onClick={onClose} disabled={busy}>{t("Cancel")}</Button><Button type="submit" variant="primary" disabled={busy}>{busy && <LoaderCircle className="h-4 w-4 animate-spin" />} {applicant ? t("Save") : t("Add applicant")}</Button></>}>
       <div className="grid gap-3 overflow-y-auto p-5 sm:grid-cols-2">
-        {!applicant && <FormFilePicker files={pages} onChange={setPages} />}
+        {!applicant && <FormFilePicker files={pages} onChange={choosePages} />}
+        {!applicant && reading && (
+          <div role="status" className={`rounded-xl px-3 py-2 text-sm sm:col-span-2 ${reading.state === "failed" ? "bg-ab-danger/10 text-ab-danger" : reading.state === "done" && !reading.found ? "bg-ab-warning/10" : "bg-ab-accent-soft/60"}`}>
+            {reading.state === "reading" && <span className="inline-flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin" /> {t("Reading the form…")}</span>}
+            {reading.state === "done" && (reading.found
+              ? <><p className="font-semibold">{t("Filled {n} detail(s) from the form. Check them against the form before saving.", { n: reading.found })}</p>
+                {reading.notes?.map((note) => <p key={note} className="text-xs text-ab-muted">{t(note)}</p>)}</>
+              : <p>{t("No details could be read from this file. Type them in, or try a clearer photo.")}</p>)}
+            {reading.state === "failed" && <p>{t("The form couldn't be read: {error}", { error: reading.error ?? "" })}</p>}
+          </div>
+        )}
         <label className="text-sm font-medium sm:col-span-2">{t("Full name *")}<input className={field} value={form.full_name} onChange={set("full_name")} /></label>
         <label className="text-sm font-medium">{t("Phone")}<input className={field} value={form.phone_number} onChange={set("phone_number")} /></label>
         <label className="text-sm font-medium">{t("Email")}<input type="email" className={field} value={form.email} onChange={set("email")} /></label>

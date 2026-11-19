@@ -212,6 +212,8 @@ class PropertyListing(Base):
     submitted_by_user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     floor_area_sqm: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    # Amenities outside the common list (amenity_list), as typed: "Other" in the dropdown.
+    other_amenities: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Listing details Abellar shows (interview 2): RFO or pre-selling, the
     # financing accepted, and the sample computation's reservation fee and
     # equity terms (with price_total, initial_dp and monthly_rate).

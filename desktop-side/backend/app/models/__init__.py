@@ -16,6 +16,7 @@ from app.models.auth_security import AuthAttempt, PasswordResetRequest, Password
 from app.models.payment import TransactionPayment
 from app.models.workforce import AgentApplicant, AgentAssessment, ApplicantForm
 from app.models.listing_assignment import ListingAssignment
+from app.models.listing_agreement import ListingAgreement
 from app.models.deal import Deal, DealEvent
 from app.models.commission import CommissionRecord, CommissionRelease, CommissionStructure
 from app.models.extraction import DocumentExtraction, DocumentSchema

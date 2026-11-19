@@ -103,3 +103,18 @@ def test_legacy_ui_labels_map_to_registry():
     assert canonical_type("Property Document") == "PROPERTY_INFORMATION"
     assert canonical_type("Proof of Payment") == "PROOF_OF_PAYMENT"
     assert canonical_type("Nonsense") is None
+
+
+def test_abellar_cash_check_voucher_for_a_commission_is_a_commission_voucher():
+    """Abellar's pad is printed CASH / CHECK VOUCHER; the particulars say it pays a commission."""
+    voucher = "ABELLAR REALTY\nCASH / CHECK VOUCHER\nPayee: Ana Cruz\nParticulars:\n100% release of comm."
+    assert classify(voucher, {}).document_type == "COMMISSION_VOUCHER"
+    other = "ABELLAR REALTY\nCASH / CHECK VOUCHER\nParticulars:\nOffice supplies, community hall"
+    assert classify(other, {}).document_type == "VOUCHER"
+
+
+def test_a_phrase_after_a_label_word_is_not_its_value():
+    """'Reservation fee, Lumina Tanza Blk 7 Lot 5' must not read as an amount of 7."""
+    text = "Total Amount\n15,000.00\nin partial/full payment for\nReservation fee, Lumina Tanza Blk 7 Lot 5"
+    assert extract_labeled_fields(text).conflicts == {}
+    assert fields(text)["amount"] == Decimal("15000.00")

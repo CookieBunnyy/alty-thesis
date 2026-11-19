@@ -17,6 +17,7 @@ _TRANSACTION = [_PARTY, _PROPERTY_REF, _AGENT_REF, ("transaction_date",), ("amou
 
 REQUIREMENTS: dict[str, list[tuple[str, ...]]] = {
     "PROPERTY_INFORMATION": [("listing_id",), ("property_title",), ("category",)],
+    "LISTING_AGREEMENT": [("listing_id",), ("property_title",), ("seller_name",)],
     "BUYER_DOCUMENT": [("full_name",), ("client_id", "email", "contact_number")],
     "RESERVATION_AGREEMENT": _TRANSACTION,
     "SALE_AGREEMENT": _TRANSACTION,
@@ -30,7 +31,8 @@ REQUIREMENTS: dict[str, list[tuple[str, ...]]] = {
 }
 
 _NON_NEGATIVE = (
-    "price_total", "initial_dp", "monthly_rate", "amount", "total_sales",
+    "price_total", "initial_dp", "monthly_rate", "amount", "total_sales", "lot_area_sqm", "floor_area_sqm",
+    "commission_rate", "commission_amount", "equity_terms_months", "extension_days",
     "total_commission", "performance_score", "num_bedrooms", "num_bathrooms",
     "garage_spaces", "assignments_count", "transactions_count", "completed_sales",
 )
@@ -58,9 +60,22 @@ class ValidationResult:
         return "; ".join(f"{error['field']}: {error['message']}" for error in self.errors)
 
 
+# Read only from listing agreements and property information sheets: elsewhere
+# an unreadable value under one of these labels doesn't stop the document.
+LISTING_DETAIL_FIELDS = {
+    "lot_area_sqm", "floor_area_sqm", "property_status", "financing_options", "equity_terms_months",
+    "agreement_date", "listing_start", "listing_end", "extension_days", "rights_to_sell", "commission_type",
+    "commission_rate", "commission_amount", "leasing_commission_rate", "cooperating_commission_rate",
+    "dual_agency", "marketing_permissions",
+}
+_LISTING_TYPES = {"PROPERTY_INFORMATION", "LISTING_AGREEMENT"}
+
+
 def validate(document_type: str, values: dict, invalid: dict[str, str]) -> ValidationResult:
     result = ValidationResult()
     for name, raw in invalid.items():
+        if name in LISTING_DETAIL_FIELDS and document_type not in _LISTING_TYPES:
+            continue
         result.add(name, f"value '{raw}' could not be parsed")
 
     requirements = list(REQUIREMENTS.get(document_type, []))

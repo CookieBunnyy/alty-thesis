@@ -9,6 +9,7 @@ import { t } from "./i18n"
 import { SalesTermsFields } from "./listingTerms"
 import { termsBody, termsFrom } from "./listingTermsData"
 import { lotAreaLong } from "@/lib/area"
+import { AmenitiesPicker } from "./AmenitiesPicker"
 
 export type Listing = {
   listing_id: number
@@ -42,6 +43,7 @@ export type Listing = {
   /** Photos uploaded in Digital Preview that passed the quality check. */
   media_ids?: number[]
   amenity_list: string[] | Record<string, unknown> | null
+  other_amenities?: string | null
   nearby_places: unknown
   nearby_establishments: unknown
   details: string | null
@@ -98,7 +100,8 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
     lat: listing.lat == null ? "" : String(listing.lat),
     lng: listing.lng == null ? "" : String(listing.lng),
     details: listing.details ?? "",
-    amenities: amenities.join(", "),
+    amenity_list: amenities.map(String),
+    other_amenities: listing.other_amenities ?? "",
     photos: (listing.photos ?? []).join("\n"),
     has_balcony: Boolean(listing.has_balcony),
     has_kitchen: Boolean(listing.has_kitchen),
@@ -150,7 +153,8 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
       village_name: form.village_name.trim() || null,
       lat, lng,
       details: form.details.trim() || null,
-      amenity_list: form.amenities.split(",").map((a) => a.trim()).filter(Boolean),
+      amenity_list: form.amenity_list,
+      other_amenities: form.other_amenities.trim() || null,
       photos: form.photos.split("\n").map((p) => p.trim()).filter(Boolean),
       has_balcony: form.has_balcony, has_kitchen: form.has_kitchen, has_backyard: form.has_backyard, has_garage: form.has_garage,
       status: form.status,
@@ -248,7 +252,8 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
               )}
             </div>
           </fieldset>
-          <Field label="Amenities (comma-separated)" wide><input className={field} value={form.amenities} onChange={(e) => set("amenities", e.target.value)} /></Field>
+          <AmenitiesPicker value={form.amenity_list} onChange={(list) => set("amenity_list", list)}
+            other={form.other_amenities} onOtherChange={(text) => set("other_amenities", text)} category={form.category} />
           <Field label="Description" wide><textarea className={`${field} min-h-24`} value={form.details} onChange={(e) => set("details", e.target.value)} /></Field>
           <Field label="Photo URLs (one per line)" wide><textarea className={`${field} min-h-20 font-mono text-xs`} value={form.photos} onChange={(e) => set("photos", e.target.value)} /></Field>
           <p className="text-xs text-ab-faint sm:col-span-2">{t("Nearby places and establishments are edited in the desktop app for now.")}</p>

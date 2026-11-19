@@ -113,7 +113,7 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
 
             <PropertyFloorPlans items={property.floor_plans} />
 
-            <PropertyAmenities amenityList={property.amenity_list} />
+            <PropertyAmenities amenityList={property.amenity_list} other={property.other_amenities} />
 
             <PropertyAmenityPhotos items={property.amenity_media} />
 

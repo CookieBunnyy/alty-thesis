@@ -20,10 +20,12 @@ import { inTeam } from "./period"
 import { ListingMarketing, MarketingBadge } from "./listingMarketing"
 import { AddPropertyForm } from "./AddPropertyForm"
 import { ListingImages } from "./listingImages"
+import { ListingAgreementSection, type ListingAgreement } from "./listingAgreement"
 
 type PartnerOption = { id: number; name: string; status: string }
 type Summary = { available: number; reserved: number; sold: number; on_hold: number; unavailable: number; total: number }
 type History = {
+  listing_agreement?: ListingAgreement | null
   status: string
   status_changed_at: string | null
   transactions: { transaction_id: string; client_id: string; client_name: string | null; agent_id: string; agent_name: string | null; transaction_type: string; transaction_date: string; amount: number; status: string; cancellation_reason?: string | null; source: string }[]
@@ -264,7 +266,8 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
       <Section title="Amenities & nearby">
         {amenities.length ? (
           <div className="flex flex-wrap gap-1.5">{amenities.map((a) => <span key={String(a)} className="rounded-full border border-ab-border bg-ab-card-2 px-2.5 py-1 text-xs">{String(a)}</span>)}</div>
-        ) : <p className="text-sm italic text-ab-faint">{t("No amenities listed")}</p>}
+        ) : !listing.other_amenities && <p className="text-sm italic text-ab-faint">{t("No amenities listed")}</p>}
+        {listing.other_amenities && <p className="mt-2 text-sm"><span className="text-xs text-ab-faint">{t("Other amenities")}:</span> {listing.other_amenities}</p>}
         {nearby.length > 0 && (
           <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
             {nearby.map(([group, items]) => (
@@ -279,6 +282,7 @@ function PropertyDrawer({ listing, partners, onClose, onSaved, onDeleted }: {
         )}
       </Section>
 
+      <ListingAgreementSection agreement={history.data?.listing_agreement} />
       <Section title="History">
         <LoadState loading={history.loading} error={history.error} onRetry={history.reload} />
         {history.data && (

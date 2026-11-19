@@ -504,3 +504,30 @@ Tests: `tests/test_interview_two.py` (accreditation scope and renewal, steps aft
   detector works at up to 960 px; the text-rotation classifier is off; one CPU thread (`OCR_THREADS`); only one
   document is read at a time; freed memory is returned to the system after each read. Whole-process peak measured
   at ~310–340 MB, back to ~130 MB afterwards. Test: `tests/test_ocr_memory.py`.
+
+## Recruitment form details read from the photo (2026-11-19)
+
+* Choosing the recruitment form photo or scan in **New applicant** reads it and fills the details (name,
+  birthday, address, mobile, email, recruiter, team, experience, license, source) for the Filing Manager to check
+  before saving (`POST /recruitment/forms/read`, nothing saved).
+* An applicant who already has form pages gets **Fill details from the form**
+  (`POST /recruitment/applicants/{id}/fill-from-forms`): only empty details are filled; typed ones are kept.
+* `services/recruitment_form.py` matches the form's labels even when OCR drops spaces, matches the recruiter
+  and team to the sellers and teams in ALTY, and never invents values; the broker declaration (a ticked box) is left
+  for a person to confirm. Tested with the demo photo: all 10 details read.
+
+## Real-looking demo documents, Abellar's voucher, sign out in Settings (2026-11-19)
+
+* **Demo documents are PDFs laid out like the real papers** (`scripts/make_demo_documents.py`, needs `reportlab`
+  only to run it): buyer's information sheet, valid ID photocopy (generic specimen), certificate of employment,
+  reservation agreement (numbered acknowledgments, property table), official receipts (settlement table, red number),
+  letter of guarantee (fictitious lender), deed of absolute sale with acknowledgment and a transaction-summary annex,
+  Abellar's **CASH / CHECK VOUCHER**, and the recruitment form. Every page is marked SAMPLE. Checked end to end: all
+  process and file correctly, the deal goes reserved to closed, all 8 voucher fields and all 10 recruitment details
+  are read.
+* **Abellar's real voucher is recognized:** a cash / check voucher whose particulars mention a commission ("release
+  of comm.") is now a Commission Voucher.
+* **Reading fixes:** a phrase after a label word ("Reservation fee, Lumina Tanza Blk 7 Lot 5") is no longer read as a
+  value; the recruitment form reader also takes a value from the line under its label (PDF forms).
+* **Sign out** moved to Settings (removed from the top bar, the phone menu and Profile) and asks "Sign out of ALTY?"
+  first.

@@ -38,7 +38,7 @@ def editable_fields() -> set[str]:
 # Every field of a property the seller added themselves, until approved.
 OWN_DRAFT_FIELDS = {
     "title", "category", "project_name", "partner_id", "price_total", "initial_dp", "monthly_rate",
-    "num_bedrooms", "num_bathrooms", "layout_type", "village_name", "lat", "lng", "amenity_list", "details",
+    "num_bedrooms", "num_bathrooms", "layout_type", "village_name", "lat", "lng", "amenity_list", "other_amenities", "details",
     "has_balcony", "has_kitchen", "has_backyard", "has_garage", "garage_spaces", "lot_area_sqm", "floor_area_sqm",
     "property_status", "financing_options", "reservation_fee", "equity_terms_months",
 }
@@ -115,9 +115,10 @@ def update_my_listing(listing_id: int, payload: dict[str, Any], db: Session = De
                 changes[field] = {"old": str(getattr(listing, field)), "new": str(value)}
                 setattr(listing, field, value)
             continue
-        if field == "details" and value is not None and not isinstance(value, str):
-            raise HTTPException(status_code=422, detail="details must be text")
-        if field != "details" and value is not None and not isinstance(value, (list, dict)):
+        text_field = field in ("details", "other_amenities")
+        if text_field and value is not None and not isinstance(value, str):
+            raise HTTPException(status_code=422, detail=f"{field} must be text")
+        if not text_field and value is not None and not isinstance(value, (list, dict)):
             raise HTTPException(status_code=422, detail=f"{field} must be a list")
         if getattr(listing, field) != value:
             changes[field] = {"old": getattr(listing, field), "new": value}

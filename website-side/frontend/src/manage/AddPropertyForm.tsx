@@ -2,8 +2,8 @@
 // property they added until it is approved. Step 1: the details, starting
 // with the developer the property belongs to. Step 2: photos, floor plans and
 // amenity pictures, each checked for quality as it is uploaded.
-import { useCallback, useState, type FormEvent, type ReactNode } from "react"
-import { Building2, Check, LoaderCircle, MapPin, PencilRuler, X } from "lucide-react"
+import { useCallback, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { Building2, Check, FileText, LoaderCircle, MapPin, PencilRuler, X } from "lucide-react"
 import { Link } from "@/components/Link"
 import { CATEGORIES } from "@/lib/categories"
 import { isManagement } from "./format"
@@ -19,13 +19,15 @@ import { lotAreaLong } from "@/lib/area"
 import { t } from "./i18n"
 import { SalesTermsFields } from "./listingTerms"
 import { termsBody, termsFrom } from "./listingTermsData"
+import { AmenitiesPicker } from "./AmenitiesPicker"
+import { ALL_AMENITIES, amenityNames } from "./amenityOptions"
 
 type Developer = { id: number; name: string; status: string; accredited?: boolean; partner_type?: string | null; accreditation_status?: string }
 export type DraftListing = {
   listing_id: number; title: string | null; category: string | null; project_name: string | null; partner_id: number | null
   price_total: number | string | null; initial_dp: number | string | null; monthly_rate: number | string | null
   num_bedrooms: number | null; num_bathrooms: number | null; layout_type: string | null; village_name: string | null
-  lat: number | string | null; lng: number | string | null; amenity_list: unknown; details: string | null
+  lat: number | string | null; lng: number | string | null; amenity_list: unknown; other_amenities?: string | null; details: string | null
   has_balcony: boolean | null; has_kitchen: boolean | null; has_backyard: boolean | null; has_garage: boolean | null
   garage_spaces: number | null; lot_area_sqm: number | string | null; floor_area_sqm: number | string | null
   boundary?: unknown
@@ -35,8 +37,20 @@ export type DraftListing = {
 const field = "mt-1 block w-full rounded-xl border border-ab-border bg-ab-input px-3 py-2 text-sm focus:border-ab-accent focus:outline-none"
 const str = (value: unknown) => (value === null || value === undefined ? "" : String(value))
 const num = (value: string) => (value.trim() === "" ? null : Number(value.replace(/,/g, "")))
-const amenityNames = (raw: unknown): string[] =>
-  Array.isArray(raw) ? raw.map(String) : raw && typeof raw === "object" ? Object.keys(raw as Record<string, unknown>) : []
+
+/** What POST /documents/read-fields returns: the fields a document states. */
+type ReadFields = {
+  filename: string; document_type: string | null
+  fields: Record<string, string | number | boolean | string[] | null>
+  resolved: { partner_id?: number | null; branch_id?: number | null }
+}
+// Document field -> form field (text values).
+const FROM_DOCUMENT: Record<string, string> = {
+  property_title: "title", category: "category", project_name: "project_name", price_total: "price_total",
+  initial_dp: "initial_dp", monthly_rate: "monthly_rate", num_bedrooms: "num_bedrooms", num_bathrooms: "num_bathrooms",
+  layout_type: "layout_type", village_name: "village_name", latitude: "lat", longitude: "lng",
+  floor_area_sqm: "floor_area_sqm", lot_area_sqm: "lot_area_sqm", details: "details", garage_spaces: "garage_spaces",
+}
 
 function Field({ label, children, wide, hint }: { label: string; children: ReactNode; wide?: boolean; hint?: ReactNode }) {
   return (
@@ -73,12 +87,15 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
     monthly_rate: str(listing?.monthly_rate), num_bedrooms: str(listing?.num_bedrooms), num_bathrooms: str(listing?.num_bathrooms),
     layout_type: str(listing?.layout_type), village_name: str(listing?.village_name), lat: str(listing?.lat), lng: str(listing?.lng),
     floor_area_sqm: str(listing?.floor_area_sqm), lot_area_sqm: str(listing?.lot_area_sqm),
-    amenities: amenityNames(listing?.amenity_list).join(", "), details: str(listing?.details),
+    amenity_list: amenityNames(listing?.amenity_list), other_amenities: str(listing?.other_amenities), details: str(listing?.details),
     has_balcony: Boolean(listing?.has_balcony), has_kitchen: Boolean(listing?.has_kitchen),
     has_backyard: Boolean(listing?.has_backyard), has_garage: Boolean(listing?.has_garage), garage_spaces: str(listing?.garage_spaces ?? 0),
   })
   const [terms, setTerms] = useState(() => termsFrom(listing))
   const [error, setError] = useState("")
+  const [reading, setReading] = useState(false)
+  const [readNote, setReadNote] = useState("")
+  const picker = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [picking, setPicking] = useState(false)
   const [drawing, setDrawing] = useState(false)
@@ -87,6 +104,54 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }))
   const developer = developers.data?.find((d) => String(d.id) === form.partner_id)
   const pinned = form.lat !== "" && form.lng !== ""
+
+  // Fill the form from a property information sheet or listing agreement.
+  // Nothing is saved: the person checks the fields, then saves as usual.
+  const fillFromDocument = async (file: File) => {
+    setReading(true)
+    setError("")
+    setReadNote("")
+    try {
+      const upload = new FormData()
+      upload.append("file", file)
+      const read = await api<ReadFields>("/documents/read-fields", { method: "POST", body: upload })
+      const f = read.fields
+      const patch: Partial<typeof form> = {}
+      for (const [from, to] of Object.entries(FROM_DOCUMENT)) {
+        const value = f[from]
+        if (value !== undefined && value !== null && value !== "") Object.assign(patch, { [to]: String(value) })
+      }
+      for (const key of ["has_balcony", "has_kitchen", "has_backyard", "has_garage"] as const) {
+        if (typeof f[key] === "boolean") patch[key] = f[key] as boolean
+      }
+      // Amenities in the common list become chips; the rest go to "Other amenities".
+      const stated = Array.isArray(f.amenities) ? f.amenities : []
+      const known = stated.map((name) => ALL_AMENITIES.find((a) => a.toLowerCase() === name.toLowerCase())).filter((a): a is string => Boolean(a))
+      const unknown = stated.filter((name) => !ALL_AMENITIES.some((a) => a.toLowerCase() === name.toLowerCase()))
+      const other = [typeof f.other_amenities === "string" ? f.other_amenities : "", ...unknown].filter(Boolean).join(", ")
+      if (stated.length) patch.amenity_list = [...new Set(known)]
+      if (other) patch.other_amenities = other
+      const partner = read.resolved.partner_id
+      if (partner && developers.data?.some((d) => d.id === partner)) patch.partner_id = String(partner)
+      setForm((current) => ({ ...current, ...patch }))
+      setTerms((current) => ({
+        property_status: typeof f.property_status === "string" ? f.property_status : current.property_status,
+        financing_options: Array.isArray(f.financing_options) ? f.financing_options : current.financing_options,
+        reservation_fee: f.amount != null && read.document_type !== "LISTING_AGREEMENT" ? String(f.amount) : current.reservation_fee,
+        equity_terms_months: f.equity_terms_months != null ? String(f.equity_terms_months) : current.equity_terms_months,
+      }))
+      const count = Object.keys(patch).length + ["property_status", "financing_options", "equity_terms_months"].filter((k) => f[k] != null).length
+      const missingDeveloper = typeof f.developer === "string" && !patch.partner_id ? ` ${t("Developer “{name}” isn't in the list yet: choose it above or add it in Partners / Developers.", { name: f.developer })}` : ""
+      setReadNote(count
+        ? t("Filled {n} fields from {file}. Check them before saving.", { n: count, file: read.filename }) + missingDeveloper
+        : t("No property details were found in {file}.", { file: read.filename }))
+    } catch (readError) {
+      setError(t((readError as Error).message))
+    } finally {
+      setReading(false)
+      if (picker.current) picker.current.value = ""
+    }
+  }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -108,7 +173,7 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
       partner_id: Number(form.partner_id), title: form.title.trim(), category: form.category.trim(),
       project_name: form.project_name.trim() || null, ...numbers, ...areas, lat, lng,
       layout_type: form.layout_type.trim() || null, village_name: form.village_name.trim() || null,
-      amenity_list: form.amenities.split(",").map((a) => a.trim()).filter(Boolean), details: form.details.trim() || null,
+      amenity_list: form.amenity_list, other_amenities: form.other_amenities.trim() || null, details: form.details.trim() || null,
       has_balcony: form.has_balcony, has_kitchen: form.has_kitchen, has_backyard: form.has_backyard, has_garage: form.has_garage,
     }
     setBusy(true)
@@ -154,6 +219,19 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
 
         {step === "details" ? (
           <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-ab-border-strong p-3 sm:col-span-2">
+              <p className="min-w-0 flex-1 text-sm">
+                <span className="font-semibold">{t("Have the property's papers?")}</span>
+                <span className="block text-xs text-ab-muted">{t("Upload a property information sheet or listing agreement (PDF, Word or photo) and the form fills itself in.")}</span>
+              </p>
+              <input ref={picker} type="file" accept=".pdf,.docx,image/png,image/jpeg,image/webp" className="sr-only"
+                aria-label={t("Property document")} onChange={(e) => { const file = e.target.files?.[0]; if (file) void fillFromDocument(file) }} />
+              <Button onClick={() => picker.current?.click()} disabled={reading}>
+                {reading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                {t(reading ? "Reading…" : "Fill from document")}
+              </Button>
+              {readNote && <p role="status" className="w-full text-xs text-ab-accent">{readNote}</p>}
+            </div>
             <div className="rounded-xl border border-ab-accent/40 bg-ab-accent-soft p-3 sm:col-span-2">
               <label className="block text-sm font-semibold" htmlFor="developer">
                 <Building2 className="mr-1 inline h-4 w-4" aria-hidden />{t("Developer this property belongs to *")}
@@ -213,9 +291,9 @@ export function AddPropertyForm({ listing, onClose, onSaved }: { listing?: Draft
                 {form.has_garage && <label className="flex items-center gap-2">{t("Spaces")}<input className="w-16 rounded-lg border border-ab-border bg-ab-input px-2 py-1" inputMode="numeric" value={form.garage_spaces} onChange={(e) => set("garage_spaces", e.target.value)} /></label>}
               </div>
             </fieldset>
-            <Field label="Amenities (comma-separated)" wide hint={t("Pictures of the amenities can be added in the next step.")}>
-              <input className={field} value={form.amenities} onChange={(e) => set("amenities", e.target.value)} placeholder={t("e.g. Swimming pool, Basketball court, 24-hr security")} />
-            </Field>
+            <AmenitiesPicker value={form.amenity_list} onChange={(list) => set("amenity_list", list)}
+              other={form.other_amenities} onOtherChange={(text) => set("other_amenities", text)} category={form.category}
+              hint={t("Pictures of the amenities can be added in the next step.")} />
             <Field label="Description" wide><textarea className={`${field} min-h-24`} value={form.details} onChange={(e) => set("details", e.target.value)} /></Field>
             <p className="text-xs text-ab-faint sm:col-span-2">
               {t("New properties are saved as not approved: they appear on the website once the Administrator approves them for marketing.")}

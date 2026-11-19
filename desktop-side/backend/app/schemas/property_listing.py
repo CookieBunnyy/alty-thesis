@@ -42,6 +42,7 @@ class PropertyListingCreate(BaseModel):
     )
     photos: list[str] = Field(default_factory=list)
     amenity_list: dict | list | None = None
+    other_amenities: str | None = Field(default=None, max_length=2000)
     nearby_places: dict | list | None = None
     details: str | None = None
     nearby_establishments: dict | list | None = None
@@ -87,6 +88,7 @@ class PropertyListingResponse(BaseModel):
     photos: list[str] | None = None
 
     amenity_list: dict | list | None = None
+    other_amenities: str | None = Field(default=None, max_length=2000)
     nearby_places: dict | list | None = None
 
     details: str | None = None
@@ -145,6 +147,7 @@ class PropertyListingUpdate(BaseModel):
     lng: Decimal | None = Field(default=None, ge=-180, le=180, max_digits=10, decimal_places=6)
     photos: list[str] | None = None
     amenity_list: dict | list | None = None
+    other_amenities: str | None = Field(default=None, max_length=2000)
     nearby_places: dict | list | None = None
     details: str | None = None
     nearby_establishments: dict | list | None = None
@@ -212,6 +215,7 @@ class PropertyListingCreate(BaseModel):
     lat: Decimal | None = Field(default=None, ge=-90, le=90, max_digits=10, decimal_places=6)
     lng: Decimal | None = Field(default=None, ge=-180, le=180, max_digits=10, decimal_places=6)
     amenity_list: list[str] | None = None
+    other_amenities: str | None = Field(default=None, max_length=2000)
     details: str | None = None
     has_balcony: bool | None = None
     has_kitchen: bool | None = None

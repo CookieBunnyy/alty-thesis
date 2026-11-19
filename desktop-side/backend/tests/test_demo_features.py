@@ -379,3 +379,38 @@ def test_sellers_set_the_number_buyers_call(api, admin, db):
                    json={"phone_number": "09170000000"}).status_code == 403
     assert api.put(f"{API}/agents/{other_user['agent_id']}/phone", headers=admin,
                    json={"phone_number": "09170000000"}).status_code == 200
+
+
+def test_recruitment_form_details_are_read_from_the_photo(api, admin, db):
+    """The Filing Manager uploads the form; the details fill themselves."""
+    from tests import documents as build
+
+    _make_user("filer2", "Filing Manager")
+    filer = login(api, "filer2")
+    recruiter_user, _seller = _new_seller(api, admin)
+    form = ["SELLER / AGENT RECRUITMENT FORM", "Full name  Patricia Anne Lim", "Date of birth  March 14, 1996",
+            "Home address  Blk 4 Lot 9, Brgy. Salitran II, Dasmarinas, Cavite", "Mobile number  0917 555 0177",
+            "Email address  patricia.lim@example.com", f"Recruited by  {recruiter_user['full_name']}",
+            "Real estate experience  1 year", "PRC license no.  None yet", "How you heard about us  Referral"]
+    read = api.post(f"{API}/recruitment/forms/read", headers=filer,
+                    files={"file": ("form.docx", build.docx(form), "application/octet-stream")})
+    assert read.status_code == 200, read.text
+    fields = read.json()["fields"]
+    assert fields["full_name"] == "Patricia Anne Lim" and fields["birthday"] == "1996-03-14"
+    assert fields["phone_number"] == "09175550177" and fields["email"] == "patricia.lim@example.com"
+    assert fields["recruiter_agent_id"] == recruiter_user["agent_id"]
+    assert fields["experience_years"] == 1 and fields["has_license"] is False and fields["source"] == "REFERRAL"
+
+    # An applicant recorded with only a name gets the rest from the uploaded photo;
+    # what was already typed is kept.
+    applicant = api.post(f"{API}/recruitment/applicants", headers=filer,
+                         json={"full_name": "Patricia A. Lim", "address": "Typed address"}).json()
+    base = f"{API}/recruitment/applicants/{applicant['id']}"
+    assert api.post(f"{base}/fill-from-forms", headers=filer).status_code == 409   # no form yet
+    api.post(f"{base}/forms", headers=filer, files={"file": ("form.png", build.png(form), "image/png")})
+    filled = api.post(f"{base}/fill-from-forms", headers=filer)
+    assert filled.status_code == 200, filled.text
+    body = filled.json()
+    assert body["full_name"] == "Patricia A. Lim" and body["address"] == "Typed address"
+    assert body["email"] == "patricia.lim@example.com" and body["birthday"] == "1996-03-14"
+    assert "email" in body["filled"] and "full_name" not in body["filled"]

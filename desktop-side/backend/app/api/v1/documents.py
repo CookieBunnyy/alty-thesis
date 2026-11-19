@@ -712,6 +712,42 @@ def upload_document(
     return _serialize_document(db, row, processing)
 
 
+@router.post("/read-fields")
+def read_document_fields(file: UploadFile = File(...), db: Session = Depends(get_db),
+                         _actor: User = Depends(get_company_user)):
+    """Read a document without storing it: the fields it states, normalized,
+    so a form (Add property) can fill itself in. Nothing is saved or changed."""
+    from app.models.branch import Branch
+    from app.models.partner import Partner
+    from app.services.document_classification import classify
+    from app.services.document_extraction import (ExtractionError, extract_labeled_fields, extract_text,
+                                                  jsonable_fields, normalize_fields)
+
+    filename, content, _hash, kind = _read_upload(file)
+    try:
+        extraction = extract_text(kind.source_format, content)
+    except ExtractionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    labeled = extract_labeled_fields(extraction.text)
+    normalized = normalize_fields(labeled.values)
+    fields = normalized.values
+    classification = classify(extraction.text, fields)
+    resolved: dict = {}
+    if fields.get("developer"):
+        resolved["partner_id"] = db.scalar(select(Partner.id).where(func.lower(Partner.name) == fields["developer"].casefold()))
+    if fields.get("team_name"):
+        team = fields["team_name"].casefold()
+        resolved["branch_id"] = db.scalar(select(Branch.id).where(or_(func.lower(Branch.name) == team, func.lower(Branch.code) == team)))
+    return {
+        "filename": filename,
+        "document_type": classification.document_type,
+        "confidence": classification.confidence,
+        "fields": jsonable_fields(fields),
+        "unreadable": normalized.invalid,
+        "resolved": resolved,
+    }
+
+
 @router.get("/{document_id}/versions", response_model=list[DocumentResponse])
 def get_document_versions(document_id: str, db: Session = Depends(get_db),
                           _actor: User = Depends(get_company_user)):

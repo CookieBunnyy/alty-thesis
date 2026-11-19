@@ -25,8 +25,10 @@ from app.models.user import User
 from app.models.workforce import (APPLICANT_CLOSED, APPLICANT_SOURCES, APPLICANT_STAGES, APPLICANT_STATUSES,
                                   AgentApplicant, ApplicantForm)
 from app.services.audit import record_audit
+from app.services.document_extraction import ExtractionError, extract_text
 from app.services.document_storage import (StorageError, UnsupportedFileError, delete_file, detect_file_kind,
                                            read_file, store_file)
+from app.services.recruitment_form import read_form
 from app.services.cloud_sync import try_push_pending
 
 router = APIRouter(prefix="/recruitment", tags=["Recruitment"])
@@ -403,6 +405,77 @@ def upload_form(applicant_id: int, file: UploadFile = File(...), db: Session = D
                  details={"file_name": name, "form_id": form.id})
     db.commit()
     return _one(db, applicant)
+
+
+def _upload_bytes(file: UploadFile) -> tuple[str, bytes]:
+    name = (file.filename or "").replace("\\", "/").split("/")[-1].strip()[:255] or "recruitment-form"
+    content = file.file.read(settings.MAX_UPLOAD_MB * 1024 * 1024 + 1)
+    if not content:
+        raise HTTPException(status_code=400, detail="The selected file is empty")
+    if len(content) > settings.MAX_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(status_code=413, detail=f"Files must be {settings.MAX_UPLOAD_MB} MB or smaller")
+    return name, content
+
+
+def _form_text(name: str, content: bytes) -> str:
+    try:
+        kind = detect_file_kind(name, content)
+        return extract_text(kind.source_format, content).text
+    except UnsupportedFileError as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+    except ExtractionError as exc:
+        raise HTTPException(status_code=422, detail=f"The form couldn't be read: {exc}") from exc
+
+
+@router.post("/forms/read")
+def read_recruitment_form(file: UploadFile = File(...), db: Session = Depends(get_db),
+                          _user: User = Depends(get_company_user)):
+    """The applicant's details read from a photo or scan of the recruitment
+    form, to fill the New applicant form. Nothing is saved."""
+    name, content = _upload_bytes(file)
+    return read_form(db, _form_text(name, content))
+
+
+# Filled from the form only when the applicant record has nothing there yet.
+FILLABLE = ("full_name", "birthday", "address", "phone_number", "email", "recruiter_agent_id", "recruiter_name",
+            "branch_id", "experience_years", "has_license", "license_number", "source")
+
+
+@router.post("/applicants/{applicant_id}/fill-from-forms")
+def fill_from_forms(applicant_id: int, db: Session = Depends(get_db), actor: User = Depends(get_company_user)):
+    """Read the uploaded form pages and fill the details the record doesn't have yet."""
+    applicant = _applicant_or_404(db, applicant_id)
+    forms = db.execute(select(ApplicantForm).where(ApplicantForm.applicant_id == applicant.id)
+                       .order_by(ApplicantForm.uploaded_at, ApplicantForm.id)).scalars().all()
+    if not forms:
+        raise HTTPException(status_code=409, detail="Upload the recruitment form first")
+    texts = []
+    for form in forms:
+        try:
+            texts.append(_form_text(form.file_name, read_file(form.bucket, form.path)))
+        except StorageError as exc:
+            raise HTTPException(status_code=502, detail="The form file is currently unavailable") from exc
+    result = read_form(db, "\n".join(texts))
+    filled = {}
+    for field in FILLABLE:
+        value = result["fields"].get(field)
+        if value is None:
+            continue
+        if field == "birthday":
+            value = date.fromisoformat(value)
+        current = getattr(applicant, field)
+        empty = current in (None, "") or (field == "has_license" and current is False and value is True)
+        if field == "recruiter_name" and applicant.recruiter_agent_id:
+            empty = False
+        if empty and current != value:
+            setattr(applicant, field, value)
+            filled[field] = str(value)
+    if filled:
+        _log(applicant, applicant.status, actor, "Details filled from the recruitment form")
+        record_audit(db, "APPLICANT_FILLED_FROM_FORM", actor=actor, entity_type="agent_applicants",
+                     entity_id=applicant.id, details=filled)
+    db.commit()
+    return {**_one(db, applicant), "filled": sorted(filled), "notes": result["notes"]}
 
 
 def _form_or_404(db: Session, applicant_id: int, form_id: int) -> ApplicantForm:

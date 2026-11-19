@@ -1,8 +1,8 @@
 import { useCallback, useState } from "react"
-import { CloudUpload, LoaderCircle, Moon, Sun } from "lucide-react"
+import { CloudUpload, LoaderCircle, LogOut, Moon, Sun } from "lucide-react"
 import { useTheme } from "@/hooks/useTheme"
 import { statusLabel } from "./format"
-import { Button, LoadState, PageHeader, Section } from "./ui"
+import { Button, Confirm, LoadState, PageHeader, Section } from "./ui"
 import { useStaffAuth } from "./staffContext"
 import { useToast } from "./toastContext"
 import { useApiData } from "./useApiData"
@@ -78,7 +78,26 @@ export function SettingsPage() {
       </Section>
       <HelpSettings />
       {isAdmin ? <AdminSettings /> : <p className="text-xs text-ab-faint">{t("System configuration is available to the Administrator.")}</p>}
+      <SignOutSection />
     </div>
+  )
+}
+
+/** Signing out asks first, so a stray click doesn't end the session. */
+function SignOutSection() {
+  const { user, signOut } = useStaffAuth()
+  const [asking, setAsking] = useState(false)
+  return (
+    <Section title="Sign out">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-ab-muted">{t("Signed in as {name} ({role}).", { name: user?.full_name ?? "", role: t(user?.role ?? "") })}</p>
+        <Button variant="danger" onClick={() => setAsking(true)}><LogOut className="h-4 w-4" /> {t("Sign out")}</Button>
+      </div>
+      {asking && (
+        <Confirm title={t("Sign out of ALTY?")} confirmLabel={t("Sign out")} onCancel={() => setAsking(false)} onConfirm={signOut}
+          message={t("You'll need your username and password to sign in again.")} />
+      )}
+    </Section>
   )
 }
 
