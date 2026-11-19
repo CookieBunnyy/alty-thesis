@@ -10,6 +10,7 @@ import { SalesTermsFields } from "./listingTerms"
 import { termsBody, termsFrom } from "./listingTermsData"
 import { lotAreaLong } from "@/lib/area"
 import { AmenitiesPicker } from "./AmenitiesPicker"
+import { ListingImages } from "./listingImages"
 
 export type Listing = {
   listing_id: number
@@ -255,6 +256,12 @@ export function PropertyEditForm({ listing, partners, onClose, onSaved }: {
           <AmenitiesPicker value={form.amenity_list} onChange={(list) => set("amenity_list", list)}
             other={form.other_amenities} onOtherChange={(text) => set("other_amenities", text)} category={form.category} />
           <Field label="Description" wide><textarea className={`${field} min-h-24`} value={form.details} onChange={(e) => set("details", e.target.value)} /></Field>
+          <fieldset className="sm:col-span-2">
+            <legend className="text-sm font-medium">{t("Photos, floor plans & amenities")}</legend>
+            <div className="mt-2">
+              <ListingImages listingId={listing.listing_id} editable />
+            </div>
+          </fieldset>
           <Field label="Photo URLs (one per line)" wide><textarea className={`${field} min-h-20 font-mono text-xs`} value={form.photos} onChange={(e) => set("photos", e.target.value)} /></Field>
           <p className="text-xs text-ab-faint sm:col-span-2">{t("Nearby places and establishments are edited in the desktop app for now.")}</p>
         </div>
