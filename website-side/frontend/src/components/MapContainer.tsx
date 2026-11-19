@@ -814,7 +814,7 @@ export const PropertyMap: React.FC<MapProps> = ({
         {/* 0. Locked map: dim the basemap, then reveal real administrative shapes. */}
         {lockToAreas && (
           <Polygon
-            key={`shade-${theme}-${areas.map((area) => area.id).join(',')}`}
+            key="area-shade"
             positions={[[[-85, -180], [85, -180], [85, 180], [-85, 180]]]}
             interactive={false}
             pathOptions={{ stroke: false, fillColor: '#000', fillOpacity: theme === 'dark' ? 0.6 : 0.5 }}
