@@ -1,105 +1,92 @@
-// The map's "unlocked areas": the places where Abellar has listed properties.
-// Properties within a few kilometres of each other form one area (a town or a
-// cluster of subdivisions); everything else in the Philippines stays shaded.
+// Province boundaries are derived from geoBoundaries PHL ADM2 (CC BY 3.0 IGO),
+// sourced from NAMRIA, PSA, and OCHA Philippines.
+import type { Feature, MultiPolygon, Polygon, Position } from "geojson"
 import type { Property } from "@/types"
+import provinceBoundaries from "./philippinesAdmin2.json"
+
+type BoundaryProperties = { shapeName: string; shapeID: string }
+type ProvinceBoundary = Feature<Polygon | MultiPolygon, BoundaryProperties>
 
 export type MapArea = {
   id: string
   name: string
   center: { lat: number; lng: number }
-  /** Circle that holds every property of the area, with a margin (metres). */
-  radiusM: number
+  bounds: [[number, number], [number, number]]
+  boundary: ProvinceBoundary
   properties: Property[]
 }
 
-/** What the visitor can pan to: the Philippines and its waters. */
-export const PHILIPPINES_BOUNDS: [[number, number], [number, number]] = [[4.2, 115.8], [21.4, 127.2]]
-
-const JOIN_KM = 6 // properties closer than this share an area
-const MARGIN_KM = 1.2
-const MIN_RADIUS_KM = 1.5
-
-export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const rad = Math.PI / 180
-  const dLat = (b.lat - a.lat) * rad
-  const dLng = (b.lng - a.lng) * rad
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2
-  return 12742 * Math.asin(Math.min(1, Math.sqrt(h)))
-}
-
-/** "Brgy. Sahud Ulan, Tanza, Cavite" -> "Tanza"; "Talon Dos, Las Piñas City" -> "Las Piñas City". */
-function placeName(address: string | null | undefined) {
-  const parts = String(address ?? "").split(",").map((part) => part.trim()).filter(Boolean)
-  if (parts.length === 0) return ""
-  return parts.length >= 3 ? parts[parts.length - 2] : parts[parts.length - 1]
-}
+/** Tight bounds for the Philippines map, excluding most surrounding countries. */
+export const PHILIPPINES_BOUNDS: [[number, number], [number, number]] = [[4.4, 116.7], [21.3, 126.8]]
 
 export function groupIntoAreas(properties: Property[]): MapArea[] {
   const located = properties.filter((p) => p.lat != null && p.lng != null)
-  const point = (p: Property) => ({ lat: p.lat!, lng: p.lng! })
+  const features = provinceBoundaries.features as ProvinceBoundary[]
+  const grouped = new Map<string, { boundary: ProvinceBoundary; properties: Property[] }>()
 
-  // Join properties that are near each other (union-find).
-  const parent = located.map((_, i) => i)
-  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])))
-  for (let i = 0; i < located.length; i++) {
-    for (let j = i + 1; j < located.length; j++) {
-      if (distanceKm(point(located[i]), point(located[j])) < JOIN_KM) parent[find(i)] = find(j)
+  for (const property of located) {
+    const boundary = features.find((feature) => containsPoint(feature, property.lng!, property.lat!))
+    if (!boundary) continue
+    const group = grouped.get(boundary.properties.shapeID) ?? { boundary, properties: [] }
+    group.properties.push(property)
+    grouped.set(boundary.properties.shapeID, group)
+  }
+
+  return [...grouped.values()]
+    .map(({ boundary, properties: members }) => {
+      const bounds = boundaryBounds(boundary)
+      return {
+        id: `province-${boundary.properties.shapeID}`,
+        name: boundary.properties.shapeName,
+        center: {
+          lat: members.reduce((sum, p) => sum + p.lat!, 0) / members.length,
+          lng: members.reduce((sum, p) => sum + p.lng!, 0) / members.length,
+        },
+        bounds,
+        boundary,
+        properties: members,
+      }
+    })
+    .sort((a, b) => b.properties.length - a.properties.length || a.name.localeCompare(b.name))
+}
+
+function containsPoint(feature: ProvinceBoundary, longitude: number, latitude: number) {
+  const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates
+  return polygons.some((rings) => {
+    if (!containsPointInRing(longitude, latitude, rings[0])) return false
+    return !rings.slice(1).some((ring) => containsPointInRing(longitude, latitude, ring))
+  })
+}
+
+function containsPointInRing(longitude: number, latitude: number, ring: Position[]) {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i]
+    const [xj, yj] = ring[j]
+    if ((yi > latitude) !== (yj > latitude) && longitude < ((xj - xi) * (latitude - yi)) / (yj - yi) + xi) {
+      inside = !inside
     }
   }
-  const groups = new Map<number, Property[]>()
-  located.forEach((p, i) => {
-    const root = find(i)
-    groups.set(root, [...(groups.get(root) ?? []), p])
-  })
+  return inside
+}
 
-  // Areas whose circles would overlap become one area (so the shade has clean holes).
-  let areas = [...groups.values()].map(describeArea)
-  for (let merged = true; merged; ) {
-    merged = false
-    outer: for (let i = 0; i < areas.length; i++) {
-      for (let j = i + 1; j < areas.length; j++) {
-        if (distanceKm(areas[i].center, areas[j].center) * 1000 < areas[i].radiusM + areas[j].radiusM) {
-          const joined = describeArea([...areas[i].properties, ...areas[j].properties])
-          areas = [...areas.filter((_, k) => k !== i && k !== j), joined]
-          merged = true
-          break outer
-        }
+function boundaryBounds(feature: ProvinceBoundary): [[number, number], [number, number]] {
+  const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates
+  let south = Infinity
+  let west = Infinity
+  let north = -Infinity
+  let east = -Infinity
+  for (const polygon of polygons) {
+    for (const ring of polygon) {
+      for (const [longitude, latitude] of ring) {
+        south = Math.min(south, latitude)
+        west = Math.min(west, longitude)
+        north = Math.max(north, latitude)
+        east = Math.max(east, longitude)
       }
     }
   }
-  return areas.sort((a, b) => b.properties.length - a.properties.length || a.name.localeCompare(b.name))
-}
-
-function describeArea(members: Property[]): MapArea {
-  const center = {
-    lat: members.reduce((sum, p) => sum + p.lat!, 0) / members.length,
-    lng: members.reduce((sum, p) => sum + p.lng!, 0) / members.length,
-  }
-  const farthest = Math.max(0, ...members.map((p) => distanceKm(center, { lat: p.lat!, lng: p.lng! })))
-  const names = new Map<string, number>()
-  for (const p of members) {
-    const name = placeName(p.village_name)
-    if (name) names.set(name, (names.get(name) ?? 0) + 1)
-  }
-  const name = [...names.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Abellar area"
-  const ids = members.map((p) => Number(p.listing_id)).sort((a, b) => a - b)
-  return {
-    id: `area-${ids[0]}`,
-    name,
-    center,
-    radiusM: Math.max(MIN_RADIUS_KM, farthest + MARGIN_KM) * 1000,
-    properties: members,
-  }
-}
-
-/** A circle as a polygon ring (for the holes in the shade layer). */
-export function circleRing(center: { lat: number; lng: number }, radiusM: number, steps = 64): [number, number][] {
-  const dLat = radiusM / 111_320
-  const dLng = radiusM / (111_320 * Math.cos((center.lat * Math.PI) / 180))
-  return Array.from({ length: steps }, (_, i) => {
-    const angle = (i / steps) * 2 * Math.PI
-    return [center.lat + dLat * Math.sin(angle), center.lng + dLng * Math.cos(angle)] as [number, number]
-  })
+  return [[south, west], [north, east]]
 }
 
 /** Corners of a circle's bounding box, to frame it on the map. */

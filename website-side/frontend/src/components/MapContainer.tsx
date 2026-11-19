@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Circle, MapContainer, TileLayer, Marker, Popup, Polygon, Polyline, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import { Circle, GeoJSON, MapContainer, TileLayer, Marker, Popup, Polygon, Polyline, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { ChevronLeft, ExternalLink, Layers, LoaderCircle, LocateFixed, Lock, LogIn, Mail, MapPinOff, MessageSquareText, Minus, Phone, Plus, Satellite, Users, X } from 'lucide-react';
 import type { MapProps, NearbyAgent, NearbyEstablishmentsMap, RouteOption, TrafficLevel } from '../types';
-import { PHILIPPINES_BOUNDS, circleBounds, circleRing, distanceKm, groupIntoAreas, type MapArea } from '@/lib/mapAreas';
+import { PHILIPPINES_BOUNDS, circleBounds, groupIntoAreas, type MapArea } from '@/lib/mapAreas';
 import { CallButton } from '@/components/CallButton';
 import { SignInToContact } from './SignInToContact';
 import { RatingSummary } from './Stars';
@@ -59,9 +59,7 @@ const HOUSE_SVG =
 
 const DEFAULT_CENTER: [number, number] = [14.5995, 120.9842]; // Metro Manila
 
-// Temporary UI setting: hide map provider attribution during development.
-// Set to true before public/production deployment to restore the required credits.
-const SHOW_MAP_ATTRIBUTION = false;
+const SHOW_MAP_ATTRIBUTION = true;
 
 // Congested stretches reported by the live-traffic provider, drawn over the route.
 const TRAFFIC_COLORS: Record<TrafficLevel, string> = {
@@ -169,6 +167,9 @@ const MapResizer: React.FC = () => {
   useEffect(() => {
     map.attributionControl?.setPosition('topleft');
     map.attributionControl?.setPrefix(false);
+    map.attributionControl?.addAttribution(
+      'Administrative boundaries &copy; <a href="https://www.geoboundaries.org">geoBoundaries</a>, source: NAMRIA / PSA / OCHA Philippines (CC BY 3.0 IGO)',
+    );
     const container = map.getContainer();
     let frame = 0;
     const observer = new ResizeObserver(() => {
@@ -187,6 +188,26 @@ const MapResizer: React.FC = () => {
       } catch {
         /* already removed */
       }
+    };
+  }, [map]);
+  return null;
+};
+
+/** Keep the locked map focused on the Philippines at every viewport size. */
+const PhilippinesBoundsGuard: React.FC = () => {
+  const map = useMap();
+  useEffect(() => {
+    const bounds = L.latLngBounds(PHILIPPINES_BOUNDS);
+    const constrainView = () => {
+      const minZoom = map.getBoundsZoom(bounds, false, L.point(16, 16));
+      map.setMinZoom(minZoom);
+      if (map.getZoom() < minZoom) map.setZoom(minZoom, { animate: false });
+      map.panInsideBounds(bounds, { animate: false });
+    };
+    constrainView();
+    map.on('resize', constrainView);
+    return () => {
+      map.off('resize', constrainView);
     };
   }, [map]);
   return null;
@@ -538,28 +559,26 @@ export const PropertyMap: React.FC<MapProps> = ({
     () => (lockToAreas ? groupIntoAreas(properties) : []),
     [lockToAreas, properties],
   );
-  const [chosenPoint, setChosenPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [chosenAreaId, setChosenAreaId] = useState<string | null>(null);
   const selectedArea = selectedProperty
     ? areas.find((area) => area.properties.some((p) => p.listing_id === selectedProperty.listing_id)) ?? null
     : null;
   const [openedFor, setOpenedFor] = useState<string | null>(null);
   if (selectedArea && selectedArea.id !== openedFor) {
     setOpenedFor(selectedArea.id);
-    setChosenPoint(selectedArea.center);
+    setChosenAreaId(selectedArea.id);
   }
-  const chosenArea = chosenPoint
-    ? areas.find((area) => distanceKm(area.center, chosenPoint) * 1000 <= area.radiusM) ?? null
-    : null;
+  const chosenArea = areas.find((area) => area.id === chosenAreaId) ?? null;
   const activeArea = selectedArea ?? chosenArea;
   const shownProperties = !lockToAreas ? validProperties : activeArea ? activeArea.properties : [];
   const openArea = (area: MapArea) => {
-    setChosenPoint(area.center);
+    setChosenAreaId(area.id);
     setOpenedFor(area.id);
     // A property in another area is deselected (that also ends its seller search).
     if (selectedProperty && !area.properties.some((p) => p.listing_id === selectedProperty.listing_id)) onClearNearby?.();
   };
   const showAllAreas = () => {
-    setChosenPoint(null);
+    setChosenAreaId(null);
     setOpenedFor(null);
     onCloseSellers?.();
     if (selectedProperty) onClearNearby?.();
@@ -728,10 +747,12 @@ export const PropertyMap: React.FC<MapProps> = ({
       <MapContainer
         center={initialCenter}
         zoom={lockToAreas ? 6 : 13}
+        minZoom={lockToAreas ? 5 : undefined}
+        zoomSnap={lockToAreas ? 0.25 : 1}
         zoomControl={false}
         attributionControl={SHOW_MAP_ATTRIBUTION}
         className="z-0 h-full w-full rounded-xl"
-        {...(lockToAreas ? { maxBounds: PHILIPPINES_BOUNDS, maxBoundsViscosity: 1, minZoom: 5 } : {})}
+        {...(lockToAreas ? { maxBounds: PHILIPPINES_BOUNDS, maxBoundsViscosity: 1 } : {})}
       >
         {/* OpenStreetMap tiles; darkened in CSS (.ab-dark-tiles) for the dark
             theme, shown as-is for the light theme. Keyed so the class swaps. */}
@@ -740,7 +761,7 @@ export const PropertyMap: React.FC<MapProps> = ({
         ) : (
           <TileLayer
             key={theme}
-            attribution={SHOW_MAP_ATTRIBUTION ? '&copy; <a href="https://www.openstreetmap.org/copyright">' : ''}
+            attribution={SHOW_MAP_ATTRIBUTION ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' : ''}
             url={STREET_TILES}
             className={theme === 'dark' ? 'ab-dark-tiles' : ''}
           />
@@ -756,6 +777,7 @@ export const PropertyMap: React.FC<MapProps> = ({
         )}
 
         <MapResizer />
+        {lockToAreas && <PhilippinesBoundsGuard />}
         <MapControls
           onLocate={onLocate}
           onToggleTraffic={onToggleTraffic}
@@ -775,7 +797,7 @@ export const PropertyMap: React.FC<MapProps> = ({
         <FitToProperties
           points={[
             ...(lockToAreas
-              ? (activeArea ? [activeArea] : areas).flatMap((area) => circleBounds(area.center, area.radiusM))
+              ? (activeArea ? [activeArea] : areas).flatMap((area) => area.bounds)
               : validProperties.map((p) => [p.lat!, p.lng!] as [number, number])),
             // With a radius, frame the whole circle around the workplace too.
             ...(workplaceLocation && workplaceRadiusKm ? radiusBounds(workplaceLocation, workplaceRadiusKm) : []),
@@ -789,14 +811,11 @@ export const PropertyMap: React.FC<MapProps> = ({
         )}
         <PickHandler active={isPickingLocation} onPick={onPickLocation} />
 
-        {/* 0. Locked map: shade everything except the areas with listings */}
+        {/* 0. Locked map: dim the basemap, then reveal real administrative shapes. */}
         {lockToAreas && (
           <Polygon
             key={`shade-${theme}-${areas.map((area) => area.id).join(',')}`}
-            positions={[
-              [[-85, -180], [85, -180], [85, 180], [-85, 180]],
-              ...areas.map((area) => circleRing(area.center, area.radiusM)),
-            ]}
+            positions={[[[-85, -180], [85, -180], [85, 180], [-85, 180]]]}
             interactive={false}
             pathOptions={{ stroke: false, fillColor: '#000', fillOpacity: theme === 'dark' ? 0.6 : 0.5 }}
           />
@@ -805,11 +824,14 @@ export const PropertyMap: React.FC<MapProps> = ({
           const isOpen = area.id === activeArea?.id;
           return (
             <React.Fragment key={area.id}>
-              <Circle
-                center={[area.center.lat, area.center.lng]}
-                radius={area.radiusM}
-                interactive={!isOpen}
-                pathOptions={{ color: areaColor, weight: isOpen ? 3 : 2, fillColor: areaColor, fillOpacity: isOpen ? 0.04 : 0.18 }}
+              <GeoJSON
+                data={area.boundary}
+                style={{
+                  color: areaColor,
+                  weight: isOpen ? 3 : 2,
+                  fillColor: areaColor,
+                  fillOpacity: isOpen ? 0.12 : 0.24,
+                }}
                 eventHandlers={{ click: () => openArea(area) }}
               />
               {!isOpen && !mappedSellers.length && (
