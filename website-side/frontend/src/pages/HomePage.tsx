@@ -193,6 +193,14 @@ export function HomePage() {
       <SiteHeader />
       <HomeHero data={data} />
 
+      {data?.partners && data.partners.length > 0 && (
+        <section id="partners" className="mx-auto max-w-7xl scroll-mt-24 px-4 pb-10" aria-label="Developers and partners">
+          <Reveal className="border-y border-ab-border py-8">
+            <PartnersStrip partners={data.partners} />
+          </Reveal>
+        </section>
+      )}
+
       {error && (
         <p role="alert" className="mx-auto mt-8 max-w-7xl px-4 text-center text-ab-danger">
           Unable to load the latest listings: {error}
@@ -235,15 +243,6 @@ export function HomePage() {
               </div>
             )}
           </section>
-
-          {/* ---------------- PARTNERS ---------------- */}
-          {data.partners && data.partners.length > 0 && (
-            <section id="partners" className="mx-auto max-w-7xl scroll-mt-24 px-4 pb-20" aria-label="Developers and partners">
-              <Reveal className="border-y border-ab-border py-8">
-                <PartnersStrip partners={data.partners} />
-              </Reveal>
-            </section>
-          )}
 
           {/* ---------------- REVIEWS ---------------- */}
           <section className="mx-auto max-w-7xl px-4 pb-20">
@@ -402,8 +401,7 @@ export function HomePage() {
             <Reveal className="hero-panel relative mx-auto max-w-7xl overflow-hidden rounded-3xl border border-ab-border px-6 py-12 text-center md:px-14 md:py-16">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,color-mix(in_oklab,var(--color-ab-accent)_22%,transparent),transparent_60%)]" aria-hidden />
               <div className="relative mx-auto flex max-w-2xl flex-col items-center">
-                <img src="/icons/site-192.png" alt="" width={56} height={56} className="h-14 w-14 rounded-2xl shadow-[0_14px_30px_-12px_rgba(0,0,0,0.55)]" />
-                <h2 className="mt-6 text-3xl font-extrabold tracking-tight text-ab-text md:text-4xl">Ready to find your next home?</h2>
+                <h2 className="text-3xl font-extrabold tracking-tight text-ab-text md:text-4xl">Ready to find your next home?</h2>
                 <p className="mt-3 text-ab-muted md:text-lg">
                   {client
                     ? "Browse the latest listings, or follow your transactions and reviews in your account."

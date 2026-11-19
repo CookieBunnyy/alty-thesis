@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.security import ADMINISTRATOR, canonical_role, permissions_for
 from app.models.agent import Agent
 from app.models.audit import AuditEvent
+from app.models.auth_security import PasswordResetToken
 from app.models.client import Client
 from app.models.document import Document
 from app.models.notification import NotificationRead
@@ -261,6 +262,33 @@ def _password_requests(db: Session) -> list[dict[str, Any]]:
     ]
 
 
+def _buyer_password_resets(db: Session, now: datetime) -> list[dict[str, Any]]:
+    rows = db.execute(
+        select(PasswordResetToken, User, Client)
+        .join(User, User.id == PasswordResetToken.user_id)
+        .join(Client, Client.client_id == User.client_id)
+        .where(
+            func.lower(User.role) == "client",
+            PasswordResetToken.created_at >= now - SECURITY_WINDOW,
+        )
+        .order_by(PasswordResetToken.created_at.desc())
+        .limit(20)
+    ).all()
+    return [
+        _item(
+            f"buyer-password-reset:{token.id}",
+            category="security",
+            severity="info",
+            title="Buyer password reset requested",
+            message=f"{client.full_name} ({client.email or user.username}) requested a password reset; "
+                    "a one-time link was sent to the buyer.",
+            at=token.created_at,
+            page="users",
+        )
+        for token, user, client in rows
+    ]
+
+
 def notifications_for(db: Session, user: User) -> dict[str, Any]:
     now = datetime.utcnow()
     pages = set(permissions_for(user.role))
@@ -284,6 +312,7 @@ def notifications_for(db: Session, user: User) -> dict[str, Any]:
         items += _sync(db, now)
         items += _security(db, now)
         items += _password_requests(db)
+        items += _buyer_password_resets(db, now)
 
     items.sort(key=lambda item: item["created_at"] or "", reverse=True)
     items = items[:MAX_ITEMS]

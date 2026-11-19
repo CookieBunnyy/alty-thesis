@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import CLIENT, canonical_role
+from app.models.client import Client
 from app.models.auth_security import PasswordResetRequest, PasswordResetToken
 from app.models.user import User
 from app.services import auth_throttle as throttle
@@ -66,7 +67,9 @@ def _eligible(db: Session, identifier: str) -> User | None:
     user = db.execute(
         select(User).where(or_(func.lower(User.username) == identifier, func.lower(User.email) == identifier))
     ).scalars().first()
-    if user is None or not user.is_active or canonical_role(user.role) == CLIENT:
+    if user is None or not user.is_active:
+        return None
+    if canonical_role(user.role) == CLIENT and (user.client_id is None or db.get(Client, user.client_id) is None):
         return None
     return user
 

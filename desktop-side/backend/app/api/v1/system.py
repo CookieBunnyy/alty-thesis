@@ -94,6 +94,7 @@ def security_check(request: Request, _user: User = Depends(require_admin)):
         "captcha_enabled": settings.captcha_enabled,
         "password_reset_enabled": settings.password_reset_enabled,
         "staff_app_url": settings.STAFF_APP_URL or None,
+        "client_app_url": settings.CLIENT_APP_URL or None,
         "email_provider": settings.EMAIL_PROVIDER,
         "email_sender_set": bool(settings.EMAIL_FROM.strip()),
         "cors_origins": settings.cors_origins,

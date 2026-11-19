@@ -49,6 +49,8 @@ services:
         sync: false
       - key: STAFF_APP_URL         # e.g. https://alty-msa.vercel.app (reset links)
         sync: false
+      - key: CLIENT_APP_URL        # e.g. https://alty-thesis.vercel.app (buyer reset links)
+        sync: false
       # Cloudflare Turnstile security check (optional; both or neither).
       - key: TURNSTILE_SITE_KEY
         sync: false

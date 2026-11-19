@@ -520,12 +520,12 @@
   -webkit-mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
   mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
 }
-/* Logos in one tone: white on the dark theme, grey on the light one; full on hover. */
-/* Developers' logos in their own colours, each on a white card (many logos
-   come with a white background), like the banners on the office board. */
+/* Developers' logos are grayscale until hovered or keyboard-focused. */
 .partner-item { background: #fff; border: 1px solid var(--color-ab-border); border-radius: 14px;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.04); transition: transform 0.2s ease, box-shadow 0.2s ease; }
 .partner-item:hover, .partner-item:focus-visible { transform: translateY(-2px); box-shadow: 0 8px 20px rgb(0 0 0 / 0.08); }
+.partner-item img { filter: grayscale(1); transition: filter 0.2s ease; }
+.partner-item:hover img, .partner-item:focus-visible img { filter: grayscale(0); }
 .partner-wordmark { color: #1f2a1f; }
 
 /* Scroll reveal (see useReveal). */

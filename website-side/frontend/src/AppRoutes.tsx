@@ -14,6 +14,12 @@ import { crossHostUrl } from "@/lib/hosts"
 
 // Management System: its own bundle, downloaded only by staff who open /manage.
 const ManageApp = lazy(() => import("./manage/ManageApp"))
+const ForgotPasswordForm = lazy(() =>
+  import("./manage/AccountRecovery").then(({ ForgotPasswordForm: Component }) => ({ default: Component })),
+)
+const ResetPasswordForm = lazy(() =>
+  import("./manage/AccountRecovery").then(({ ResetPasswordForm: Component }) => ({ default: Component })),
+)
 
 const TITLES: Record<string, string> = {
   "/": "Abellar Realty — Real Estate Property Discovery and Services",
@@ -21,6 +27,8 @@ const TITLES: Record<string, string> = {
   "/map": "Property Map · Abellar Realty",
   "/signin": "Sign In · Abellar Realty",
   "/signup": "Create Account · Abellar Realty",
+  "/forgot-password": "Forgot Password · Abellar Realty",
+  "/reset-password": "Reset Password · Abellar Realty",
   "/account": "My Account · Abellar Realty",
 }
 
@@ -81,6 +89,32 @@ function CurrentPage() {
   if (pathname === "/map") return <App />
   if (pathname === "/signin") return <AuthPage key="signin" mode="signin" />
   if (pathname === "/signup") return <AuthPage key="signup" mode="signup" />
+  if (pathname === "/forgot-password") {
+    return (
+      <div className="min-h-dvh bg-ab-bg px-4 py-16 text-ab-text">
+        <main className="mx-auto w-full max-w-md rounded-3xl border border-ab-border bg-ab-card p-6 shadow-xl sm:p-8">
+          <h1 className="text-center text-2xl font-extrabold">Forgot your password?</h1>
+          <p className="mt-2 text-center text-sm text-ab-muted">Reset your buyer account password.</p>
+          <Suspense fallback={<p className="mt-7 text-center text-sm text-ab-muted">Loading…</p>}>
+            <div className="mt-7"><ForgotPasswordForm audience="buyer" /></div>
+          </Suspense>
+        </main>
+      </div>
+    )
+  }
+  if (pathname === "/reset-password") {
+    return (
+      <div className="min-h-dvh bg-ab-bg px-4 py-16 text-ab-text">
+        <main className="mx-auto w-full max-w-md rounded-3xl border border-ab-border bg-ab-card p-6 shadow-xl sm:p-8">
+          <h1 className="text-center text-2xl font-extrabold">Choose a new password</h1>
+          <p className="mt-2 text-center text-sm text-ab-muted">Set a new password for your buyer account.</p>
+          <Suspense fallback={<p className="mt-7 text-center text-sm text-ab-muted">Loading…</p>}>
+            <div className="mt-7"><ResetPasswordForm audience="buyer" /></div>
+          </Suspense>
+        </main>
+      </div>
+    )
+  }
   if (pathname === "/account") return <AccountPage />
   const agent = matchPath("/agents/:id", pathname)
   if (agent) return <AgentPage agentId={agent.id} />

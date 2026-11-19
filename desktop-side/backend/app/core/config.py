@@ -139,6 +139,9 @@ class Settings(BaseSettings):
     # site, e.g. https://alty-msa.vercel.app), never from the request's Host.
     # Empty = password recovery is switched off.
     STAFF_APP_URL: str = ""
+    # Public site origin for buyer password-reset links. When unset, links use
+    # STAFF_APP_URL and the site's cross-host redirect sends them to the buyer app.
+    CLIENT_APP_URL: str = ""
     PASSWORD_RESET_TTL_MINUTES: int = 20         # clamped to 15-30
     PASSWORD_RESET_PER_EMAIL_PER_HOUR: int = 3
     PASSWORD_RESET_MIN_EMAIL_INTERVAL_SECONDS: int = 120

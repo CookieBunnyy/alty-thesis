@@ -78,6 +78,7 @@ Secrets go only in Render's Environment tab (never in `VITE_*` variables):
 | Variable | Value |
 | --- | --- |
 | `STAFF_APP_URL` | the Management System's address, e.g. `https://alty-msa.vercel.app` — reset links are built from this, never from the request |
+| `CLIENT_APP_URL` | the public buyer site's address, e.g. `https://alty-thesis.vercel.app` — buyer reset links are built from this |
 | `EMAIL_PROVIDER` | `resend` (HTTPS API; Render's free plan blocks SMTP ports) |
 | `RESEND_API_KEY` | Resend → **API Keys** → create one with *Sending access* (secret) |
 | `EMAIL_FROM` | an address on your domain verified in Resend, e.g. `no-reply@yourdomain.com` |
@@ -90,6 +91,10 @@ records it shows (SPF/DKIM) at your domain registrar, then wait for
 `onboarding@resend.dev` *to your own Resend account address*, so reset emails
 to other staff would be refused.
 
+Buyer reset emails also notify active Administrators who have an email address
+set on their staff account. The request appears in the Administrator's in-app
+notifications as well.
+
 Optional tuning: `PASSWORD_RESET_TTL_MINUTES` (15–30, default 20),
 `LOGIN_COOLDOWN_STEPS` (default `5:60,10:300,15:900` = failures:seconds),
 `LOGIN_CAPTCHA_AFTER_FAILURES` (3), `LOGIN_MAX_ATTEMPTS_PER_IP` (60 per 15 min),
@@ -101,7 +106,8 @@ After deploying, sign in as the Administrator and open
 own public IP (not a Render/Cloudflare address), and it shows whether email,
 the reset link address, Turnstile and CORS are configured (no secret values).
 Every staff member needs an **email** (Users & Access → edit) to use
-"Forgot password?".
+"Forgot password?". Administrators need an email on their staff account to
+receive buyer reset notices by email.
 
 ### Separate app for the Management System (Alty MSA)
 

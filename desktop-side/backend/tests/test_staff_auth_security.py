@@ -22,6 +22,7 @@ from main import app
 from tests.conftest import _make_user, login
 
 STAFF_URL = "https://alty-msa.example.app"
+CLIENT_URL = "https://alty-site.example.app"
 GENERIC = auth_api.RESET_SENT_MESSAGE
 
 
@@ -30,6 +31,7 @@ def mail(monkeypatch):
     outbox: list[dict] = []
     monkeypatch.setattr(email_service, "outbox", outbox)
     monkeypatch.setattr(settings, "STAFF_APP_URL", STAFF_URL)
+    monkeypatch.setattr(settings, "CLIENT_APP_URL", CLIENT_URL)
     monkeypatch.setattr(settings, "EMAIL_PROVIDER", "brevo")
     monkeypatch.setattr(settings, "PASSWORD_RESET_VIA", "email")
     monkeypatch.setattr(settings, "EMAIL_FROM", "no-reply@example.app")
@@ -50,9 +52,9 @@ def _request(api, email: str, **extra):
     return api.post("/api/v1/auth/password-reset/request", json={"email": email, **extra})
 
 
-def _token_from(message: dict) -> str:
-    link = message["text"].split(STAFF_URL, 1)[1].split()[0]
-    assert link.startswith("/manage/reset-password#token=")
+def _token_from(message: dict, base_url: str = STAFF_URL, path: str = "/manage/reset-password") -> str:
+    link = message["text"].split(base_url, 1)[1].split()[0]
+    assert link.startswith(f"{path}#token=")
     return link.split("#token=", 1)[1]
 
 
@@ -203,15 +205,34 @@ def test_unknown_and_registered_email_get_the_same_answer(api, mail):
     assert [message["to"] for message in mail] == ["known@example.com"]
 
 
-def test_client_accounts_cannot_recover_through_staff_flow(api, mail):
-    api.post("/api/v1/client/register", json={
+def test_client_accounts_can_reset_and_notify_admin(api, mail):
+    _staff("recovery-admin", "admin@example.com", role="Administrator")
+    admin = login(api, "recovery-admin")
+    signup = api.post("/api/v1/client/register", json={
         "full_name": "Ana Reyes", "email": "ana@example.com", "phone_number": "0917 111 2222",
         "password": "s3cret-pass"})
-    with SessionLocal() as session:  # even if a client row somehow carried an email
-        session.execute(update(User).where(User.username == "ana@example.com").values(email="ana@example.com"))
-        session.commit()
+    assert signup.status_code == 201
+    old_session = {"Authorization": f"Bearer {signup.json()['access_token']}"}
+
     assert _request(api, "ana@example.com").status_code == 202
-    assert mail == []
+    buyer_email, admin_email = mail
+    assert buyer_email["to"] == "ana@example.com"
+    assert buyer_email["subject"] == "Reset your Abellar Realty password"
+    token = _token_from(buyer_email, CLIENT_URL, "/reset-password")
+    assert admin_email["to"] == "admin@example.com"
+    assert admin_email["subject"] == "Buyer password reset requested"
+    assert token not in admin_email["text"]
+
+    notifications = api.get("/api/v1/notifications", headers=admin).json()["items"]
+    assert any(item["title"] == "Buyer password reset requested" and "ana@example.com" in item["message"]
+               for item in notifications)
+
+    done = api.post("/api/v1/auth/password-reset/confirm",
+                    json={"token": token, "new_password": "Fresh-Buyer-2026"})
+    assert done.status_code == 200
+    assert api.get("/api/v1/client/me", headers=old_session).status_code == 401
+    assert api.post("/api/v1/client/login",
+                    json={"email": "ana@example.com", "password": "Fresh-Buyer-2026"}).status_code == 200
 
 
 def test_repeated_requests_do_not_send_unlimited_emails(api, mail, monkeypatch):

@@ -83,12 +83,16 @@ def test_denied_request_cannot_reset(api, admin):
     assert login(api, "filer")  # password unchanged
 
 
-def test_unknown_accounts_look_the_same_and_clients_are_ignored(api, admin):
-    _make_user("buyer", "Client")
+def test_unknown_accounts_look_the_same_and_buyers_can_request_admin_help(api, admin):
+    api.post("/api/v1/client/register", json={
+        "full_name": "Buyer", "email": "buyer@example.com", "phone_number": "0917 111 2222",
+        "password": "s3cret-pass"})
     unknown = _ask(api, "nobody-here")
-    client = _ask(api, "buyer")
+    client = _ask(api, "buyer@example.com")
     assert set(unknown) == set(client) and _status(api, unknown["request_token"]) == "PENDING"
-    assert _open(api, admin) == []
+    [item] = _open(api, admin)
+    assert item["user"]["role"] == "Client"
+    assert item["user"]["username"] == "buyer@example.com"
 
 
 def test_only_the_administrator_decides(api, admin, employee):

@@ -8,6 +8,7 @@ from app.core.client_ip import client_ip
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import (
+    CLIENT,
     canonical_role,
     create_session_token,
     get_current_user,
@@ -150,6 +151,14 @@ def request_password_reset(payload: PasswordResetRequest, request: Request, back
     message = reset_service.request_reset(db, payload.email, ip)
     if message is not None:
         background.add_task(reset_service.send_reset_email, message)
+        if message.is_client:
+            for admin_email in reset_service.active_admin_emails(db):
+                background.add_task(
+                    reset_service.send_buyer_reset_admin_notice,
+                    admin_email,
+                    message.full_name,
+                    message.to,
+                )
     return {"message": RESET_SENT_MESSAGE}
 
 
@@ -180,7 +189,12 @@ def password_reset_status(payload: PasswordResetStatus, db: Session = Depends(ge
 def confirm_password_reset(payload: PasswordResetConfirm, request: Request, background: BackgroundTasks,
                            db: Session = Depends(get_db)):
     user = reset_service.confirm_reset(db, payload.token, payload.new_password, client_ip(request))
-    background.add_task(reset_service.send_password_changed_notice, user.email, user.full_name)
+    background.add_task(
+        reset_service.send_password_changed_notice,
+        reset_service.account_email(db, user),
+        user.full_name,
+        canonical_role(user.role) == CLIENT,
+    )
     return {"message": "Your password was changed. Sign in with the new password."}
 
 

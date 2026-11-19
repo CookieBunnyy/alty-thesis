@@ -175,7 +175,10 @@ export function AuthPage({ mode }: { mode: "signin" | "signup" }) {
                   <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-[var(--color-ab-accent)]" />
                   Stay signed in
                 </label>
-                <Link to="/manage/forgot-password" className="font-semibold text-ab-accent hover:underline">Staff: forgot password?</Link>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <Link to="/forgot-password" className="font-semibold text-ab-accent hover:underline">Buyer: forgot password?</Link>
+                  <Link to="/manage/forgot-password" className="font-semibold text-ab-accent hover:underline">Staff: forgot password?</Link>
+                </div>
               </div>
             )}
             {!isSignUp && needsCheck && config?.captcha_site_key && (

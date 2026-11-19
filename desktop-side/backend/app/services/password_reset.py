@@ -20,8 +20,9 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.security import CLIENT, canonical_role, get_password_hash
+from app.core.security import ADMINISTRATOR, CLIENT, canonical_role, get_password_hash
 from app.models.auth_security import PasswordResetToken
+from app.models.client import Client
 from app.models.user import User
 from app.services import auth_throttle as throttle
 from app.services.audit import record_audit, record_audit_now
@@ -36,6 +37,7 @@ class ResetEmail:
     to: str
     full_name: str
     link: str
+    is_client: bool
 
 
 def hash_token(token: str) -> str:
@@ -48,14 +50,49 @@ def mask_email(email: str) -> str:
 
 
 def _eligible(db: Session, email: str) -> User | None:
-    user = db.execute(select(User).where(func.lower(User.email) == email)).scalar_one_or_none()
-    if user is None or not user.is_active or canonical_role(user.role) == CLIENT:
+    client_ids = select(Client.client_id).where(func.lower(Client.email) == email)
+    user = db.scalars(
+        select(User).where(
+            func.lower(User.email) == email,
+            func.lower(User.role) != CLIENT.casefold(),
+        )
+    ).first()
+    if user is None:
+        user = db.execute(
+            select(User).where(
+                func.lower(User.role) == CLIENT.casefold(),
+                (func.lower(User.username) == email) | User.client_id.in_(client_ids),
+            )
+        ).scalars().first()
+    if user is None or not user.is_active:
+        return None
+    if canonical_role(user.role) == CLIENT and (user.client_id is None or db.get(Client, user.client_id) is None):
         return None
     return user
 
 
+def account_email(db: Session, user: User) -> str | None:
+    if canonical_role(user.role) == CLIENT:
+        client = db.get(Client, user.client_id) if user.client_id else None
+        return (client.email if client else None) or user.username
+    return user.email
+
+
+def active_admin_emails(db: Session) -> list[str]:
+    rows = db.execute(
+        select(User.email, User.role)
+        .where(
+            User.is_active.is_(True),
+            User.email.is_not(None),
+            func.trim(User.email) != "",
+        )
+        .distinct()
+    ).all()
+    return sorted({email for email, role in rows if email and canonical_role(role) == ADMINISTRATOR})
+
+
 def request_reset(db: Session, email: str, ip: str) -> ResetEmail | None:
-    """Create a reset link when ``email`` belongs to an eligible staff account
+    """Create a reset link when ``email`` belongs to an eligible account
     and the sending limits allow it. Returns what to send, or None."""
     if throttle.count(db, throttle.RESET_IP, ip, HOUR) >= settings.PASSWORD_RESET_PER_IP_PER_HOUR:
         raise HTTPException(status_code=429, detail="Too many requests. Please wait a while and try again.")
@@ -90,8 +127,13 @@ def request_reset(db: Session, email: str, ip: str) -> ResetEmail | None:
     throttle.record(db, throttle.RESET_SENT, account)
     record_audit(db, "PASSWORD_RESET_REQUESTED", actor=user, entity_type="users", entity_id=user.id)
     db.commit()
-    link = f"{settings.STAFF_APP_URL.strip().rstrip('/')}/manage/reset-password#token={token}"
-    return ResetEmail(to=user.email or email, full_name=user.full_name, link=link)
+    recipient = account_email(db, user) or email
+    is_client = canonical_role(user.role) == CLIENT
+    base_url = (settings.CLIENT_APP_URL if is_client and settings.CLIENT_APP_URL.strip()
+                else settings.STAFF_APP_URL).strip().rstrip("/")
+    path = "/reset-password" if is_client else "/manage/reset-password"
+    link = f"{base_url}{path}#token={token}"
+    return ResetEmail(to=recipient, full_name=user.full_name, link=link, is_client=is_client)
 
 
 def confirm_reset(db: Session, token: str, new_password: str, ip: str) -> User:
@@ -111,7 +153,7 @@ def confirm_reset(db: Session, token: str, new_password: str, ip: str) -> User:
             .returning(PasswordResetToken.user_id)
         ).scalar_one_or_none()
     user = db.get(User, claimed) if claimed is not None else None
-    if user is None or not user.is_active or canonical_role(user.role) == CLIENT:
+    if user is None or not user.is_active:
         db.rollback()
         throttle.record(db, throttle.RESET_CONFIRM_IP, ip)
         record_audit_now(db, "PASSWORD_RESET_FAILED", actor="UNKNOWN", entity_type="users", result="FAILED",
@@ -142,31 +184,51 @@ def set_password(user: User, new_password: str) -> None:
 
 def send_reset_email(message: ResetEmail) -> None:
     minutes = settings.password_reset_ttl_minutes
+    product = "Abellar Realty" if message.is_client else "Alty MSA (Abellar Realty Management System)"
+    account_label = "buyer" if message.is_client else "staff"
     text = (
         f"Hello {message.full_name},\n\n"
-        "Someone asked to reset the password of your Alty MSA (Abellar Realty Management System) account.\n"
+        f"Someone asked to reset the password of your {product} {account_label} account.\n"
         f"Open this link within {minutes} minutes to choose a new password:\n\n{message.link}\n\n"
         "The link works once. If you didn't ask for this, ignore this email: your password stays the same.\n"
     )
     html = (
         f"<p>Hello {_escape(message.full_name)},</p>"
-        "<p>Someone asked to reset the password of your <b>Alty MSA</b> (Abellar Realty Management System) account.</p>"
+        f"<p>Someone asked to reset the password of your <b>{_escape(product)}</b> {account_label} account.</p>"
         f"<p><a href=\"{_escape(message.link)}\">Choose a new password</a> (valid for {minutes} minutes, works once).</p>"
         "<p>If you didn't ask for this, ignore this email: your password stays the same.</p>"
     )
-    send_email(message.to, "Reset your Alty MSA password", text, html)
+    subject = "Reset your Abellar Realty password" if message.is_client else "Reset your Alty MSA password"
+    send_email(message.to, subject, text, html)
 
 
-def send_password_changed_notice(to: str | None, full_name: str) -> None:
+def send_buyer_reset_admin_notice(to: str, buyer_name: str, buyer_email: str) -> None:
+    text = (
+        "A buyer requested a password reset for their Abellar Realty account.\n\n"
+        f"Buyer: {buyer_name}\n"
+        f"Email: {buyer_email}\n\n"
+        "A one-time reset link was sent to the buyer. No action is required unless they need assistance.\n"
+    )
+    html = (
+        "<p>A buyer requested a password reset for their Abellar Realty account.</p>"
+        f"<p>Buyer: {_escape(buyer_name)}<br>Email: {_escape(buyer_email)}</p>"
+        "<p>A one-time reset link was sent to the buyer. No action is required unless they need assistance.</p>"
+    )
+    send_email(to, "Buyer password reset requested", text, html)
+
+
+def send_password_changed_notice(to: str | None, full_name: str, is_client: bool = False) -> None:
     if not to:
         return
+    product = "Abellar Realty" if is_client else "Alty MSA (Abellar Realty Management System)"
     text = (
         f"Hello {full_name},\n\n"
-        "The password of your Alty MSA (Abellar Realty Management System) account was just changed, "
+        f"The password of your {product} account was just changed, "
         "and every device signed in to it was signed out.\n\n"
         "If this wasn't you, contact your Administrator right away.\n"
     )
-    send_email(to, "Your Alty MSA password was changed", text)
+    subject = "Your Abellar Realty password was changed" if is_client else "Your Alty MSA password was changed"
+    send_email(to, subject, text)
 
 
 def _escape(value: str) -> str:

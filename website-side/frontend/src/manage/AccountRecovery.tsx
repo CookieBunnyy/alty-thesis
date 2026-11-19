@@ -21,15 +21,20 @@ function Alert({ tone, children }: { tone: "error" | "info" | "success"; childre
   return <p role={tone === "error" ? "alert" : "status"} className={`mt-4 rounded-xl border px-3 py-2 text-sm ${tones[tone]}`}>{children}</p>
 }
 
-const BackToSignIn = () => (
+type RecoveryAudience = "staff" | "buyer"
+
+const signInPath = (audience: RecoveryAudience) => audience === "staff" ? "/signin?next=%2Fmanage" : "/signin"
+const forgotPasswordPath = (audience: RecoveryAudience) => audience === "staff" ? "/manage/forgot-password" : "/forgot-password"
+
+const BackToSignIn = ({ audience }: { audience: RecoveryAudience }) => (
   <p className="mt-6 text-center text-sm">
-    <Link to="/signin?next=%2Fmanage" className="font-semibold text-ab-accent hover:underline">{t("Back to sign in")}</Link>
+    <Link to={signInPath(audience)} className="font-semibold text-ab-accent hover:underline">{t("Back to sign in")}</Link>
   </p>
 )
 
 /** "Forgot password?": a reset link to the account's registered email. The
  *  answer is the same whether or not the address belongs to an account. */
-export function ForgotPasswordForm() {
+export function ForgotPasswordForm({ audience = "staff" }: { audience?: RecoveryAudience }) {
   const config = useSecurityConfig()
   const [email, setEmail] = useState("")
   const [busy, setBusy] = useState(false)
@@ -73,12 +78,14 @@ export function ForgotPasswordForm() {
     }
   }
 
-  if (config && !config.password_reset_enabled && config.password_reset_mode === "admin") return <AdminApprovalRequest />
+  if (config && !config.password_reset_enabled && config.password_reset_mode === "admin") {
+    return <AdminApprovalRequest audience={audience} />
+  }
   if (config && !config.password_reset_enabled) {
     return (
       <div>
         <Alert tone="info">{t("Ask the Administrator to reset it in Users & Access.")}</Alert>
-        <BackToSignIn />
+        <BackToSignIn audience={audience} />
       </div>
     )
   }
@@ -88,7 +95,9 @@ export function ForgotPasswordForm() {
       <div className="text-center">
         <MailCheck className="mx-auto h-10 w-10 text-ab-accent" aria-hidden />
         <p role="status" className="mt-3 text-sm text-ab-text">
-          {t("If that email belongs to a staff account, we've sent it a link to reset the password. Check the inbox and the spam folder.")}
+          {audience === "staff"
+            ? t("If that email belongs to a staff account, we've sent it a link to reset the password. Check the inbox and the spam folder.")
+            : t("If that email belongs to a buyer account, we've sent a reset link. Check the inbox and the spam folder.")}
         </p>
         <p className="mt-2 text-xs text-ab-faint">
           {t("The link works once and expires in {minutes} minutes.", { minutes: config?.password_reset_minutes ?? 20 })}
@@ -100,7 +109,7 @@ export function ForgotPasswordForm() {
           {busy && <LoaderCircle className="h-4 w-4 animate-spin" />}
           {cooldown > 0 ? t("Send again in {time}", { time: formatWait(cooldown) }) : t("Send the link again")}
         </button>
-        <BackToSignIn />
+        <BackToSignIn audience={audience} />
       </div>
     )
   }
@@ -110,14 +119,18 @@ export function ForgotPasswordForm() {
       <label className="block text-sm font-medium" htmlFor="reset-email">{t("Registered email")}</label>
       <input id="reset-email" type="email" autoComplete="email" inputMode="email" value={email}
         onChange={(e) => setEmail(e.target.value)} className={field} placeholder="name@example.com" autoFocus />
-      <p className="mt-2 text-xs text-ab-faint">{t("The email the Administrator registered for your staff account.")}</p>
+      <p className="mt-2 text-xs text-ab-faint">
+        {audience === "staff"
+          ? t("The email the Administrator registered for your staff account.")
+          : t("Use the email address you used to create your buyer account.")}
+      </p>
       {needsCheck && config?.captcha_site_key && <Turnstile siteKey={config.captcha_site_key} onToken={setCaptcha} resetKey={checkRound} unavailableText={t("The security check couldn't load. Check your connection and reload the page.")} />}
       {error && <Alert tone="error">{error}</Alert>}
       <button type="submit" disabled={busy || cooldown > 0} className={primary}>
         {busy && <LoaderCircle className="h-4 w-4 animate-spin" />}
         {busy ? t("Sending…") : cooldown > 0 ? t("Try again in {time}", { time: formatWait(cooldown) }) : t("Send reset link")}
       </button>
-      <BackToSignIn />
+      <BackToSignIn audience={audience} />
     </form>
   )
 }
@@ -133,7 +146,11 @@ function useLinkToken(): string | null {
 }
 
 /** The page the reset link opens (or an approved request): choose a new password. */
-export function ResetPasswordForm({ approvedToken, onDone }: { approvedToken?: string; onDone?: () => void } = {}) {
+export function ResetPasswordForm({
+  approvedToken,
+  onDone,
+  audience = "staff",
+}: { approvedToken?: string; onDone?: () => void; audience?: RecoveryAudience } = {}) {
   const linkToken = useLinkToken()
   const token = approvedToken ?? linkToken
   const [password, setPassword] = useState("")
@@ -179,7 +196,7 @@ export function ResetPasswordForm({ approvedToken, onDone }: { approvedToken?: s
       <div className="text-center">
         <CheckCircle2 className="mx-auto h-10 w-10 text-ab-accent" aria-hidden />
         <p role="status" className="mt-3 text-sm">{t("Your password was changed. Every device signed in to your account was signed out.")}</p>
-        <Link to="/signin?next=%2Fmanage" className={primary}>{t("Sign in with the new password")}</Link>
+        <Link to={signInPath(audience)} className={primary}>{t("Sign in with the new password")}</Link>
       </div>
     )
   }
@@ -189,15 +206,15 @@ export function ResetPasswordForm({ approvedToken, onDone }: { approvedToken?: s
         <div>
           <Alert tone="error">{t("This approval has expired or was already used. Send a new request.")}</Alert>
           <button type="button" onClick={onDone} className={primary}>{t("Send a new request")}</button>
-          <BackToSignIn />
+          <BackToSignIn audience={audience} />
         </div>
       )
     }
     return (
       <div>
         <Alert tone="error">{t("This reset link is invalid or has expired. Request a new one.")}</Alert>
-        <Link to="/manage/forgot-password" className={primary}>{t("Request a new link")}</Link>
-        <BackToSignIn />
+        <Link to={forgotPasswordPath(audience)} className={primary}>{t("Request a new link")}</Link>
+        <BackToSignIn audience={audience} />
       </div>
     )
   }
@@ -221,7 +238,7 @@ export function ResetPasswordForm({ approvedToken, onDone }: { approvedToken?: s
         {busy && <LoaderCircle className="h-4 w-4 animate-spin" />}
         {busy ? t("Saving…") : t("Set new password")}
       </button>
-      <BackToSignIn />
+      <BackToSignIn audience={audience} />
     </form>
   )
 }
@@ -233,19 +250,22 @@ type RequestStatus = "PENDING" | "APPROVED" | "DENIED" | "EXPIRED" | "COMPLETED"
 const REQUEST_KEY = "alty.manage.passwordRequest"
 const POLL_MS = 10000
 
-function readStored(): StoredRequest | null {
+const requestStorageKey = (audience: RecoveryAudience) =>
+  audience === "staff" ? REQUEST_KEY : "alty.buyer.passwordRequest"
+
+function readStored(audience: RecoveryAudience): StoredRequest | null {
   try {
-    const value = JSON.parse(localStorage.getItem(REQUEST_KEY) ?? "null") as StoredRequest | null
+    const value = JSON.parse(localStorage.getItem(requestStorageKey(audience)) ?? "null") as StoredRequest | null
     return value?.token && value.code ? value : null
   } catch {
     return null
   }
 }
 
-function writeStored(value: StoredRequest | null) {
+function writeStored(value: StoredRequest | null, audience: RecoveryAudience) {
   try {
-    if (value) localStorage.setItem(REQUEST_KEY, JSON.stringify(value))
-    else localStorage.removeItem(REQUEST_KEY)
+    if (value) localStorage.setItem(requestStorageKey(audience), JSON.stringify(value))
+    else localStorage.removeItem(requestStorageKey(audience))
   } catch {
     // Private mode: the request still works while this page stays open.
   }
@@ -254,9 +274,9 @@ function writeStored(value: StoredRequest | null) {
 /** "Forgot password?" while email isn't set up: the request goes to the
  *  Administrator. This browser keeps the request's secret, so only it can
  *  choose the new password once the request is approved. */
-function AdminApprovalRequest() {
+function AdminApprovalRequest({ audience }: { audience: RecoveryAudience }) {
   const config = useSecurityConfig()
-  const [request, setRequest] = useState<StoredRequest | null>(readStored)
+  const [request, setRequest] = useState<StoredRequest | null>(() => readStored(audience))
   const [identifier, setIdentifier] = useState("")
   const [note, setNote] = useState("")
   const [busy, setBusy] = useState(false)
@@ -267,9 +287,9 @@ function AdminApprovalRequest() {
   const [checkRound, setCheckRound] = useState(0)
 
   const forget = useCallback(() => {
-    writeStored(null)
+    writeStored(null, audience)
     setRequest(null)
-  }, [])
+  }, [audience])
 
   const send = async (event: FormEvent) => {
     event.preventDefault()
@@ -286,7 +306,7 @@ function AdminApprovalRequest() {
     if (needsCheck) setCheckRound((n) => n + 1) // a check token works once
     if (reply.ok && reply.data) {
       const stored = { token: reply.data.request_token, code: reply.data.code, identifier: identifier.trim(), expires_at: reply.data.expires_at }
-      writeStored(stored)
+      writeStored(stored, audience)
       setRequest(stored)
       setNote("")
       return
@@ -304,7 +324,7 @@ function AdminApprovalRequest() {
     }
   }
 
-  if (request) return <RequestStatusView request={request} onForget={forget} />
+  if (request) return <RequestStatusView request={request} onForget={forget} audience={audience} />
 
   return (
     <form onSubmit={send} noValidate>
@@ -321,12 +341,16 @@ function AdminApprovalRequest() {
         {busy && <LoaderCircle className="h-4 w-4 animate-spin" />}
         {busy ? t("Sending…") : cooldown > 0 ? t("Try again in {time}", { time: formatWait(cooldown) }) : t("Send request to the Administrator")}
       </button>
-      <BackToSignIn />
+      <BackToSignIn audience={audience} />
     </form>
   )
 }
 
-function RequestStatusView({ request, onForget }: { request: StoredRequest; onForget: () => void }) {
+function RequestStatusView({
+  request,
+  onForget,
+  audience,
+}: { request: StoredRequest; onForget: () => void; audience: RecoveryAudience }) {
   const [status, setStatus] = useState<RequestStatus | null>(null)
   const [offline, setOffline] = useState(false)
 
@@ -356,7 +380,9 @@ function RequestStatusView({ request, onForget }: { request: StoredRequest; onFo
     return (
       <div>
         <Alert tone="success">{t("The Administrator approved your request. Choose your new password.")}</Alert>
-        <div className="mt-2"><ResetPasswordForm approvedToken={request.token} onDone={() => writeStored(null)} /></div>
+        <div className="mt-2">
+          <ResetPasswordForm approvedToken={request.token} onDone={() => writeStored(null, audience)} audience={audience} />
+        </div>
       </div>
     )
   }
@@ -373,7 +399,7 @@ function RequestStatusView({ request, onForget }: { request: StoredRequest; onFo
         <XCircle className="mx-auto h-10 w-10 text-ab-muted" aria-hidden />
         <p role="status" className="mt-3 text-sm">{endedText}</p>
         <button type="button" onClick={onForget} className={primary}>{t("Send a new request")}</button>
-        <BackToSignIn />
+        <BackToSignIn audience={audience} />
       </div>
     )
   }
@@ -393,7 +419,7 @@ function RequestStatusView({ request, onForget }: { request: StoredRequest; onFo
         {offline ? t("Can't reach the server. Retrying…") : <><LoaderCircle className="mr-1 inline h-3.5 w-3.5 animate-spin align-[-2px]" aria-hidden />{t("This page updates by itself. You can also come back to it later on this device.")}</>}
       </p>
       <button type="button" onClick={onForget} className="mt-4 text-sm font-semibold text-ab-muted hover:text-ab-text hover:underline">{t("Cancel and start over")}</button>
-      <BackToSignIn />
+      <BackToSignIn audience={audience} />
     </div>
   )
 }
