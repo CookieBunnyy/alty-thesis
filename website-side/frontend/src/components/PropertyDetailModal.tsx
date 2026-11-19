@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MapPin, Map as MapIcon, Home, PhoneCall, X } from 'lucide-react';
+import React from 'react';
+import { MapPin, Map as MapIcon, Home, Users, X } from 'lucide-react';
 import type { PropertyDetailModalProps, NearbyEstablishmentsMap, LocationPoint } from '../types';
 
 import { PropertyImageGallery } from '@/components/property-detail-modal/PropertyImageGaller';
@@ -10,7 +10,7 @@ import { PropertyAmenities } from '@/components/property-detail-modal/PropertyAm
 import { PropertyNearby } from '@/components/property-detail-modal/PropertyNearby';
 import { PropertyAmenityPhotos, PropertyFloorPlans } from '@/components/property-detail-modal/PropertyFlyerMedia';
 import { CommuteCard } from '@/components/CommuteCard';
-import { ContactAgentsModal } from '@/components/ContactAgentsModal';
+import { navigate } from '@/lib/router';
 import { publicUrl } from '@/config';
 import { categoryLabel } from '@/lib/categories';
 
@@ -26,8 +26,13 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
   onViewOnMap,
   onSetWorkplaceClick,
 }) => {
-  const [isContactOpen, setIsContactOpen] = useState(false);
   if (!property) return null;
+
+  // The sellers near the property, as pins on the map around it.
+  const handleSearchSellers = () => {
+    onClose();
+    navigate(`/map?property=${encodeURIComponent(String(property.listing_id))}&sellers=1`);
+  };
 
   const handleViewOnMap = () => {
     if (onViewOnMap) {
@@ -131,17 +136,16 @@ export const PropertyDetailModal: React.FC<ModalProps> = ({
             </button>
 
             <button
-              onClick={() => setIsContactOpen(true)}
-              title="Reserve or buy through an agent near this property"
+              onClick={handleSearchSellers}
+              title="Show the sellers near this property on the map, to reserve or buy through one"
               className="flex items-center gap-1.5 px-5 py-2 bg-ab-accent text-ab-ink rounded-xl text-sm font-medium hover:bg-ab-accent-hover transition shadow-sm"
             >
-              <PhoneCall className="h-4 w-4" />
-              <span>Reserve / Purchase</span>
+              <Users className="h-4 w-4" />
+              <span>Search Nearby Sellers</span>
             </button>
           </div>
         </div>
       </div>
-      {isContactOpen && <ContactAgentsModal property={property} onClose={() => setIsContactOpen(false)} />}
     </div>
   );
 };

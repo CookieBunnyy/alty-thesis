@@ -23,7 +23,7 @@ function Alert({ tone, children }: { tone: "error" | "info" | "success"; childre
 
 const BackToSignIn = () => (
   <p className="mt-6 text-center text-sm">
-    <Link to="/manage/signin" className="font-semibold text-ab-accent hover:underline">{t("Back to sign in")}</Link>
+    <Link to="/signin?next=%2Fmanage" className="font-semibold text-ab-accent hover:underline">{t("Back to sign in")}</Link>
   </p>
 )
 
@@ -179,7 +179,7 @@ export function ResetPasswordForm({ approvedToken, onDone }: { approvedToken?: s
       <div className="text-center">
         <CheckCircle2 className="mx-auto h-10 w-10 text-ab-accent" aria-hidden />
         <p role="status" className="mt-3 text-sm">{t("Your password was changed. Every device signed in to your account was signed out.")}</p>
-        <Link to="/manage/signin" className={primary}>{t("Sign in with the new password")}</Link>
+        <Link to="/signin?next=%2Fmanage" className={primary}>{t("Sign in with the new password")}</Link>
       </div>
     )
   }

@@ -328,7 +328,8 @@ def list_nearby_agents(listing_id: int, request: Request, limit: int = 5,
     def card(agent: Agent) -> dict:
         return {**_public_agent(agent, stats, viewer), "completed_sales": agent.completed_sales,
                 "assigned": agent.agent_id in assigned, "email": emails.get(agent.agent_id),
-                "straight_line_km": None, "road_distance_km": None, "travel_time_min": None}
+                "straight_line_km": None, "road_distance_km": None, "travel_time_min": None,
+                "lat": None, "lng": None}
 
     property_point = None
     if listing.lat is not None and listing.lng is not None:
@@ -339,6 +340,9 @@ def list_nearby_agents(listing_id: int, request: Request, limit: int = 5,
         if property_point is not None and agent.latitude is not None and agent.longitude is not None:
             agent_point = routing.Point(float(agent.latitude), float(agent.longitude))
             entry["straight_line_km"] = round(routing.haversine_m(agent_point, property_point) / 1000, 2)
+            # For the seller pins on the website map: rounded to ~100 m, so the
+            # map shows the area an agent works from, not an exact address.
+            entry["lat"], entry["lng"] = round(agent_point.lat, 3), round(agent_point.lng, 3)
             located.append((entry, agent_point))
         else:
             unlocated.append(entry)

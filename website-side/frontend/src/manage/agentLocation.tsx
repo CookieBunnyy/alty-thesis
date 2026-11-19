@@ -1,6 +1,6 @@
-// How buyers find and reach an agent. On the website, "Reserve / Purchase"
-// lists the agents nearest the property (needs the map pin), and signed-in
-// buyers call or text them (needs the mobile number).
+// How buyers find and reach an agent. On the website, "Search Nearby Sellers"
+// shows the agents nearest the property as pins on the map (needs the agent's
+// location), and signed-in buyers call or text them (needs the mobile number).
 import { useState, type FormEvent } from "react"
 import { Check, LoaderCircle, MapPin, Pencil, Phone, TriangleAlert } from "lucide-react"
 import { Button } from "./ui"
@@ -56,7 +56,7 @@ function PhoneRow({ agent, own, onSaved }: { agent: AgentPlace; own?: boolean; o
               {has ? agent.phone_number : t(own ? "Your mobile number isn't set" : "No mobile number")}
             </span>
             <span className="block text-xs text-ab-muted">
-              {t("Signed-in buyers call or text this number from “Reserve / Purchase” on the website.")}
+              {t("Signed-in buyers call or text this number from “Search Nearby Sellers” on the website.")}
             </span>
           </p>
           <Button variant={has ? "secondary" : "primary"} onClick={() => setEditing(true)}>
@@ -98,7 +98,7 @@ export function AgentLocation({ agent, own, onSaved }: { agent: AgentPlace; own?
           </span>
           <span className="block text-xs text-ab-muted">
             {pinned ? `${Number(agent.latitude).toFixed(5)}, ${Number(agent.longitude).toFixed(5)}`
-              : t("Buyers see the agents nearest each property. Without a pin, this agent is listed as “Location not on the map”.")}
+              : t("Buyers see the agents nearest each property as pins on the map. Without a pin, this agent doesn't appear there.")}
           </span>
         </p>
         <Button variant={pinned ? "secondary" : "primary"} onClick={() => setPicking(true)}><MapPin className="h-4 w-4" /> {t(pinned ? "Move pin" : "Set on map")}</Button>

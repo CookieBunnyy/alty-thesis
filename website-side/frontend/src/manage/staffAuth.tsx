@@ -7,10 +7,12 @@ import { clearApiCache } from "./useApiData"
 import { API_URL } from "@/config"
 import { ApiError, requestJson } from "@/lib/auth"
 import { EXPIRED_KEY, StaffAuthContext, type StaffUser } from "./staffContext"
-import { authRequest } from "./authRequests"
+import { readStaffToken, staffSignIn, STAFF_TOKEN_KEY, storeStaffToken } from "./staffToken"
 
 const AUTH_URL = `${API_URL}/api/v1/auth`
-const TOKEN_KEY = "alty-staff-token"
+const TOKEN_KEY = STAFF_TOKEN_KEY
+const readToken = readStaffToken
+const storeToken = storeStaffToken
 
 /** When the token stops working (ms since epoch), from its "exp" claim. */
 function expiresAt(token: string | null): number | null {
@@ -19,27 +21,6 @@ function expiresAt(token: string | null): number | null {
     return typeof payload.exp === "number" ? payload.exp * 1000 : null
   } catch {
     return null
-  }
-}
-
-
-// "Stay signed in" keeps the token in localStorage; otherwise it lasts for
-// this browser session only (shared office computers).
-function readToken(): string | null {
-  try {
-    return window.sessionStorage.getItem(TOKEN_KEY) ?? window.localStorage.getItem(TOKEN_KEY)
-  } catch {
-    return null
-  }
-}
-
-function storeToken(token: string | null, remember = false) {
-  try {
-    window.sessionStorage.removeItem(TOKEN_KEY)
-    window.localStorage.removeItem(TOKEN_KEY)
-    if (token) (remember ? window.localStorage : window.sessionStorage).setItem(TOKEN_KEY, token)
-  } catch {
-    /* storage blocked: signed in while this page stays open */
   }
 }
 
@@ -95,22 +76,9 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
   }, [token, user])
 
   const signIn = useCallback(async (username: string, password: string, remember: boolean, captchaToken?: string | null) => {
-    // OAuth2 password form, as the desktop sends it (+ the security check when asked).
-    const body = new URLSearchParams({ username, password })
-    if (captchaToken) body.set("captcha_token", captchaToken)
-    const reply = await authRequest<{ access_token: string }>("/login", {
-      method: "POST",
-      body,
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    })
-    if (!reply.ok || !reply.data) {
-      throw new ApiError(reply.message, reply.status, { captchaRequired: reply.captchaRequired, retryAfter: reply.retryAfter })
-    }
-    const session = reply.data
-    const me = await requestJson<StaffUser>(`${AUTH_URL}/me`, {}, session.access_token)
-    storeToken(session.access_token, remember)
-    try { window.sessionStorage.removeItem(EXPIRED_KEY) } catch { /* storage blocked */ }
-    setToken(session.access_token)
+    const access = await staffSignIn(username, password, remember, captchaToken)
+    const me = await requestJson<StaffUser>(`${AUTH_URL}/me`, {}, access)
+    setToken(access)
     setUser(me)
     setIsReady(true)
   }, [])

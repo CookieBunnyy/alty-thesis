@@ -92,8 +92,15 @@ function ManageRoutes() {
   const open = path === "/manage/signin" || path === "/manage/forgot-password" || path === "/manage/reset-password"
   const needsSignIn = !open && isReady && !user
   useEffect(() => {
-    if (needsSignIn) navigate(`/manage/signin?next=${encodeURIComponent(href)}`, { replace: true })
+    if (needsSignIn) navigate(`/signin?next=${encodeURIComponent(href)}`, { replace: true })
   }, [needsSignIn, href])
+  // One Sign In page for buyers and staff: the old staff address forwards to it.
+  useEffect(() => {
+    if (path === "/manage/signin") {
+      const next = new URLSearchParams(window.location.search).get("next")
+      navigate(`/signin?next=${encodeURIComponent(next?.startsWith("/manage") ? next : "/manage")}`, { replace: true })
+    }
+  }, [path])
 
   // A page this account can't open (e.g. the previous account's last page,
   // remembered at sign-in, or an old bookmark): go to this account's home.
@@ -103,7 +110,7 @@ function ManageRoutes() {
     if (notForThisAccount) navigate("/manage", { replace: true })
   }, [notForThisAccount])
 
-  if (path === "/manage/signin") return <ManageSignIn />
+  if (path === "/manage/signin") return null
   if (path === "/manage/forgot-password") return <ManageSignIn view="forgot" />
   if (path === "/manage/reset-password") return <ManageSignIn view="reset" />
   if (!isReady || !user) {

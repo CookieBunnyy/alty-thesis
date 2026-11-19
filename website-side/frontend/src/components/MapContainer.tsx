@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, MapContainer, TileLayer, Marker, Popup, Polygon, Polyline, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { Layers, LocateFixed, MapPinOff, Minus, Plus, Satellite } from 'lucide-react';
-import type { MapProps, NearbyEstablishmentsMap, RouteOption, TrafficLevel } from '../types';
+import { ChevronLeft, ExternalLink, Layers, LoaderCircle, LocateFixed, Lock, LogIn, Mail, MapPinOff, MessageSquareText, Minus, Phone, Plus, Satellite, Users, X } from 'lucide-react';
+import type { MapProps, NearbyAgent, NearbyEstablishmentsMap, RouteOption, TrafficLevel } from '../types';
+import { PHILIPPINES_BOUNDS, circleBounds, circleRing, distanceKm, groupIntoAreas, type MapArea } from '@/lib/mapAreas';
+import { CallButton } from '@/components/CallButton';
+import { SignInToContact } from './SignInToContact';
+import { RatingSummary } from './Stars';
 import { publicUrl } from '../config';
 import { formatKm, formatMinutes, trafficTileUrl } from '@/lib/mapApi';
 
@@ -104,6 +108,35 @@ const placePin = (emoji: string) =>
     popupAnchor: [0, -38],
   });
 const WorkplaceIcon = placePin('🏢');
+
+const escapeHtml = (text: string) =>
+  text.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
+
+// An unlocked area on the shaded map: its name and how many properties it has.
+const areaPin = (area: MapArea) =>
+  L.divIcon({
+    className: 'ab-pin ab-pin-wrap',
+    html: `<div class="ab-area-pin"><b>${area.properties.length}</b><span>${escapeHtml(area.name)}</span></div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+
+const initials = (name: string) =>
+  name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join('') || '?';
+
+// A nearby seller: initials in a round badge, with the distance on its corner.
+const sellerPin = (agent: NearbyAgent) =>
+  L.divIcon({
+    className: 'ab-pin ab-pin-wrap',
+    html: `<div class="ab-seller-pin${agent.assigned ? ' is-assigned' : ''}">${escapeHtml(initials(agent.full_name))}${
+      agent.straight_line_km != null ? `<em>${agent.straight_line_km.toFixed(1)}km</em>` : ''
+    }</div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+    popupAnchor: [0, -40],
+  });
+
+const LOCKED_CENTER: [number, number] = [12.3, 122.3]; // the whole Philippines
 const MeIcon = L.divIcon({ className: '', html: '<div class="ab-me-dot"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
 
 const propertyCover = (property: { photos?: string[]; media?: string[] }) =>
@@ -285,6 +318,74 @@ const FitToProperties: React.FC<{ points: [number, number][]; paused: boolean; t
   return null;
 };
 
+/** Frame the nearby-sellers radius once the sellers have loaded. */
+const FitSellers: React.FC<{ center: { lat: number; lng: number }; radiusM: number; bottomInset: number }> = ({ center, radiusM, bottomInset }) => {
+  const map = useMap();
+  const key = `${center.lat},${center.lng},${Math.round(radiusM)}`;
+  useEffect(() => {
+    map.fitBounds(L.latLngBounds(circleBounds(center, radiusM)), {
+      paddingTopLeft: [30, 90],
+      paddingBottomRight: [70, 30 + bottomInset],
+      maxZoom: 15,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, key]);
+  return null;
+};
+
+/** A seller pin's card: distance, rating, and how to reach them. */
+const SellerCard: React.FC<{ agent: NearbyAgent; returnTo: string }> = ({ agent, returnTo }) => {
+  const action =
+    'inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-ab-border bg-ab-card px-2.5 text-xs font-semibold text-ab-text transition hover:bg-ab-hover';
+  return (
+    <div className="w-[230px] space-y-1.5">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-bold text-ab-text">
+        {agent.full_name}
+        {agent.assigned && (
+          <span className="rounded-full bg-ab-accent-soft px-2 py-0.5 text-[10px] font-semibold text-ab-accent">Handles this property</span>
+        )}
+      </p>
+      <RatingSummary rating={agent.client_rating} count={agent.review_count} compact />
+      <p className="text-xs tabular-nums text-ab-muted">
+        {agent.road_distance_km != null && agent.travel_time_min != null ? (
+          <>
+            <strong className="text-ab-text">{agent.road_distance_km.toFixed(1)} km by road</strong> · ~{Math.max(1, agent.travel_time_min)} min by car
+          </>
+        ) : agent.straight_line_km != null ? (
+          <>{agent.straight_line_km.toFixed(1)} km from the property (straight-line)</>
+        ) : null}
+      </p>
+      {agent.agent_location && <p className="text-[11px] text-ab-faint">Based in {agent.agent_location}</p>}
+      <div className="flex flex-wrap gap-1.5 pt-1">
+        {agent.contact_requires_sign_in && agent.has_phone && (
+          <SignInToContact compact returnTo={returnTo}>
+            <LogIn className="h-3.5 w-3.5 text-ab-accent" /> Sign in to call or text
+          </SignInToContact>
+        )}
+        {agent.phone_number && (
+          <>
+            <CallButton phone={agent.phone_number} name={agent.full_name} className={action}>
+              <Phone className="h-3.5 w-3.5 text-ab-accent" /> Call
+            </CallButton>
+            <CallButton kind="text" phone={agent.phone_number} name={agent.full_name} className={action}>
+              <MessageSquareText className="h-3.5 w-3.5 text-ab-accent" /> Text
+            </CallButton>
+          </>
+        )}
+        {agent.email && (
+          <a href={`mailto:${agent.email}`} className={action}>
+            <Mail className="h-3.5 w-3.5 text-ab-accent" /> Email
+          </a>
+        )}
+        {!agent.has_phone && !agent.email && <span className="text-[11px] text-ab-faint">No mobile number on file yet.</span>}
+        <a href={`/agents/${encodeURIComponent(agent.agent_id)}`} target="_blank" rel="noreferrer" className={action}>
+          Profile <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
+    </div>
+  );
+};
+
 const PickHandler: React.FC<{ active: boolean; onPick?: (point: { lat: number; lng: number }) => void }> = ({
   active,
   onPick,
@@ -417,13 +518,63 @@ export const PropertyMap: React.FC<MapProps> = ({
   controlsTop = 12,
   showClearInControls = true,
   legendInControls = false,
+  lockToAreas = false,
+  overlayTop,
+  sellers = null,
+  onCloseSellers,
 }) => {
   const validProperties = properties.filter((p) => p.lat !== null && p.lng !== null);
   const [initialCenter] = useState<[number, number]>(() =>
-    validProperties[0]?.lat != null && validProperties[0]?.lng != null
-      ? [validProperties[0].lat, validProperties[0].lng]
-      : DEFAULT_CENTER,
+    lockToAreas
+      ? LOCKED_CENTER
+      : validProperties[0]?.lat != null && validProperties[0]?.lng != null
+        ? [validProperties[0].lat, validProperties[0].lng]
+        : DEFAULT_CENTER,
   );
+
+  // Locked map: only the areas with Abellar listings are lit; a visitor
+  // chooses one to see its property pins (selecting a property opens its area).
+  const areas = useMemo(
+    () => (lockToAreas ? groupIntoAreas(properties) : []),
+    [lockToAreas, properties],
+  );
+  const [chosenPoint, setChosenPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const selectedArea = selectedProperty
+    ? areas.find((area) => area.properties.some((p) => p.listing_id === selectedProperty.listing_id)) ?? null
+    : null;
+  const [openedFor, setOpenedFor] = useState<string | null>(null);
+  if (selectedArea && selectedArea.id !== openedFor) {
+    setOpenedFor(selectedArea.id);
+    setChosenPoint(selectedArea.center);
+  }
+  const chosenArea = chosenPoint
+    ? areas.find((area) => distanceKm(area.center, chosenPoint) * 1000 <= area.radiusM) ?? null
+    : null;
+  const activeArea = selectedArea ?? chosenArea;
+  const shownProperties = !lockToAreas ? validProperties : activeArea ? activeArea.properties : [];
+  const openArea = (area: MapArea) => {
+    setChosenPoint(area.center);
+    setOpenedFor(area.id);
+    // A property in another area is deselected (that also ends its seller search).
+    if (selectedProperty && !area.properties.some((p) => p.listing_id === selectedProperty.listing_id)) onClearNearby?.();
+  };
+  const showAllAreas = () => {
+    setChosenPoint(null);
+    setOpenedFor(null);
+    onCloseSellers?.();
+    if (selectedProperty) onClearNearby?.();
+  };
+
+  // Nearby sellers: pins for the agents with a map location, inside a circle
+  // just large enough to hold them.
+  const sellerCenter =
+    sellers?.property.lat != null && sellers.property.lng != null ? { lat: sellers.property.lat, lng: sellers.property.lng } : null;
+  const sellerAgents = sellers?.status === 'ready' ? sellers.result?.agents ?? [] : [];
+  const mappedSellers = sellerAgents.filter((agent) => agent.lat != null && agent.lng != null);
+  const sellerRadiusM =
+    Math.max(1, ...mappedSellers.map((agent) => agent.straight_line_km ?? 0)) * 1000 * 1.08;
+  const sellersReturnTo = sellers ? `/map?property=${encodeURIComponent(String(sellers.property.listing_id))}&sellers=1` : '/map';
+  const areaColor = theme === 'dark' ? '#C7F000' : '#5E7E00';
 
   let selectedNearby: NearbyEstablishmentsMap = {};
   if (selectedProperty?.nearby_establishments) {
@@ -494,6 +645,78 @@ export const PropertyMap: React.FC<MapProps> = ({
           <Satellite className="h-3.5 w-3.5 text-ab-accent" /> View lot on satellite
         </button>
       )}
+      {(lockToAreas || sellers) && !isPickingLocation && (
+        <div
+          style={{ top: overlayTop ?? controlsTop }}
+          className="pointer-events-none absolute left-3 right-16 z-[1000] flex flex-col items-center gap-2"
+        >
+          {lockToAreas && !activeArea && areas.length > 0 && (
+            <p className="flex max-w-full items-center gap-2 rounded-full bg-ab-text px-4 py-2 text-xs font-semibold text-ab-bg shadow-lg sm:text-sm">
+              <Lock className="h-4 w-4 shrink-0 text-ab-accent" /> Choose a highlighted area to see its properties
+            </p>
+          )}
+          {lockToAreas && areas.length === 0 && (
+            <p className="max-w-full rounded-full bg-ab-text px-4 py-2 text-xs font-semibold text-ab-bg shadow-lg sm:text-sm">
+              No properties match. Clear the filters to light up Abellar's areas.
+            </p>
+          )}
+          {lockToAreas && activeArea && (
+            <div className="pointer-events-auto flex max-w-full items-center gap-1 rounded-full border border-ab-border bg-ab-card py-1 pl-1 pr-3 text-xs shadow-md">
+              {areas.length > 1 && (
+                <button
+                  type="button"
+                  onClick={showAllAreas}
+                  className="inline-flex min-h-8 items-center gap-1 rounded-full bg-ab-hover px-2.5 font-semibold text-ab-text transition hover:bg-ab-accent hover:text-ab-ink"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" /> All areas
+                </button>
+              )}
+              <span className="truncate pl-1.5 font-semibold text-ab-text">{activeArea.name}</span>
+              <span className="shrink-0 text-ab-muted">
+                · {activeArea.properties.length} {activeArea.properties.length === 1 ? 'property' : 'properties'}
+              </span>
+            </div>
+          )}
+          {sellers && (
+            <div
+              role="status"
+              className="pointer-events-auto flex max-w-full items-center gap-2 rounded-2xl border border-[#2E7CF6]/50 bg-ab-card py-1.5 pl-3 pr-1.5 text-xs shadow-md"
+            >
+              {sellers.status === 'loading' ? (
+                <LoaderCircle className="h-4 w-4 shrink-0 animate-spin text-[#2E7CF6]" />
+              ) : (
+                <Users className="h-4 w-4 shrink-0 text-[#2E7CF6]" />
+              )}
+              <span className="min-w-0 text-ab-text">
+                {sellers.status === 'loading' && 'Searching for sellers near this property…'}
+                {sellers.status === 'error' && (sellers.error || "Couldn't load the nearby sellers.")}
+                {sellers.status === 'ready' &&
+                  (mappedSellers.length === 0
+                    ? sellerCenter
+                      ? 'No sellers with a map location near this property yet.'
+                      : "This property isn't on the map yet."
+                    : (
+                      <>
+                        <strong>{mappedSellers.length} nearby {mappedSellers.length === 1 ? 'seller' : 'sellers'}</strong> within{' '}
+                        {(sellerRadiusM / 1000).toFixed(1)} km. Tap a pin to contact.
+                        {sellerAgents.length > mappedSellers.length && (
+                          <span className="text-ab-muted"> ({sellerAgents.length - mappedSellers.length} more without a map location)</span>
+                        )}
+                      </>
+                    ))}
+              </span>
+              <button
+                type="button"
+                onClick={onCloseSellers}
+                aria-label="Hide nearby sellers"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ab-muted transition hover:bg-ab-hover hover:text-ab-text"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       {isPickingLocation && (
         <div className="pointer-events-none absolute inset-x-0 top-20 z-[1000] flex justify-center px-4">
           <p className="rounded-full bg-ab-text px-4 py-2 text-sm font-semibold text-ab-bg shadow-lg">
@@ -502,7 +725,14 @@ export const PropertyMap: React.FC<MapProps> = ({
         </div>
       )}
 
-      <MapContainer center={initialCenter} zoom={13} zoomControl={false} attributionControl={SHOW_MAP_ATTRIBUTION} className="z-0 h-full w-full rounded-xl">
+      <MapContainer
+        center={initialCenter}
+        zoom={lockToAreas ? 6 : 13}
+        zoomControl={false}
+        attributionControl={SHOW_MAP_ATTRIBUTION}
+        className="z-0 h-full w-full rounded-xl"
+        {...(lockToAreas ? { maxBounds: PHILIPPINES_BOUNDS, maxBoundsViscosity: 1, minZoom: 5 } : {})}
+      >
         {/* OpenStreetMap tiles; darkened in CSS (.ab-dark-tiles) for the dark
             theme, shown as-is for the light theme. Keyed so the class swaps. */}
         {basemap === 'satellite' ? (
@@ -539,12 +769,14 @@ export const PropertyMap: React.FC<MapProps> = ({
           basemap={basemap}
           onToggleBasemap={() => setBasemap((value) => (value === 'satellite' ? 'map' : 'satellite'))}
         />
-        <LotBoundaries properties={validProperties} selected={selectedProperty} onSelect={onSelectProperty} />
+        <LotBoundaries properties={shownProperties} selected={selectedProperty} onSelect={onSelectProperty} />
         <FitLot property={selectedProperty} paused={Boolean(activeRoute)} bottomInset={bottomInset} />
         <CameraController route={activeRoute} target={focusTarget} bottomInset={bottomInset} />
         <FitToProperties
           points={[
-            ...validProperties.map((p) => [p.lat!, p.lng!] as [number, number]),
+            ...(lockToAreas
+              ? (activeArea ? [activeArea] : areas).flatMap((area) => circleBounds(area.center, area.radiusM))
+              : validProperties.map((p) => [p.lat!, p.lng!] as [number, number])),
             // With a radius, frame the whole circle around the workplace too.
             ...(workplaceLocation && workplaceRadiusKm ? radiusBounds(workplaceLocation, workplaceRadiusKm) : []),
           ]}
@@ -552,7 +784,69 @@ export const PropertyMap: React.FC<MapProps> = ({
           topInset={80}
           bottomInset={bottomInset}
         />
+        {sellers?.status === 'ready' && sellerCenter && mappedSellers.length > 0 && (
+          <FitSellers center={sellerCenter} radiusM={sellerRadiusM} bottomInset={bottomInset} />
+        )}
         <PickHandler active={isPickingLocation} onPick={onPickLocation} />
+
+        {/* 0. Locked map: shade everything except the areas with listings */}
+        {lockToAreas && (
+          <Polygon
+            key={`shade-${theme}-${areas.map((area) => area.id).join(',')}`}
+            positions={[
+              [[-85, -180], [85, -180], [85, 180], [-85, 180]],
+              ...areas.map((area) => circleRing(area.center, area.radiusM)),
+            ]}
+            interactive={false}
+            pathOptions={{ stroke: false, fillColor: '#000', fillOpacity: theme === 'dark' ? 0.6 : 0.5 }}
+          />
+        )}
+        {areas.map((area) => {
+          const isOpen = area.id === activeArea?.id;
+          return (
+            <React.Fragment key={area.id}>
+              <Circle
+                center={[area.center.lat, area.center.lng]}
+                radius={area.radiusM}
+                interactive={!isOpen}
+                pathOptions={{ color: areaColor, weight: isOpen ? 3 : 2, fillColor: areaColor, fillOpacity: isOpen ? 0.04 : 0.18 }}
+                eventHandlers={{ click: () => openArea(area) }}
+              />
+              {!isOpen && !mappedSellers.length && (
+                <Marker
+                  position={[area.center.lat, area.center.lng]}
+                  icon={areaPin(area)}
+                  title={`${area.name}: ${area.properties.length} ${area.properties.length === 1 ? 'property' : 'properties'}`}
+                  zIndexOffset={500}
+                  eventHandlers={{ click: () => openArea(area) }}
+                />
+              )}
+            </React.Fragment>
+          );
+        })}
+
+        {/* Nearby sellers: the radius around the property and a pin per seller */}
+        {sellerCenter && mappedSellers.length > 0 && (
+          <Circle
+            center={[sellerCenter.lat, sellerCenter.lng]}
+            radius={sellerRadiusM}
+            interactive={false}
+            pathOptions={{ color: '#2E7CF6', weight: 2, dashArray: '6 6', fillColor: '#2E7CF6', fillOpacity: 0.06 }}
+          />
+        )}
+        {mappedSellers.map((agent) => (
+          <Marker
+            key={`seller-${agent.agent_id}`}
+            position={[agent.lat!, agent.lng!]}
+            icon={sellerPin(agent)}
+            title={agent.full_name}
+            zIndexOffset={agent.assigned ? 1200 : 1100}
+          >
+            <Popup minWidth={230} autoPanPaddingTopLeft={[20, (overlayTop ?? controlsTop) + 110]}>
+              <SellerCard agent={agent} returnTo={sellersReturnTo} />
+            </Popup>
+          </Marker>
+        ))}
 
         {/* 1. Alternative routes (click to select), then the active route */}
         {routes
@@ -619,7 +913,7 @@ export const PropertyMap: React.FC<MapProps> = ({
         ))}
 
         {/* 2. Property pins */}
-        {validProperties.map((prop) => {
+        {shownProperties.map((prop) => {
           const cover = propertyCover(prop);
           const isSelected = selectedProperty?.listing_id === prop.listing_id;
           return (

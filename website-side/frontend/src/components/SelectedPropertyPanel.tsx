@@ -1,4 +1,4 @@
-import { Bath, Bed, Building, Info, MapPin, PhoneCall, X, LandPlot } from "lucide-react"
+import { Bath, Bed, Building, Info, MapPin, Users, X, LandPlot } from "lucide-react"
 import { CommuteCard } from "./CommuteCard"
 import { publicUrl } from "@/config"
 import { categoryLabel } from "@/lib/categories"
@@ -15,7 +15,9 @@ type Props = {
   onSetWorkplaceClick: () => void
   onViewRoute?: () => void
   onOpenDetails: () => void
-  onContactAgent: () => void
+  onSearchSellers: () => void
+  /** The seller pins for this property are on the map. */
+  sellersShown?: boolean
   onClose: () => void
   compact?: boolean
   commute?: CommuteState
@@ -27,7 +29,7 @@ const STATUS_STYLES: Record<string, string> = {
   SOLD: "bg-ab-info/15 text-ab-info",
 }
 
-/** Property → commute (DSS) → Contact Agent, for the selected pin.
+/** Property → commute (DSS) → Search Nearby Sellers, for the selected pin.
  *  Reservations and purchases are recorded by agents from documents, so the
  *  website connects the client with an agent instead of transacting. */
 export function SelectedPropertyPanel({
@@ -38,7 +40,8 @@ export function SelectedPropertyPanel({
   onSetWorkplaceClick,
   onViewRoute,
   onOpenDetails,
-  onContactAgent,
+  onSearchSellers,
+  sellersShown = false,
   onClose,
   compact = false,
   commute,
@@ -116,10 +119,11 @@ export function SelectedPropertyPanel({
       <div className="grid gap-2">
         <button
           type="button"
-          onClick={onContactAgent}
+          onClick={onSearchSellers}
+          aria-pressed={sellersShown}
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-ab-accent px-3 text-sm font-semibold text-ab-ink transition hover:bg-ab-accent-hover"
         >
-          <PhoneCall className="h-4 w-4" /> Reserve / Purchase
+          <Users className="h-4 w-4" /> {sellersShown ? "Sellers shown on the map" : "Search Nearby Sellers"}
         </button>
         <button
           type="button"
@@ -129,7 +133,7 @@ export function SelectedPropertyPanel({
           <Info className="h-4 w-4 text-ab-accent" /> Full details, photos & amenities
         </button>
       </div>
-      <p className="text-center text-xs text-ab-faint">Agents near this property handle reservations and purchases.</p>
+      <p className="text-center text-xs text-ab-faint">Sellers near this property handle reservations and purchases. They appear as pins on the map.</p>
     </article>
   )
 }

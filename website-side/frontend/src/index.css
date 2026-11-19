@@ -369,6 +369,81 @@
   box-shadow: 0 0 0 6px rgba(46, 124, 246, 0.25);
 }
 
+/* Unlocked area label on the shaded map: tap it to reveal that area's properties */
+.ab-area-pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  border-radius: 9999px;
+  padding: 6px 11px 6px 7px;
+  font: 700 12px/1 var(--font-sans);
+  background: var(--color-ab-accent);
+  color: var(--color-ab-ink);
+  border: 2px solid var(--color-ab-card);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-ab-accent) 35%, transparent), 0 6px 16px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+.ab-area-pin b {
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  padding: 0 5px;
+  background: var(--color-ab-ink);
+  color: var(--color-ab-accent);
+  font-size: 11px;
+}
+.ab-pin-wrap:hover .ab-area-pin { box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-ab-accent) 45%, transparent), 0 6px 16px rgba(0, 0, 0, 0.35); }
+.ab-area-pin.is-open { background: var(--color-ab-card); color: var(--color-ab-text); border-color: var(--color-ab-accent); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28); }
+.ab-area-pin.is-open b { background: var(--color-ab-accent); color: var(--color-ab-ink); }
+
+/* Nearby seller pin: the agent's initials (or photo) in a round badge */
+.ab-seller-pin {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  transform: translate(-50%, -100%);
+  border-radius: 9999px;
+  background: var(--color-ab-card);
+  color: var(--color-ab-text);
+  border: 3px solid #2E7CF6;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  font: 800 12px/1 var(--font-sans);
+  overflow: visible;
+}
+.ab-seller-pin img { width: 100%; height: 100%; border-radius: 9999px; object-fit: cover; }
+.ab-seller-pin::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  border: 5px solid transparent;
+  border-top: 6px solid #2E7CF6;
+  transform: translateX(-50%);
+}
+.ab-seller-pin.is-assigned { border-color: var(--color-ab-accent); }
+.ab-seller-pin.is-assigned::after { border-top-color: var(--color-ab-accent); }
+.ab-seller-pin em {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  border-radius: 9999px;
+  padding: 2px 4px;
+  background: var(--color-ab-text);
+  color: var(--color-ab-bg);
+  font: 800 9px/1 var(--font-sans);
+  font-style: normal;
+}
+.ab-pin-wrap:hover .ab-seller-pin { transform: translate(-50%, -100%) scale(1.08); }
+
 /* Mobile bottom sheet */
 .ab-sheet { transition: max-height 0.25s ease; }
 

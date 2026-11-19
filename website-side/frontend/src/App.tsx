@@ -23,8 +23,7 @@ import { ChatMessageList } from "./components/ChatMessageList"
 import { ChatInput } from "./components/ChatInput"
 import { WorkplaceDialog } from "./components/WorkplaceDialog"
 import { SelectedPropertyPanel } from "./components/SelectedPropertyPanel"
-import { ContactAgentsModal } from "./components/ContactAgentsModal"
-import type { ChatMessage, Property, LocationPoint, PlaceResult, RouteSelection, TrafficStatus, TravelMode } from "./types"
+import type { ChatMessage, Property, LocationPoint, PlaceResult, RouteSelection, SellerSearch, TrafficStatus, TravelMode } from "./types"
 import { CHAT_API_URL, publicUrl } from "./config"
 import { useTheme } from "./hooks/useTheme"
 import { DEFAULT_RADIUS_KM, RADIUS_OPTIONS_KM, kmBetween, loadWorkplace, saveWorkplace as saveWorkplaceSession } from "./lib/workplace"
@@ -34,7 +33,8 @@ import { categoryCounts, categoryLabel, categoryOf } from "./lib/categories"
 import { navigate, useLocation } from "./lib/router"
 import { RowSkeleton } from "./components/Skeleton"
 import { useCommute } from "./hooks/useCommute"
-import { formatKm, formatMinutes, getCapabilities, requestCurrentPosition, reversePlace, searchPlaces } from "./lib/mapApi"
+import { formatKm, formatMinutes, getCapabilities, getNearbyAgents, requestCurrentPosition, reversePlace, searchPlaces } from "./lib/mapApi"
+import { useAuth } from "./lib/auth"
 import { ChatBotIcon } from "./components/icons/ChatBotIcon"
 import { MIA_GREETING, MiaHeader } from "./components/Mia"
 import { ChatNudge } from "./components/ChatNudge"
@@ -103,8 +103,9 @@ export default function App() {
   const [placeResults, setPlaceResults] = useState<PlaceResult[] | null>(null)
   const [isSearchingPlaces, setIsSearchingPlaces] = useState(false)
   const [notice, setNotice] = useState("")
-  // Property whose nearby agents the client is looking at (Contact Agent).
-  const [contactProperty, setContactProperty] = useState<Property | null>(null)
+  // "Search Nearby Sellers": seller pins around the selected property.
+  const [sellerSearch, setSellerSearch] = useState<SellerSearch | null>(null)
+  const { token: clientToken, isReady: clientReady } = useAuth()
   const [isSheetExpanded, setIsSheetExpanded] = useState(false)
 
   const chatEndRef = useRef<HTMLDivElement | null>(null)
@@ -414,6 +415,7 @@ export default function App() {
 
   // Map pins and list cards: select, show commute + actions in the panel/sheet.
   const selectOnMap = (prop: Property) => {
+    if (sellerSearch && sellerSearch.property.listing_id !== prop.listing_id) setSellerSearch(null)
     setSelectedProperty(prop)
     setRouteSelection((current) => ({ ...current, routeId: "A" }))
     setFocusPoint(null)
@@ -429,8 +431,28 @@ export default function App() {
 
   const clearSelection = () => {
     setSelectedProperty(null)
+    setSellerSearch(null)
     setIsSheetExpanded(false)
   }
+
+  const searchNearbySellers = (property: Property) => {
+    setSellerSearch({ property, status: "loading" })
+    setIsSheetExpanded(false) // phones: show the map, not the sheet
+  }
+
+  // Load the sellers once a saved sign-in is restored (signed-in buyers get
+  // the numbers to call or text).
+  const sellerLookup = sellerSearch?.status === "loading" ? sellerSearch.property : null
+  useEffect(() => {
+    if (!sellerLookup || !clientReady) return
+    let current = true
+    getNearbyAgents(sellerLookup.listing_id, clientToken)
+      .then((result) => current && setSellerSearch({ property: sellerLookup, status: "ready", result }))
+      .catch((error: Error) => current && setSellerSearch({ property: sellerLookup, status: "error", error: error.message }))
+    return () => {
+      current = false
+    }
+  }, [sellerLookup, clientReady, clientToken])
 
   const activeMode = commute.result?.modes[effectiveSelection.mode]
   const activeRoute = activeMode?.routes.find((route) => route.id === effectiveSelection.routeId) ?? activeMode?.routes[0]
@@ -444,8 +466,8 @@ export default function App() {
     const property = activeProperties.find((item) => String(item.listing_id) === linkedPropertyId)
     if (property) {
       selectOnMap(property)
-      // Back from signing in for "Reserve / Purchase": reopen the agents.
-      if (search.get("reserve") === "1") setContactProperty(property)
+      // Back from signing in to contact a seller: show the sellers again.
+      if (search.get("sellers") === "1" || search.get("reserve") === "1") setSellerSearch({ property, status: "loading" })
     } else {
       setNotice("That property is no longer available.")
     }
@@ -498,6 +520,10 @@ export default function App() {
       controlsTop={isMobileView ? 76 : 12}
       showClearInControls={isMobileView}
       legendInControls
+      lockToAreas
+      overlayTop={isMobileView ? 76 : 72}
+      sellers={sellerSearch}
+      onCloseSellers={() => setSellerSearch(null)}
     />
   )
 
@@ -510,7 +536,8 @@ export default function App() {
       onSetWorkplaceClick={handleSetWorkplaceClick}
       onViewRoute={isMobileView ? () => setIsSheetExpanded(false) : undefined}
       onOpenDetails={() => setPreviewProperty(selectedProperty)}
-      onContactAgent={() => setContactProperty(selectedProperty)}
+      onSearchSellers={() => searchNearbySellers(selectedProperty)}
+      sellersShown={sellerSearch?.property.listing_id === selectedProperty.listing_id}
       onClose={clearSelection}
       compact={isMobileView}
       commute={commute}
@@ -668,7 +695,6 @@ export default function App() {
         onViewOnMap={handleViewOnMap}
       />
 
-      {contactProperty && <ContactAgentsModal property={contactProperty} onClose={() => setContactProperty(null)} />}
 
       <div className="w-full shrink-0">
         <Header

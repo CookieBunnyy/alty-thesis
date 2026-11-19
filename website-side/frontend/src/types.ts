@@ -196,6 +196,17 @@ export interface NearbyAgent {
   assigned?: boolean;
   /** Only sent to signed-in clients, when the agent's account has one. */
   email?: string | null;
+  /** Where the agent works from, rounded to ~100 m (for the seller pins). */
+  lat?: number | null;
+  lng?: number | null;
+}
+
+/** "Search Nearby Sellers": the agents around one property, shown on the map. */
+export interface SellerSearch {
+  property: Property;
+  status: 'loading' | 'ready' | 'error';
+  result?: NearbyAgentsResult;
+  error?: string;
 }
 
 export interface NearbyAgentsResult {
@@ -236,6 +247,13 @@ export interface MapProps {
   controlsTop?: number; // px from the top, to clear an overlaid search bar
   showClearInControls?: boolean; // "Clear selection" in the control column (phones); desktop has it in the top bar
   legendInControls?: boolean; // live-traffic key under the map controls instead of bottom-left
+  /** Shade the Philippines except the areas with listings; pins appear once an area is chosen. */
+  lockToAreas?: boolean;
+  /** px from the top for the area hint and seller bar (below an overlaid search bar). */
+  overlayTop?: number;
+  /** Seller pins around a property, within the radius of the nearest sellers. */
+  sellers?: SellerSearch | null;
+  onCloseSellers?: () => void;
 }
 
 export interface PropertyDetailModalProps {

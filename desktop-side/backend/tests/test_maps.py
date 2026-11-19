@@ -164,6 +164,9 @@ def test_nearby_agents_use_database_agents_and_separate_distances(api, fake, db)
     assert near["straight_line_km"] < 1
     assert near["road_distance_km"] == 1.0 and near["travel_time_min"] == 2   # from the provider
     assert body["agents"][2]["straight_line_km"] is None
+    # Seller pins on the map: the agent's area, rounded to ~100 m.
+    assert (near["lat"], near["lng"]) == (14.58, 121.035)
+    assert body["agents"][2]["lat"] is None and body["agents"][2]["lng"] is None
     assert body["routing"]["available"] is True
     assert "total_commission" not in near and "performance_score" not in near
     # Call / Text numbers are for signed-in clients only.

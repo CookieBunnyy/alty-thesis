@@ -2311,7 +2311,7 @@ export const FILIPINO: Record<string, string> = {
   "No pin yet: click the map where it is.": "Wala pang pin: i-click sa mapa kung nasaan ito.",
   "Use this location": "Gamitin ang lokasyong ito",
   "Pinned on the map": "Naka-pin sa mapa",
-  "Buyers see the agents nearest each property. Without a pin, this agent is listed as “Location not on the map”.": "Nakikita ng mga buyer ang mga agent na pinakamalapit sa bawat property. Kung walang pin, nakalista ang agent na ito bilang “Location not on the map”.",
+  "Buyers see the agents nearest each property as pins on the map. Without a pin, this agent doesn't appear there.": "Nakikita ng mga buyer sa mapa ang mga agent na pinakamalapit sa bawat property, bilang mga pin. Kung walang pin, hindi lalabas doon ang agent na ito.",
   "Location on the map": "Lokasyon sa mapa",
   "Optional, but needed for the website map, travel times and the nearest agents.": "Opsyonal, pero kailangan para sa mapa ng website, oras ng biyahe at mga pinakamalapit na agent.",
   "Remove pin": "Alisin ang pin",
@@ -2330,7 +2330,7 @@ export const FILIPINO: Record<string, string> = {
   "Your location is set. Buyers near your area will see you.": "Naitakda na ang iyong lokasyon. Makikita ka ng mga buyer na malapit sa iyong lugar.",
   "Location saved.": "Na-save ang lokasyon.",
   // Recruitment form, agent mobile number
-  "Signed-in buyers call or text this number from “Reserve / Purchase” on the website.": "Tinatawagan o tini-text ng mga naka-sign in na buyer ang numerong ito mula sa “Reserve / Purchase” sa website.",
+  "Signed-in buyers call or text this number from “Search Nearby Sellers” on the website.": "Tinatawagan o tini-text ng mga naka-sign in na buyer ang numerong ito mula sa “Search Nearby Sellers” sa website.",
   "Buyers can now call or text you from the website.": "Matatawagan o mate-text ka na ng mga buyer mula sa website.",
   "Mobile number saved.": "Na-save ang mobile number.",
   "Your mobile number isn't set": "Wala pang nakatakdang mobile number mo",
